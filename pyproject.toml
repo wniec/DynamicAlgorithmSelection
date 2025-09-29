@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "dynamicalgorithmselection"
+version = "0.1.0"
+description = ""
+authors = ["wniec <niecwladek@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pypop7 = "^0.0.82"
+torch = "2.6.0"
+coco-experiment = "^2.8.1"
+cocopp = "^2.8.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
