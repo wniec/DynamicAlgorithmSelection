@@ -13,9 +13,11 @@ from torch import nn
 class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
+        self.i = 0
 
     def forward(self, x):
-        return 2
+        self.i += 1
+        return self.i % 3
 
 
 class Agent(Optimizer):
@@ -42,13 +44,23 @@ class Agent(Optimizer):
             info = '  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}'
             print(info.format(self._n_generations, self.best_so_far_y, np.min(y), self.n_function_evaluations))
 
+    def _save_fitness(self, x, y):
+        # update best-so-far solution (x) and fitness (y)
+        if y < self.best_so_far_y:
+            self.best_so_far_x, self.best_so_far_y = np.copy(x), y
+        # update all settings related to early stopping
+        if (self._base_early_stopping - y) <= self.early_stopping_threshold:
+            self._counter_early_stopping += 1
+        else:
+            self._counter_early_stopping, self._base_early_stopping = 0, y
+
     def iterate(self, x=None, y=None, optimizer=None):
         optimizer.set_data(x, y)
         if self._check_terminations():
             return x, y
         self._n_generations += 1
         results = optimizer.optimize()
-        self._evaluate_fitness(results['best_so_far_x'])  # fitness evaluation
+        self._save_fitness(results['best_so_far_x'], results['best_so_far_y'])  # fitness evaluation
         return itemgetter('x', 'y')(optimizer.get_data())
 
     def _collect(self, fitness, y=None):
@@ -70,6 +82,7 @@ class Agent(Optimizer):
             action = model(state)
             action_options = {k: v for k, v in self.options.items()}
             action_options['max_function_evaluations'] = min(self.n_function_evaluations + self.sub_optimizer_max_fe, self.max_function_evaluations)
+            action_options['verbose'] = False
             optimizer = self.ACTIONS[action](self.problem, action_options)
             optimizer.n_function_evaluations = self.n_function_evaluations
             optimizer._n_generations = 0

@@ -13,6 +13,7 @@ class LMCMAES(Optimizer):
 
         if self.n_individuals is None:  # number of offspring (λ: lambda), offspring population size
             self.n_individuals = 4 + int(3 * np.log(self.ndim_problem))  # only for small populations setting
+        self.individuals_at_start = self.n_individuals
         assert self.n_individuals > 0, f'`self.n_individuals` = {self.n_individuals}, but should > 0.'
         # parent number, number of (positively) selected search points in the population,
         #   number of strictly positive recombination weights (Nikolaus Hansen, 2023)
@@ -234,6 +235,7 @@ class LMCMAES(Optimizer):
             y_bak = np.copy(y)
             # sample and evaluate offspring population
             x, y = self.iterate(mean, x, pm, vm, y, b, args)
+
             self.results['x'] = x
             self.results['y'] = y
             if self._check_terminations():
@@ -251,4 +253,8 @@ class LMCMAES(Optimizer):
         return results
 
     def set_data(self, x, y):
-        self.start_conditions = {'x': x, 'y': y, 'mean': (x.mean(axis=0) if x is not None else None)}
+        if x is None or y is None:
+            self.start_conditions = {'x': None, 'y': None, 'mean': None}
+        else:
+            indices = np.argsort(y)[:self.individuals_at_start]
+            self.start_conditions = {'x': x[indices], 'y': y[indices], 'mean': (x.mean(axis=0) if x is not None else None)}

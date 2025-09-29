@@ -15,13 +15,11 @@ def coco_bbob(
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
     for i, function in enumerate(cocoex.Suite(suite, "", "")):
-        if i > 1:
-            break
         function.observe_with(observer)
         options["max_function_evaluations"] = (
                 evaluations_multiplier * function.dimension
         )
-        options["verbose"] = False
+        # options["verbose"] = False
         coco_bbob_single_function(optimizer, function, options)
     return observer.result_folder
 
@@ -41,8 +39,8 @@ def coco_bbob_single_function(optimizer, function: cocoex.interface.Problem, opt
 if __name__ == '__main__':
     coco_bbob(
         Agent,
-        {'sub_optimization_ratio': 4},
-        1000,
+        {'sub_optimization_ratio': 2, 'n_individuals': 20},
+        800,
     )
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

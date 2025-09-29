@@ -2,15 +2,7 @@ import time
 from enum import IntEnum
 
 import numpy as np  # engine for numerical computing
-
-
-class Terminations(IntEnum):
-    """Helper class used by all optimizer classes."""
-    NO_TERMINATION = 0
-    MAX_FUNCTION_EVALUATIONS = 1  # maximum of function evaluations
-    MAX_RUNTIME = 2  # maximal runtime to be allowed
-    FITNESS_THRESHOLD = 3  # when the best-so-far fitness is below fitness threshold, the optimizer will stop
-    EARLY_STOPPING = 4  # when the best-so-far fitness does not improve for a long time, the optimizer will stop
+from pypop7.optimizers.core import Terminations
 
 
 class Optimizer(object):
