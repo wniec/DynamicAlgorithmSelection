@@ -31,52 +31,75 @@ class Optimizer(object):
     Berlin: Springer International Publishing.
     https://link.springer.com/book/10.1007/978-3-319-68913-5
     """
+
     def __init__(self, problem, options):
         # problem-related settings
         self.start_conditions = dict()
         self.results = dict()
-        self.fitness_function = problem.get('fitness_function')
-        self.ndim_problem = problem.get('ndim_problem')
+        self.fitness_function = problem.get("fitness_function")
+        self.ndim_problem = problem.get("ndim_problem")
         assert self.ndim_problem > 0
-        self.upper_boundary = problem.get('upper_boundary')
-        self.lower_boundary = problem.get('lower_boundary')
-        self.initial_upper_boundary = problem.get('initial_upper_boundary', self.upper_boundary)
-        self.initial_lower_boundary = problem.get('initial_lower_boundary', self.lower_boundary)
-        self.problem_name = problem.get('problem_name')
-        if (self.problem_name is None) and hasattr(self.fitness_function, '__name__'):
+        self.upper_boundary = problem.get("upper_boundary")
+        self.lower_boundary = problem.get("lower_boundary")
+        self.initial_upper_boundary = problem.get(
+            "initial_upper_boundary", self.upper_boundary
+        )
+        self.initial_lower_boundary = problem.get(
+            "initial_lower_boundary", self.lower_boundary
+        )
+        self.problem_name = problem.get("problem_name")
+        if (self.problem_name is None) and hasattr(self.fitness_function, "__name__"):
             self.problem_name = self.fitness_function.__name__
 
         # optimizer-related options
         self.options = options
-        self.max_function_evaluations = options.get('max_function_evaluations', np.inf)
-        self.max_runtime = options.get('max_runtime', np.inf)
-        self.fitness_threshold = options.get('fitness_threshold', -np.inf)
-        self.n_individuals = options.get('n_individuals')  # offspring population size
-        self.n_parents = options.get('n_parents')  # parent population size
-        self.seed_rng = options.get('seed_rng')
-        if self.seed_rng is None:  # it is highly recommended to explicitly set *seed_rng*
+        self.max_function_evaluations = options.get("max_function_evaluations", np.inf)
+        self.max_runtime = options.get("max_runtime", np.inf)
+        self.fitness_threshold = options.get("fitness_threshold", -np.inf)
+        self.n_individuals = options.get("n_individuals")  # offspring population size
+        self.n_parents = options.get("n_parents")  # parent population size
+        self.seed_rng = options.get("seed_rng")
+        if (
+            self.seed_rng is None
+        ):  # it is highly recommended to explicitly set *seed_rng*
             self.rng = np.random.default_rng()  # NOT use it, if possible
         else:
             self.rng = np.random.default_rng(self.seed_rng)
-        self.seed_initialization = options.get('seed_initialization', self.rng.integers(np.iinfo(np.int64).max))
+        self.seed_initialization = options.get(
+            "seed_initialization", self.rng.integers(np.iinfo(np.int64).max)
+        )
         self.rng_initialization = np.random.default_rng(self.seed_initialization)
-        self.seed_optimization = options.get('seed_optimization', self.rng.integers(np.iinfo(np.int64).max))
+        self.seed_optimization = options.get(
+            "seed_optimization", self.rng.integers(np.iinfo(np.int64).max)
+        )
         self.rng_optimization = np.random.default_rng(self.seed_optimization)
-        self.saving_fitness = options.get('saving_fitness', 0)
-        self.verbose = options.get('verbose', 10)
+        self.saving_fitness = options.get("saving_fitness", 0)
+        self.verbose = options.get("verbose", 10)
 
         # auxiliary members
-        self.Terminations, self.termination_signal = Terminations, 0  # 0 -> NO_TERMINATION
-        self.n_function_evaluations = options.get('n_function_evaluations', 0)
+        self.Terminations, self.termination_signal = (
+            Terminations,
+            0,
+        )  # 0 -> NO_TERMINATION
+        self.n_function_evaluations = options.get("n_function_evaluations", 0)
         self.start_function_evaluations = None
-        self.time_function_evaluations = options.get('time_function_evaluations', 0)
-        self.runtime, self.start_time = options.get('runtime', 0), None
-        self.best_so_far_y, self.best_so_far_x = options.get('best_so_far_y', np.inf), None
+        self.time_function_evaluations = options.get("time_function_evaluations", 0)
+        self.runtime, self.start_time = options.get("runtime", 0), None
+        self.best_so_far_y, self.best_so_far_x = (
+            options.get("best_so_far_y", np.inf),
+            None,
+        )
+        self.worst_so_far_y, self.worst_so_far_x = (
+            options.get("worst_so_far_y", -np.inf),
+            None,
+        )
         self.fitness = None
-        self.is_restart = options.get('is_restart', True)
+        self.is_restart = options.get("is_restart", True)
         # all members of *early stopping* (closed by default according to following settings)
-        self.early_stopping_evaluations = options.get('early_stopping_evaluations', np.inf)
-        self.early_stopping_threshold = options.get('early_stopping_threshold', 0.0)
+        self.early_stopping_evaluations = options.get(
+            "early_stopping_evaluations", np.inf
+        )
+        self.early_stopping_threshold = options.get("early_stopping_threshold", 0.0)
         self._counter_early_stopping, self._base_early_stopping = 0, self.best_so_far_y
 
     def _evaluate_fitness(self, x, args=None):
@@ -90,6 +113,8 @@ class Optimizer(object):
         # update best-so-far solution (x) and fitness (y)
         if y < self.best_so_far_y:
             self.best_so_far_x, self.best_so_far_y = np.copy(x), y
+        if y > self.worst_so_far_y:
+            self.worst_so_far_x, self.worst_so_far_y = np.copy(x), y
         # update all settings related to early stopping
         if (self._base_early_stopping - y) <= self.early_stopping_threshold:
             self._counter_early_stopping += 1
@@ -130,8 +155,14 @@ class Optimizer(object):
             self.fitness[0, 0], self.fitness[-1, 0] = 1, len(fitness)
 
     def _check_success(self):
-        if (self.upper_boundary is not None) and (self.lower_boundary is not None) and (
-                np.any(self.lower_boundary > self.best_so_far_x) or np.any(self.best_so_far_x > self.upper_boundary)):
+        if (
+            (self.upper_boundary is not None)
+            and (self.lower_boundary is not None)
+            and (
+                np.any(self.lower_boundary > self.best_so_far_x)
+                or np.any(self.best_so_far_x > self.upper_boundary)
+            )
+        ):
             return False
         elif np.isnan(self.best_so_far_y) or np.any(np.isnan(self.best_so_far_x)):
             return False
@@ -139,15 +170,19 @@ class Optimizer(object):
 
     def _collect(self, fitness):
         if self.saving_fitness:
-            self._compress_fitness(fitness[:self.n_function_evaluations])
-        return {'best_so_far_x': self.best_so_far_x,
-                'best_so_far_y': self.best_so_far_y,
-                'n_function_evaluations': self.n_function_evaluations,
-                'runtime': time.time() - self.start_time,
-                'termination_signal': self.termination_signal,
-                'time_function_evaluations': self.time_function_evaluations,
-                'fitness': self.fitness,
-                'success': self._check_success()}
+            self._compress_fitness(fitness[: self.n_function_evaluations])
+        return {
+            "best_so_far_x": self.best_so_far_x,
+            "best_so_far_y": self.best_so_far_y,
+            "worst_so_far_x": self.worst_so_far_x,
+            "worst_so_far_y": self.worst_so_far_y,
+            "n_function_evaluations": self.n_function_evaluations,
+            "runtime": time.time() - self.start_time,
+            "termination_signal": self.termination_signal,
+            "time_function_evaluations": self.time_function_evaluations,
+            "fitness": self.fitness,
+            "success": self._check_success(),
+        }
 
     def initialize(self):
         raise NotImplementedError
@@ -162,8 +197,12 @@ class Optimizer(object):
         fitness = []  # to store all fitness generated during evolution/optimization
         return fitness
 
-    def set_data(self, x, y):
-        self.start_conditions = {'x': x, 'y': y}
+    def set_data(self, x, y, best_x=None, best_y=None):
+        self.start_conditions = {"x": x, "y": y, "best_x": best_x, "best_y": best_y}
 
     def get_data(self):
-        return {i: self.results[i] for i in ('x', 'y')} if self.results else self.start_conditions
+        return (
+            {i: self.results[i] for i in ("x", "y")}
+            if self.results
+            else self.start_conditions
+        )

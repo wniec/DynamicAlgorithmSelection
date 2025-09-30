@@ -8,36 +8,60 @@ from optimizers.Optimizer import Optimizer
 
 
 class SPSO(Optimizer):
-
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
-        if self.n_individuals is None:  # swarm (population) size, aka number of particles
+        if (
+            self.n_individuals is None
+        ):  # swarm (population) size, aka number of particles
             self.n_individuals = 20
-        self.cognition = options.get('cognition', 2.0)  # cognitive learning rate
+        self.cognition = options.get("cognition", 2.0)  # cognitive learning rate
         assert self.cognition >= 0.0
-        self.society = options.get('society', 2.0)  # social learning rate
+        self.society = options.get("society", 2.0)  # social learning rate
         assert self.society >= 0.0
-        self.max_ratio_v = options.get('max_ratio_v', 0.2)  # maximal ratio of velocity
+        self.max_ratio_v = options.get("max_ratio_v", 0.2)  # maximal ratio of velocity
         assert 0.0 < self.max_ratio_v <= 1.0
-        self.is_bound = options.get('is_bound', False)
-        self._max_v = self.max_ratio_v * (self.upper_boundary - self.lower_boundary)  # maximal velocity
+        self.is_bound = options.get("is_bound", False)
+        self._max_v = self.max_ratio_v * (
+            self.upper_boundary - self.lower_boundary
+        )  # maximal velocity
         self._min_v = -self._max_v  # minimal velocity
         self._topology = None  # neighbors topology of social learning
         self._n_generations = 0  # initial number of generations
         # set linearly decreasing inertia weights introduced in [Shi&Eberhart, 1998, IEEE-WCCI/CEC]
-        self._max_generations = np.ceil(self.max_function_evaluations / self.n_individuals)
+        self._max_generations = np.ceil(
+            self.max_function_evaluations / self.n_individuals
+        )
         if self._max_generations == np.inf:
             self._max_generations = 1e2 * self.ndim_problem
-        self._w = 0.9 - 0.5 * (np.arange(self._max_generations) + 1.0) / self._max_generations  # from 0.9 to 0.4
+        self._w = (
+            0.9 - 0.5 * (np.arange(self._max_generations) + 1.0) / self._max_generations
+        )  # from 0.9 to 0.4
         self._swarm_shape = (self.n_individuals, self.ndim_problem)
 
-    def initialize(self, args=None, x=None, y=None):
-        v = self.rng_initialization.uniform(self._min_v, self._max_v, size=self._swarm_shape)  # velocities
-        x = x if x is not None else self.rng_initialization.uniform(self.initial_lower_boundary, self.initial_upper_boundary,
-                                            size=self._swarm_shape)  # positions
+    def initialize(self, args=None, x=None, y=None, best_x=None, best_y=None):
+        v = self.rng_initialization.uniform(
+            self._min_v, self._max_v, size=self._swarm_shape
+        )  # velocities
+        x = (
+            x
+            if x is not None
+            else self.rng_initialization.uniform(
+                self.initial_lower_boundary,
+                self.initial_upper_boundary,
+                size=self._swarm_shape,
+            )
+        )  # positions
         y = y if y is not None else np.empty((self.n_individuals,))  # fitness
-        p_x, p_y = np.copy(x), np.copy(y)  # personally previous-best positions and fitness
+        random_idx = np.random.randint(self.n_individuals)
+        p_x, p_y = (
+            np.copy(x),
+            np.copy(y),
+        )  # personally previous-best positions and fitness
         n_x = np.copy(x)  # neighborly previous-best positions
+        if best_x is not None and best_y is not None:
+            p_x[random_idx] = best_x
+            p_y[random_idx] = best_y
+            n_x[random_idx] = best_x
         for i in range(self.n_individuals):
             if self._check_terminations():
                 return v, x, y, p_x, p_y, n_x
@@ -52,9 +76,11 @@ class SPSO(Optimizer):
             n_x[i] = p_x[np.argmin(p_y)]  # online update within global topology
             cognition_rand = self.rng_optimization.uniform(size=(self.ndim_problem,))
             society_rand = self.rng_optimization.uniform(size=(self.ndim_problem,))
-            v[i] = (self._w[min(self._n_generations, len(self._w) - 1)] * v[i] +
-                    self.cognition * cognition_rand * (p_x[i] - x[i]) +
-                    self.society * society_rand * (n_x[i] - x[i]))  # velocity update
+            v[i] = (
+                self._w[min(self._n_generations, len(self._w) - 1)] * v[i]
+                + self.cognition * cognition_rand * (p_x[i] - x[i])
+                + self.society * society_rand * (n_x[i] - x[i])
+            )  # velocity update
             v[i] = np.clip(v[i], self._min_v, self._max_v)
             x[i] += v[i]  # position update
             if self.is_bound:
@@ -63,24 +89,34 @@ class SPSO(Optimizer):
             if y[i] < p_y[i]:  # online update
                 p_x[i], p_y[i] = x[i], y[i]
         self._n_generations += 1
-        self.results['x'] = x
-        self.results['y'] = y
+        self.results["x"] = x
+        self.results["y"] = y
         return v, x, y, p_x, p_y, n_x
+
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
             if not np.isscalar(y):
                 fitness.extend(y)
             else:
                 fitness.append(y)
-        if self.verbose and ((not self._n_generations % self.verbose) or (self.termination_signal > 0)):
-            info = '  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}'
-            print(info.format(self._n_generations, self.best_so_far_y, np.min(y), self.n_function_evaluations))
+        if self.verbose and (
+            (not self._n_generations % self.verbose) or (self.termination_signal > 0)
+        ):
+            info = "  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}"
+            print(
+                info.format(
+                    self._n_generations,
+                    self.best_so_far_y,
+                    np.min(y),
+                    self.n_function_evaluations,
+                )
+            )
 
     def _collect(self, fitness, y=None):
         if y is not None:
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
-        results['_n_generations'] = self._n_generations
+        results["_n_generations"] = self._n_generations
         return results
 
     def optimize(self, fitness_function=None, args=None):
@@ -88,8 +124,10 @@ class SPSO(Optimizer):
         if fitness_function is not None:
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
-        x, y = itemgetter('x', 'y')(self.start_conditions)
-        v, x, y, p_x, p_y, n_x = self.initialize(args, x, y)
+        x, y, best_x, best_y = itemgetter("x", "y", "best_x", "best_y")(
+            self.start_conditions
+        )
+        v, x, y, p_x, p_y, n_x = self.initialize(args, x, y, best_x, best_y)
         while not self.termination_signal:
             self._print_verbose_info(fitness, y)
             v, x, y, p_x, p_y, n_x = self.iterate(v, x, y, p_x, p_y, n_x, args)

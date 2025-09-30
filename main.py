@@ -1,26 +1,38 @@
 import cocoex
-import numpy as np
+import cocopp
 from pypop7.optimizers.core import Optimizer
 
 from agent import Agent
 
 
 def coco_bbob(
-        optimizer: Optimizer,
-        options: dict,
-        evaluations_multiplier: int = 1_000,
-        run_id: id = 0,
+    optimizer: Agent,
+    options: dict,
+    evaluations_multiplier: int = 1_000,
+    run_id: id = 0,
 ):
+    actor_params, critic_params, actor_optimizer, critic_optimizer = (
+        None,
+        None,
+        None,
+        None,
+    )
     suite, output = "bbob", f"{run_id}_{evaluations_multiplier}"
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
-    for i, function in enumerate(cocoex.Suite(suite, "", "")):
+    for function in cocoex.Suite(suite, "", ""):
         function.observe_with(observer)
         options["max_function_evaluations"] = (
-                evaluations_multiplier * function.dimension
+            evaluations_multiplier * function.dimension
         )
-        # options["verbose"] = False
-        coco_bbob_single_function(optimizer, function, options)
+        options["actor_params"] = actor_params
+        options["critic_params"] = critic_params
+        options["actor_optimizer"] = actor_optimizer
+        options["critic_optimizer"] = critic_optimizer
+        options["verbose"] = False
+        _, (actor_params, critic_params, actor_optimizer, critic_optimizer) = (
+            coco_bbob_single_function(optimizer, function, options)
+        )
     return observer.result_folder
 
 
@@ -36,11 +48,13 @@ def coco_bbob_single_function(optimizer, function: cocoex.interface.Problem, opt
     return results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     coco_bbob(
         Agent,
-        {'sub_optimization_ratio': 2, 'n_individuals': 20},
+        {"sub_optimization_ratio": 2, "n_individuals": 20},
         800,
     )
+    cocopp.main('exdata/0_800-0014')  # """
+
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
