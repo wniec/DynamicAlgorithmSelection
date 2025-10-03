@@ -11,6 +11,7 @@ pypop7 = "^0.0.82"
 torch = "2.6.0"
 coco-experiment = "^2.8.1"
 cocopp = "^2.8.0"
+tqdm = "^4.67.1"
 
 
 [build-system]

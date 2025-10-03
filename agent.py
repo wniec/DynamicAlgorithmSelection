@@ -12,13 +12,13 @@ from optimizers.SPSO import SPSO
 from torch import nn
 
 DISCOUNT_FACTOR = 0.9
-
+device = "cuda" if torch.cuda.is_available() else ""
 
 class Actor(nn.Module):
     def __init__(self):
         super(Actor, self).__init__()
         self.actor = nn.Sequential(
-            nn.Linear(17, 20), nn.ReLU(), nn.Linear(20, 3), nn.Softmax(dim=0)
+            nn.Linear(17, 20), nn.ReLU(), nn.LayerNorm(20), nn.Linear(20, 3), nn.Softmax(dim=0)
         )
 
     def forward(self, x):
@@ -31,6 +31,7 @@ class Critic(nn.Module):
         self.critic = nn.Sequential(
             nn.Linear(17, 20),
             nn.ReLU(),
+            nn.LayerNorm(20),
             nn.Linear(20, 1),
         )
 
@@ -57,12 +58,13 @@ class Agent(Optimizer):
         self.problem = problem
         self.options = options
         self.history = []
-        self.actor = Actor()
-        self.critic = Critic()
-        self.actor_loss_fn = ActorLoss()
+        self.actor = Actor().to(device)
+        self.critic = Critic().to(device)
+        self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-4)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-3)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-4)
+        self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters"):
             self.actor.load_state_dict(p)
         if p := options.get("critic_parameters"):
@@ -160,14 +162,11 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
-        """plt.plot([i for i in range(len(self.actor_losses))], self.actor_losses)
-        plt.title("actor loss")
-        plt.plot([i for i in range(len(self.critic_losses))], self.critic_losses)
-        plt.title("critic loss")
-        plt.show()"""
+        results["actor_losses"] = self.actor_losses
+        results["critic_losses"] = self.critic_losses
         return results, (
-            self.actor.parameters(),
-            self.critic.parameters(),
+            self.actor.state_dict(),
+            self.critic.state_dict(),
             self.actor_optimizer.state_dict(),
             self.critic_optimizer.state_dict(),
         )
@@ -187,7 +186,7 @@ class Agent(Optimizer):
         self.critic_optimizer.step()
         self.critic_losses.append(critic_loss.item())
 
-    def optimize(self, fitness_function=None, args=None, learn=True):
+    def optimize(self, fitness_function=None, args=None):
         self.start_time = time.time()
         if fitness_function is not None:
             self.fitness_function = fitness_function
@@ -197,12 +196,12 @@ class Agent(Optimizer):
         while not self._check_terminations():
             state = self.get_state(x, y)
             with torch.no_grad():
-                future_policy = self.actor(state)
-                future_value = self.critic(state)
-            if reward is not None and learn:
+                future_policy = self.actor(state.to(device))
+                future_value = self.critic(state.to(device))
+            if reward is not None and self.train_mode:
                 current_value = DISCOUNT_FACTOR * future_value.detach() + reward
-                predicted_value = self.critic(old_state)
-                predicted_policy = self.actor(old_state)
+                predicted_value = self.critic(old_state.to(device))
+                predicted_policy = self.actor(old_state.to(device))
                 log_prob = torch.log(predicted_policy[self.last_choice])
                 advantage = current_value - predicted_value
                 self.learn(advantage, log_prob)
@@ -236,4 +235,4 @@ class Agent(Optimizer):
 
 
 def get_reward(y, best_parent):
-    return max((np.min(y) - best_parent), 0)
+    return max(best_parent - np.min(y), 0)

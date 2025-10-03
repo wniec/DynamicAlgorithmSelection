@@ -1,8 +1,6 @@
 import time
-from typing import Optional
 
-import numpy as np  # engine for numerical computing
-from operator import itemgetter
+import numpy as np
 
 from optimizers.Optimizer import Optimizer
 
@@ -124,9 +122,10 @@ class SPSO(Optimizer):
         if fitness_function is not None:
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
-        x, y, best_x, best_y = itemgetter("x", "y", "best_x", "best_y")(
-            self.start_conditions
-        )
+        x = self.start_conditions.get("x", None)
+        y = self.start_conditions.get("y", None)
+        best_x = self.start_conditions.get("best_x", None)
+        best_y = self.start_conditions.get("best_y", None)
         v, x, y, p_x, p_y, n_x = self.initialize(args, x, y, best_x, best_y)
         while not self.termination_signal:
             self._print_verbose_info(fitness, y)

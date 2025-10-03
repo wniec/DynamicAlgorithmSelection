@@ -1,5 +1,7 @@
 .*idea/
 __pycache__
-exdata
+exdata/
 optimizers/__pycache__
 poetry.lock
+ppdata/
+venv/

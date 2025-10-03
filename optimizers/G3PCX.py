@@ -1,5 +1,4 @@
 import time
-from operator import itemgetter
 
 import numpy as np  # engine for numerical computing
 
@@ -131,7 +130,10 @@ class G3PCX(Optimizer):
         if fitness_function is not None:
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
-        x, y = itemgetter("x", "y")(self.start_conditions)
+        x, y = (
+            self.start_conditions.get("x", None),
+            self.start_conditions.get("y", None),
+        )
         x, y = self.initialize(args, x, y)
         yy = y  # only for printing
         while not self._check_terminations():

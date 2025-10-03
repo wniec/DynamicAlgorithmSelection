@@ -1,5 +1,4 @@
 import time
-from operator import itemgetter
 
 import numpy as np
 
@@ -314,7 +313,9 @@ class LMCMAES(Optimizer):
         if fitness_function is not None:
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
-        mean, x, y = itemgetter("mean", "x", "y")(self.start_conditions)
+        mean = self.start_conditions.get("mean", None)
+        x = self.start_conditions.get("x", None)
+        y = self.start_conditions.get("y", None)
         mean, x, p_c, s, vm, pm, b, d, y = self.initialize(args, x, y, mean)
 
         while not self.termination_signal:
