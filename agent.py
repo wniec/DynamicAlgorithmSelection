@@ -1,9 +1,7 @@
 import time
-from operator import itemgetter
 
 import numpy as np
 import torch
-from matplotlib import pyplot as plt
 
 from optimizers.G3PCX import G3PCX
 from optimizers.LMCMAES import LMCMAES
@@ -14,29 +12,28 @@ from torch import nn
 DISCOUNT_FACTOR = 0.9
 device = "cuda" if torch.cuda.is_available() else ""
 
-class Actor(nn.Module):
-    def __init__(self):
-        super(Actor, self).__init__()
-        self.actor = nn.Sequential(
-            nn.Linear(17, 20), nn.ReLU(), nn.LayerNorm(20), nn.Linear(20, 3), nn.Softmax(dim=0)
-        )
-
-    def forward(self, x):
-        return self.actor(x)
-
-
-class Critic(nn.Module):
-    def __init__(self):
-        super(Critic, self).__init__()
-        self.critic = nn.Sequential(
-            nn.Linear(17, 20),
+class ActorCritic(nn.Module):
+    def __init__(self, state_dim=17, hidden_dim=64, action_dim=3):
+        super().__init__()
+        # Shared feature extractor
+        self.shared = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
             nn.ReLU(),
-            nn.LayerNorm(20),
-            nn.Linear(20, 1),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
         )
+        # Separate heads
+        self.actor_head = nn.Sequential(
+            nn.Linear(hidden_dim, action_dim),
+            nn.Softmax(dim=-1),
+        )
+        self.critic_head = nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
-        return self.critic(x)
+        features = self.shared(x)
+        action_probs = self.actor_head(features)
+        value = self.critic_head(features)
+        return action_probs, value
 
 
 class ActorLoss(nn.Module):
@@ -44,7 +41,7 @@ class ActorLoss(nn.Module):
         super().__init__()
 
     def forward(self, advantage, log_prob):
-        return (-advantage * log_prob).mean()
+        return -advantage * log_prob
 
 
 class Agent(Optimizer):
@@ -58,21 +55,15 @@ class Agent(Optimizer):
         self.problem = problem
         self.options = options
         self.history = []
-        self.actor = Actor().to(device)
-        self.critic = Critic().to(device)
+        self.model = ActorCritic().to(device)
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4)
         self.train_mode = options.get("train_mode", True)
-        if p := options.get("actor_parameters"):
-            self.actor.load_state_dict(p)
-        if p := options.get("critic_parameters"):
-            self.critic.load_state_dict(p)
-        if p := options.get("actor_optimizer"):
-            self.actor_optimizer.load_state_dict(p)
-        if p := options.get("critic_optimizer"):
-            self.critic_optimizer.load_state_dict(p)
+        if p := options.get("model_parameters"):
+            self.model.load_state_dict(p)
+        if p := options.get("optimizer"):
+            self.optimizer.load_state_dict(p)
         sub_optimization_ratio = options["sub_optimization_ratio"]
         self.sub_optimizer_max_fe = (
             self.max_function_evaluations / sub_optimization_ratio
@@ -107,7 +98,7 @@ class Agent(Optimizer):
             ),
             (dist(x[np.argmin(y)], self.best_so_far_x) / dist_max),
             *(
-                (np.argmin(y) - y[i])
+                (np.min(y) - y[i])
                 / ((self.worst_so_far_y - self.best_so_far_y) or 1)
                 for i in np.random.choice(self.n_individuals, 5)
             ),
@@ -133,29 +124,31 @@ class Agent(Optimizer):
                 )
             )
 
-    def _save_fitness(self, x, y):
+    def _save_fitness(self, best_x, best_y, worst_x, worst_y):
         # update best-so-far solution (x) and fitness (y)
-        self.history.append(y)
-        if y < self.best_so_far_y:
-            self.best_so_far_x, self.best_so_far_y = np.copy(x), y
-        if y > self.worst_so_far_y:
-            self.worst_so_far_x, self.worst_so_far_y = np.copy(x), y
+        self.history.append(best_y)
+        if best_y < self.best_so_far_y:
+            self.best_so_far_x, self.best_so_far_y = np.copy(best_x), best_y
+        if worst_y > self.worst_so_far_y:
+            self.worst_so_far_x, self.worst_so_far_y = np.copy(worst_x), worst_y
         # update all settings related to early stopping
-        if (self._base_early_stopping - y) <= self.early_stopping_threshold:
+        if (self._base_early_stopping - best_y) <= self.early_stopping_threshold:
             self._counter_early_stopping += 1
         else:
-            self._counter_early_stopping, self._base_early_stopping = 0, y
+            self._counter_early_stopping, self._base_early_stopping = 0, best_y
 
-    def iterate(self, x=None, y=None, optimizer=None):
-        optimizer.set_data(x, y, self.best_so_far_x, self.best_so_far_y)
+    def iterate(self, optimizer_input_data=None, optimizer=None):
+        optimizer_input_data["best_x"] = self.best_so_far_x
+        optimizer_input_data["best_y"] = self.best_so_far_y
+        optimizer.set_data(**optimizer_input_data)
         if self._check_terminations():
-            return x, y
+            return optimizer.get_data()
         self._n_generations += 1
         results = optimizer.optimize()
         self._save_fitness(
-            results["best_so_far_x"], results["best_so_far_y"]
+            results["best_so_far_x"], results["best_so_far_y"], results["worst_so_far_x"], results["worst_so_far_y"]
         )  # fitness evaluation
-        return itemgetter("x", "y")(optimizer.get_data())
+        return optimizer.get_data()
 
     def _collect(self, fitness, y=None):
         if y is not None:
@@ -165,26 +158,23 @@ class Agent(Optimizer):
         results["actor_losses"] = self.actor_losses
         results["critic_losses"] = self.critic_losses
         return results, (
-            self.actor.state_dict(),
-            self.critic.state_dict(),
-            self.actor_optimizer.state_dict(),
-            self.critic_optimizer.state_dict(),
+            self.model.state_dict(),
+            self.optimizer.state_dict(),
         )
 
     def learn(self, advantage, log_prob):
         actor_loss = self.actor_loss_fn(advantage.detach(), log_prob)
         critic_loss = self.critic_loss_fn(advantage, torch.zeros_like(advantage))
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=0.5)
-        self.actor_optimizer.step()
-        self.actor_losses.append(actor_loss.item())
 
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=0.5)
-        self.critic_optimizer.step()
+        self.actor_losses.append(actor_loss.item())
         self.critic_losses.append(critic_loss.item())
+
+        loss = actor_loss + critic_loss
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
+        self.optimizer.step()
 
     def optimize(self, fitness_function=None, args=None):
         self.start_time = time.time()
@@ -192,24 +182,22 @@ class Agent(Optimizer):
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
         old_state = None
+
         x, y, reward = None, None, None
+        iteration_result = {'x': x, "y": y}
         while not self._check_terminations():
             state = self.get_state(x, y)
             with torch.no_grad():
-                future_policy = self.actor(state.to(device))
-                future_value = self.critic(state.to(device))
+                future_policy, future_value = self.model(state.to(device))
             if reward is not None and self.train_mode:
                 current_value = DISCOUNT_FACTOR * future_value.detach() + reward
-                predicted_value = self.critic(old_state.to(device))
-                predicted_policy = self.actor(old_state.to(device))
+                predicted_policy, predicted_value = self.model(old_state.to(device))
                 log_prob = torch.log(predicted_policy[self.last_choice])
                 advantage = current_value - predicted_value
                 self.learn(advantage, log_prob)
-
             probabilities = future_policy.cpu().detach().numpy()
-
             probabilities /= probabilities.sum()
-            self.last_choice = np.random.choice([0, 1, 2], p=probabilities)
+            self.last_choice = np.random.choice([0, 1, 2], p=probabilities) if self.train_mode else np.argmax(probabilities)
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
                 self.n_function_evaluations + self.sub_optimizer_max_fe,
@@ -220,7 +208,8 @@ class Agent(Optimizer):
             optimizer.n_function_evaluations = self.n_function_evaluations
             optimizer._n_generations = 0
             best_parent = np.min(y) if y is not None else float("inf")
-            x, y = self.iterate(x, y, optimizer)
+            iteration_result = self.iterate(iteration_result, optimizer)
+            x, y = iteration_result.get("x"), iteration_result.get("y")
             reward = get_reward(y, best_parent)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
@@ -235,4 +224,4 @@ class Agent(Optimizer):
 
 
 def get_reward(y, best_parent):
-    return max(best_parent - np.min(y), 0)
+    return max(min(best_parent - np.min(y), 100), 0)

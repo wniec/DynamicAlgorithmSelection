@@ -3,11 +3,11 @@ import json
 import cocoex
 import cocopp
 import torch
-from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 from agent import Agent
 from optimizers.G3PCX import G3PCX
+from optimizers.Optimizer import Optimizer
 from optimizers.SPSO import SPSO
 from optimizers.LMCMAES import LMCMAES
 
@@ -23,7 +23,7 @@ ALL_FUNCTIONS = {_ for _ in range(1, 25)}
 
 
 def coco_bbob(
-        optimizer: Agent,
+        optimizer: Optimizer,
         options: dict,
         name: str,
         evaluations_multiplier: int = 1_000,
@@ -33,19 +33,12 @@ def coco_bbob(
     all_actor_losses = []
     all_critic_losses = []
     if train:
-        actor_params, critic_params, actor_optimizer, critic_optimizer = (
-            None,
-            None,
-            None,
-            None,
-        )
+        model_params, model_optimizer = None, None
 
     else:
         state_dict = torch.load("state.pth")
-        actor_params = state_dict["actor_params"]
-        critic_params = state_dict["critic_params"]
-        actor_optimizer = state_dict["actor_optimizer"]
-        critic_optimizer = state_dict["critic_optimizer"]
+        model_params = state_dict["model_parameters"]
+        model_optimizer = state_dict["optimizer"]
     suite, output = "bbob", name
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
@@ -60,14 +53,12 @@ def coco_bbob(
         options["max_function_evaluations"] = (
                 evaluations_multiplier * function.dimension
         )
-        options["actor_params"] = actor_params
-        options["critic_params"] = critic_params
-        options["actor_optimizer"] = actor_optimizer
-        options["critic_optimizer"] = critic_optimizer
+        options["model_parameters"] = model_params
+        options["optimizer"] = model_optimizer
         options["train"] = train
         options["verbose"] = False
         if train:
-            results, (actor_params, critic_params, actor_optimizer, critic_optimizer) = (
+            results, (model_params, model_optimizer) = (
                 coco_bbob_single_function(optimizer, function, options)
             )
             all_actor_losses.extend(results["actor_losses"])
@@ -75,10 +66,8 @@ def coco_bbob(
         else:
             coco_bbob_single_function(optimizer, function, options)
     if train:
-        state_dict = {"actor_params": actor_params,
-                      "critic_params": critic_params,
-                      "actor_optimizer": actor_optimizer,
-                      "critic_optimizer": critic_optimizer}
+        state_dict = {"model_parameters": model_params,
+                      "model_optimizer": model_optimizer,}
         torch.save(state_dict, "state.pth")
         with open("actor_losses.json", "w") as file:
             json.dump(all_actor_losses, file)
@@ -87,7 +76,7 @@ def coco_bbob(
     return observer.result_folder
 
 
-def coco_bbob_single_function(optimizer, function: cocoex.interface.Problem, options):
+def coco_bbob_single_function(optimizer: Optimizer, function: cocoex.interface.Problem, options):
     problem = {
         "fitness_function": function,
         "ndim_problem": function.dimension,
