@@ -67,7 +67,7 @@ def coco_bbob(
             coco_bbob_single_function(optimizer, function, options)
     if train:
         state_dict = {"model_parameters": model_params,
-                      "model_optimizer": model_optimizer,}
+                      "optimizer": model_optimizer,}
         torch.save(state_dict, "state.pth")
         with open("actor_losses.json", "w") as file:
             json.dump(all_actor_losses, file)
@@ -112,13 +112,13 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )
-    coco_bbob(
+    """coco_bbob(
         G3PCX,
         {"n_individuals": n},
         name="G3PCX",
         evaluations_multiplier=multiplier,
         train=False,
-    )
+    )"""
     coco_bbob(
         SPSO,
         {"n_individuals": n},
@@ -126,9 +126,9 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )
-    cocopp.main("exdata/DAS_test")
-    cocopp.main("exdata/LMCMAES")
-    cocopp.main("exdata/G3PCX")
-    cocopp.main("exdata/SPSO")
+    cocopp.main("exdata/DAS_test-0001")
+    cocopp.main("exdata/LMCMAES-0001")
+    # cocopp.main("exdata/G3PCX-0001")
+    cocopp.main("exdata/SPSO-0001")
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

@@ -12,6 +12,7 @@ from torch import nn
 DISCOUNT_FACTOR = 0.9
 device = "cuda" if torch.cuda.is_available() else ""
 
+
 class ActorCritic(nn.Module):
     def __init__(self, state_dim=17, hidden_dim=64, action_dim=3):
         super().__init__()
@@ -66,7 +67,7 @@ class Agent(Optimizer):
             self.optimizer.load_state_dict(p)
         sub_optimization_ratio = options["sub_optimization_ratio"]
         self.sub_optimizer_max_fe = (
-            self.max_function_evaluations / sub_optimization_ratio
+                self.max_function_evaluations / sub_optimization_ratio
         )
 
         self.ACTIONS = [G3PCX, SPSO, LMCMAES]
@@ -112,7 +113,7 @@ class Agent(Optimizer):
             else:
                 fitness.append(y)
         if self.verbose and (
-            (not self._n_generations % self.verbose) or (self.termination_signal > 0)
+                (not self._n_generations % self.verbose) or (self.termination_signal > 0)
         ):
             info = "  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}"
             print(
@@ -197,7 +198,8 @@ class Agent(Optimizer):
                 self.learn(advantage, log_prob)
             probabilities = future_policy.cpu().detach().numpy()
             probabilities /= probabilities.sum()
-            self.last_choice = np.random.choice([0, 1, 2], p=probabilities) if self.train_mode else np.argmax(probabilities)
+            self.last_choice = np.random.choice([0, 1, 2], p=probabilities) if self.train_mode else np.argmax(
+                probabilities)
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
                 self.n_function_evaluations + self.sub_optimizer_max_fe,
@@ -210,11 +212,11 @@ class Agent(Optimizer):
             best_parent = np.min(y) if y is not None else float("inf")
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")
-            reward = get_reward(y, best_parent)
+            reward = self.get_reward(y, best_parent)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
-                    optimizer.n_function_evaluations - self.n_function_evaluations
+                        optimizer.n_function_evaluations - self.n_function_evaluations
                 )
             else:
                 self.stagnation_count = 0
@@ -222,6 +224,8 @@ class Agent(Optimizer):
             old_state = state.clone()
         return self._collect(fitness, self.best_so_far_y)
 
-
-def get_reward(y, best_parent):
-    return max(min(best_parent - np.min(y), 100), 0)
+    def get_reward(self, y, best_parent):
+        reference = min(1e8, best_parent)
+        # I set minimal difference to 10^-13, logarithm from it is -13, so I add 13 to make reward positive
+        improvement = max(reference - np.min(y), 1e-13)
+        return (np.log10(improvement) + 13) / 10
