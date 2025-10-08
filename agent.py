@@ -21,6 +21,7 @@ class ActorCritic(nn.Module):
             nn.Linear(state_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
             nn.ReLU(),
         )
         # Separate heads
@@ -59,7 +60,7 @@ class Agent(Optimizer):
         self.model = ActorCritic().to(device)
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
         self.train_mode = options.get("train_mode", True)
         if p := options.get("model_parameters"):
             self.model.load_state_dict(p)
@@ -80,6 +81,7 @@ class Agent(Optimizer):
         dist_max = dist(self.lower_boundary, self.upper_boundary)
         average_y = sum(self.history) / (len(self.history) or 1)
         mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
+        measured_individuals = [self.n_individuals // i for i in (2, 3, 4, 6, 9)]
         vector = [
             (np.argmin(y) - self.best_so_far_y)
             / ((self.worst_so_far_y - self.best_so_far_y) or 1),
@@ -88,20 +90,18 @@ class Agent(Optimizer):
             sum((i - average_y) ** 2 for i in self.history)
             / (self.best_so_far_y - mid_so_far) ** 2
             / len(self.history),
-            (self.max_function_evaluations - self.n_function_evaluations)
-            / self.max_function_evaluations,
-            self.ndim_problem
-            / 40,  # maximum dimensionality in this COCO benchmark is 40
+            (self.max_function_evaluations - self.n_function_evaluations) / self.max_function_evaluations,
+            self.ndim_problem / 40,  # maximum dimensionality in this COCO benchmark is 40
             self.stagnation_count / self.max_function_evaluations,
             *(
                 dist(x[i], self.best_so_far_x) / dist_max
-                for i in np.random.choice(self.n_individuals, 5)
+                for i in measured_individuals
             ),
             (dist(x[np.argmin(y)], self.best_so_far_x) / dist_max),
             *(
-                (np.min(y) - y[i])
+                (y[i] - np.min(y))
                 / ((self.worst_so_far_y - self.best_so_far_y) or 1)
-                for i in np.random.choice(self.n_individuals, 5)
+                for i in measured_individuals
             ),
         ]
         return torch.tensor(vector, dtype=torch.float)
@@ -164,6 +164,7 @@ class Agent(Optimizer):
         )
 
     def learn(self, advantage, log_prob):
+        advantage = torch.clamp(advantage, -5.0, 5.0)
         actor_loss = self.actor_loss_fn(advantage.detach(), log_prob)
         critic_loss = self.critic_loss_fn(advantage, torch.zeros_like(advantage))
 
@@ -225,7 +226,7 @@ class Agent(Optimizer):
         return self._collect(fitness, self.best_so_far_y)
 
     def get_reward(self, y, best_parent):
-        reference = min(1e8, best_parent)
-        # I set minimal difference to 10^-13, logarithm from it is -13, so I add 13 to make reward positive
-        improvement = max(reference - np.min(y), 1e-13)
-        return (np.log10(improvement) + 13) / 10
+        # reference = min(self.worst_so_far_y, best_parent)
+        improvement = (best_parent - np.min(y))
+        reward = np.sign(improvement)  # 1 for improvement, 0 for no change, and -1 for worsening
+        return reward

@@ -1,7 +1,9 @@
 import json
+from itertools import product
 
 import cocoex
 import cocopp
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -20,6 +22,8 @@ from optimizers.LMCMAES import LMCMAES
 """
 EASY_TRAIN_BBOB = {4, *range(6, 15), 18, 19, 20, 22, 23, 24}
 ALL_FUNCTIONS = {_ for _ in range(1, 25)}
+INSTANCE_IDS = [1, 2, 3, 4, 5, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]
+DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
 def coco_bbob(
@@ -42,16 +46,18 @@ def coco_bbob(
     suite, output = "bbob", name
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
-    working_set = (
+    function_ids = (
         EASY_TRAIN_BBOB
         if ((easy_mode and train) or (not easy_mode and not train))
         else ALL_FUNCTIONS.difference(EASY_TRAIN_BBOB)
     )
-    working_set_filter = lambda f: f.id_function in working_set
-    for function in tqdm(filter(working_set_filter, cocoex.Suite(suite, "", ""))):
-        function.observe_with(observer)
+    problems_suite = cocoex.Suite(suite, "", "")
+    problem_ids = [f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}" for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)]
+    for problem_id in tqdm(np.random.permutation(problem_ids)):
+        problem_instance = problems_suite.get_problem(problem_id)
+        problem_instance.observe_with(observer)
         options["max_function_evaluations"] = (
-                evaluations_multiplier * function.dimension
+                evaluations_multiplier * problem_instance.dimension
         )
         options["model_parameters"] = model_params
         options["optimizer"] = model_optimizer
@@ -59,12 +65,12 @@ def coco_bbob(
         options["verbose"] = False
         if train:
             results, (model_params, model_optimizer) = (
-                coco_bbob_single_function(optimizer, function, options)
+                coco_bbob_single_function(optimizer, problem_instance, options)
             )
             all_actor_losses.extend(results["actor_losses"])
             all_critic_losses.extend(results["critic_losses"])
         else:
-            coco_bbob_single_function(optimizer, function, options)
+            coco_bbob_single_function(optimizer, problem_instance, options)
     if train:
         state_dict = {"model_parameters": model_params,
                       "optimizer": model_optimizer,}
@@ -91,7 +97,7 @@ def coco_bbob_single_function(optimizer: Optimizer, function: cocoex.interface.P
 if __name__ == "__main__":
     n = 20
     multiplier = 10_000
-    coco_bbob(
+    """coco_bbob(
         Agent,
         {"sub_optimization_ratio": 10, "n_individuals": n},
         name="DAS_train",
@@ -104,14 +110,14 @@ if __name__ == "__main__":
         name="DAS_test",
         evaluations_multiplier=multiplier,
         train=False,
-    )
-    coco_bbob(
+    )"""
+    """coco_bbob(
         LMCMAES,
         {"n_individuals": n},
         name="LMCMAES",
         evaluations_multiplier=multiplier,
         train=False,
-    )
+    )"""
     """coco_bbob(
         G3PCX,
         {"n_individuals": n},
@@ -119,16 +125,16 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )"""
-    coco_bbob(
+    """coco_bbob(
         SPSO,
         {"n_individuals": n},
         name="SPSO",
         evaluations_multiplier=multiplier,
         train=False,
-    )
-    cocopp.main("exdata/DAS_test-0001")
-    cocopp.main("exdata/LMCMAES-0001")
+    )"""
+    cocopp.main("exdata/DAS_test-0007")
+    # cocopp.main("exdata/LMCMAES-0001")
     # cocopp.main("exdata/G3PCX-0001")
-    cocopp.main("exdata/SPSO-0001")
+    # cocopp.main("exdata/SPSO-0001")
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
