@@ -4,7 +4,9 @@ from enum import IntEnum
 import numpy as np  # engine for numerical computing
 from pypop7.optimizers.core import Terminations
 
-ALL_START_CONDITONS_PARAMETERS = ['v', 'x', 'y', 'p_x', 'p_y', 'n_x', '']
+ALL_START_CONDITONS_PARAMETERS = ["v", "x", "y", "p_x", "p_y", "n_x", ""]
+
+
 class Optimizer(object):
     """Base (abstract) class of all optimizers for continuous black-box **minimization**.
 
@@ -202,4 +204,3 @@ class Optimizer(object):
 
     def get_data(self):
         return self.results or self.start_conditions
-

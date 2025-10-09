@@ -10,32 +10,44 @@ from optimizers.SPSO import SPSO
 from torch import nn
 
 DISCOUNT_FACTOR = 0.9
+HIDDEN_SIZE = 256
 device = "cuda" if torch.cuda.is_available() else ""
 
 
-class ActorCritic(nn.Module):
-    def __init__(self, state_dim=17, hidden_dim=64, action_dim=3):
-        super().__init__()
-        # Shared feature extractor
-        self.shared = nn.Sequential(
-            nn.Linear(state_dim, hidden_dim),
+class Actor(nn.Module):
+    def __init__(self):
+        super(Actor, self).__init__()
+        self.actor = nn.Sequential(
+            nn.Linear(17, HIDDEN_SIZE),
+            nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+            nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
+            nn.Linear(HIDDEN_SIZE, 3),
+            nn.Softmax(dim=0),
         )
-        # Separate heads
-        self.actor_head = nn.Sequential(
-            nn.Linear(hidden_dim, action_dim),
-            nn.Softmax(dim=-1),
-        )
-        self.critic_head = nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
-        features = self.shared(x)
-        action_probs = self.actor_head(features)
-        value = self.critic_head(features)
-        return action_probs, value
+        return self.actor(x)
+
+
+class Critic(nn.Module):
+    def __init__(self):
+        super(Critic, self).__init__()
+
+        self.critic = nn.Sequential(
+            nn.Linear(17, HIDDEN_SIZE),
+            nn.LayerNorm(HIDDEN_SIZE),
+            nn.ReLU(),
+            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+            nn.LayerNorm(HIDDEN_SIZE),
+            nn.ReLU(),
+            nn.Linear(HIDDEN_SIZE, 1),
+        )
+
+    def forward(self, x):
+        return self.critic(x)
 
 
 class ActorLoss(nn.Module):
@@ -57,18 +69,25 @@ class Agent(Optimizer):
         self.problem = problem
         self.options = options
         self.history = []
-        self.model = ActorCritic().to(device)
+        self.actor = Actor().to(device)
+        self.critic = Critic().to(device)
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-5)
+
         self.train_mode = options.get("train_mode", True)
-        if p := options.get("model_parameters"):
-            self.model.load_state_dict(p)
-        if p := options.get("optimizer"):
-            self.optimizer.load_state_dict(p)
+        if p := options.get("actor_parameters"):
+            self.actor.load_state_dict(p)
+        if p := options.get("critic_parameters"):
+            self.critic.load_state_dict(p)
+        if p := options.get("actor_optimizer"):
+            self.actor_optimizer.load_state_dict(p)
+        if p := options.get("critic_optimizer"):
+            self.critic_optimizer.load_state_dict(p)
         sub_optimization_ratio = options["sub_optimization_ratio"]
         self.sub_optimizer_max_fe = (
-                self.max_function_evaluations / sub_optimization_ratio
+            self.max_function_evaluations / sub_optimization_ratio
         )
 
         self.ACTIONS = [G3PCX, SPSO, LMCMAES]
@@ -90,17 +109,15 @@ class Agent(Optimizer):
             sum((i - average_y) ** 2 for i in self.history)
             / (self.best_so_far_y - mid_so_far) ** 2
             / len(self.history),
-            (self.max_function_evaluations - self.n_function_evaluations) / self.max_function_evaluations,
-            self.ndim_problem / 40,  # maximum dimensionality in this COCO benchmark is 40
+            (self.max_function_evaluations - self.n_function_evaluations)
+            / self.max_function_evaluations,
+            self.ndim_problem
+            / 40,  # maximum dimensionality in this COCO benchmark is 40
             self.stagnation_count / self.max_function_evaluations,
-            *(
-                dist(x[i], self.best_so_far_x) / dist_max
-                for i in measured_individuals
-            ),
+            *(dist(x[i], self.best_so_far_x) / dist_max for i in measured_individuals),
             (dist(x[np.argmin(y)], self.best_so_far_x) / dist_max),
             *(
-                (y[i] - np.min(y))
-                / ((self.worst_so_far_y - self.best_so_far_y) or 1)
+                (y[i] - np.min(y)) / ((self.worst_so_far_y - self.best_so_far_y) or 1)
                 for i in measured_individuals
             ),
         ]
@@ -113,7 +130,7 @@ class Agent(Optimizer):
             else:
                 fitness.append(y)
         if self.verbose and (
-                (not self._n_generations % self.verbose) or (self.termination_signal > 0)
+            (not self._n_generations % self.verbose) or (self.termination_signal > 0)
         ):
             info = "  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}"
             print(
@@ -147,7 +164,10 @@ class Agent(Optimizer):
         self._n_generations += 1
         results = optimizer.optimize()
         self._save_fitness(
-            results["best_so_far_x"], results["best_so_far_y"], results["worst_so_far_x"], results["worst_so_far_y"]
+            results["best_so_far_x"],
+            results["best_so_far_y"],
+            results["worst_so_far_x"],
+            results["worst_so_far_y"],
         )  # fitness evaluation
         return optimizer.get_data()
 
@@ -158,10 +178,12 @@ class Agent(Optimizer):
         results["_n_generations"] = self._n_generations
         results["actor_losses"] = self.actor_losses
         results["critic_losses"] = self.critic_losses
-        return results, (
-            self.model.state_dict(),
-            self.optimizer.state_dict(),
-        )
+        return results, {
+            "actor_parameters": self.actor.state_dict(),
+            "critic_parameters": self.critic.state_dict(),
+            "actor_optimizer": self.actor_optimizer.state_dict(),
+            "critic_optimizer": self.critic_optimizer.state_dict(),
+        }
 
     def learn(self, advantage, log_prob):
         advantage = torch.clamp(advantage, -5.0, 5.0)
@@ -171,12 +193,17 @@ class Agent(Optimizer):
         self.actor_losses.append(actor_loss.item())
         self.critic_losses.append(critic_loss.item())
 
-        loss = actor_loss + critic_loss
+        # actor update
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+        self.actor_optimizer.step()
 
-        self.optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
-        self.optimizer.step()
+        # critic update
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+        self.critic_optimizer.step()
 
     def optimize(self, fitness_function=None, args=None):
         self.start_time = time.time()
@@ -186,21 +213,26 @@ class Agent(Optimizer):
         old_state = None
 
         x, y, reward = None, None, None
-        iteration_result = {'x': x, "y": y}
+        iteration_result = {"x": x, "y": y}
         while not self._check_terminations():
             state = self.get_state(x, y)
             with torch.no_grad():
-                future_policy, future_value = self.model(state.to(device))
+                future_policy = self.actor(state.to(device))
+                future_value = self.critic(state.to(device))
             if reward is not None and self.train_mode:
                 current_value = DISCOUNT_FACTOR * future_value.detach() + reward
-                predicted_policy, predicted_value = self.model(old_state.to(device))
+                predicted_policy = self.actor(old_state.to(device))
+                predicted_value = self.critic(old_state.to(device))
                 log_prob = torch.log(predicted_policy[self.last_choice])
                 advantage = current_value - predicted_value
                 self.learn(advantage, log_prob)
             probabilities = future_policy.cpu().detach().numpy()
             probabilities /= probabilities.sum()
-            self.last_choice = np.random.choice([0, 1, 2], p=probabilities) if self.train_mode else np.argmax(
-                probabilities)
+            self.last_choice = (
+                np.random.choice([0, 1, 2], p=probabilities)
+                if self.train_mode
+                else np.argmax(probabilities)
+            )
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
                 self.n_function_evaluations + self.sub_optimizer_max_fe,
@@ -217,7 +249,7 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
-                        optimizer.n_function_evaluations - self.n_function_evaluations
+                    optimizer.n_function_evaluations - self.n_function_evaluations
                 )
             else:
                 self.stagnation_count = 0
@@ -227,6 +259,8 @@ class Agent(Optimizer):
 
     def get_reward(self, y, best_parent):
         # reference = min(self.worst_so_far_y, best_parent)
-        improvement = (best_parent - np.min(y))
-        reward = np.sign(improvement)  # 1 for improvement, 0 for no change, and -1 for worsening
+        improvement = best_parent - np.min(y)
+        reward = np.sign(
+            improvement
+        )  # 1 for improvement, 0 for no change, and -1 for worsening
         return reward
