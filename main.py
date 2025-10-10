@@ -132,7 +132,7 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )"""
-    cocopp.main("exdata/DAS_test-0008")
+    cocopp.main("exdata/DAS_test-0013")
     # cocopp.main("exdata/LMCMAES-0001")
     # cocopp.main("exdata/G3PCX-0001")
     # cocopp.main("exdata/SPSO-0001")

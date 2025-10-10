@@ -10,7 +10,7 @@ from optimizers.SPSO import SPSO
 from torch import nn
 
 DISCOUNT_FACTOR = 0.9
-HIDDEN_SIZE = 256
+HIDDEN_SIZE = 128
 device = "cuda" if torch.cuda.is_available() else ""
 
 
@@ -73,8 +73,8 @@ class Agent(Optimizer):
         self.critic = Critic().to(device)
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-5)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-6)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-6)
 
         self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters"):
@@ -95,32 +95,41 @@ class Agent(Optimizer):
     def get_state(self, x: np.ndarray, y: np.ndarray) -> torch.Tensor:
         # Definition of state is inspired by its representation in DE-DDQN article
         if x is None or y is None:
-            return torch.zeros(size=(17,))
-        dist = lambda x1, x2: np.linalg.norm(x1 - x2)
-        dist_max = dist(self.lower_boundary, self.upper_boundary)
-        average_y = sum(self.history) / (len(self.history) or 1)
-        mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
-        measured_individuals = [self.n_individuals // i for i in (2, 3, 4, 6, 9)]
-        vector = [
-            (np.argmin(y) - self.best_so_far_y)
-            / ((self.worst_so_far_y - self.best_so_far_y) or 1),
-            (average_y - self.best_so_far_y)
-            / ((self.worst_so_far_y - self.best_so_far_y) or 1),
-            sum((i - average_y) ** 2 for i in self.history)
-            / (self.best_so_far_y - mid_so_far) ** 2
-            / len(self.history),
-            (self.max_function_evaluations - self.n_function_evaluations)
-            / self.max_function_evaluations,
-            self.ndim_problem
-            / 40,  # maximum dimensionality in this COCO benchmark is 40
-            self.stagnation_count / self.max_function_evaluations,
-            *(dist(x[i], self.best_so_far_x) / dist_max for i in measured_individuals),
-            (dist(x[np.argmin(y)], self.best_so_far_x) / dist_max),
-            *(
-                (y[i] - np.min(y)) / ((self.worst_so_far_y - self.best_so_far_y) or 1)
-                for i in measured_individuals
-            ),
-        ]
+            vector = [
+                0.5,  # normalized relative fitness difference
+                0.5,  # average_y relative to best
+                1.0,  # variance measure
+                1.0,  # full remaining budget (max evaluations)
+                self.ndim_problem / 40,  # normalized problem dimension
+                0.0,  # stagnation count
+                *([0.5] * 11)
+            ]
+        else:
+            dist = lambda x1, x2: np.linalg.norm(x1 - x2)
+            dist_max = dist(self.lower_boundary, self.upper_boundary)
+            average_y = sum(self.history) / (len(self.history) or 1)
+            mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
+            measured_individuals = [self.n_individuals // i for i in (2, 3, 4, 6, 9)]
+            vector = [
+                (np.argmin(y) - self.best_so_far_y)
+                / ((self.worst_so_far_y - self.best_so_far_y) or 1),
+                (average_y - self.best_so_far_y)
+                / ((self.worst_so_far_y - self.best_so_far_y) or 1),
+                sum((i - average_y) ** 2 for i in self.history)
+                / (self.best_so_far_y - mid_so_far) ** 2
+                / len(self.history),
+                (self.max_function_evaluations - self.n_function_evaluations)
+                / self.max_function_evaluations,
+                self.ndim_problem
+                / 40,  # maximum dimensionality in this COCO benchmark is 40
+                self.stagnation_count / self.max_function_evaluations,
+                *(dist(x[i], self.best_so_far_x) / dist_max for i in measured_individuals),
+                (dist(x[np.argmin(y)], self.best_so_far_x) / dist_max),
+                *(
+                    (y[i] - np.min(y)) / ((self.worst_so_far_y - self.best_so_far_y) or 1)
+                    for i in measured_individuals
+                ),
+            ]
         return torch.tensor(vector, dtype=torch.float)
 
     def _print_verbose_info(self, fitness, y):
