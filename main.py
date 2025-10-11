@@ -67,6 +67,7 @@ def coco_bbob(
             results, agent_state = coco_bbob_single_function(
                 optimizer, problem_instance, options
             )
+            options["buffer"] = results["buffer"]
             all_actor_losses.extend(results["actor_losses"])
             all_critic_losses.extend(results["critic_losses"])
         else:
@@ -132,7 +133,7 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )"""
-    cocopp.main("exdata/DAS_test-0013")
+    cocopp.main("exdata/DAS_test-0014")
     # cocopp.main("exdata/LMCMAES-0001")
     # cocopp.main("exdata/G3PCX-0001")
     # cocopp.main("exdata/SPSO-0001")

@@ -14,6 +14,66 @@ HIDDEN_SIZE = 128
 device = "cuda" if torch.cuda.is_available() else ""
 
 
+class RolloutBuffer:
+    def __init__(self, capacity, device="cpu"):
+        self.capacity = capacity
+        self.device = device
+        self.clear()
+
+    def clear(self):
+        self.states = []
+        self.actions = []
+        self.rewards = []
+        self.dones = []
+        self.log_probs = []
+        self.values = []
+
+    def add(self, state, action, reward, done, log_prob, value):
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.dones.append(done)
+        self.log_probs.append(log_prob)
+        self.values.append(value)
+
+    def size(self):
+        return len(self.states)
+
+    def as_tensors(self):
+        import torch
+        states = torch.stack(self.states)[-self.capacity:].to(self.device)      # shape (T, state_dim)
+        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[-self.capacity:]  # (T,)
+        old_log_probs = torch.stack(self.log_probs).to(self.device)[-self.capacity:]  # (T,)
+        values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity:] # (T,)
+        rewards = self.rewards[-self.capacity:]
+        dones = self.dones[-self.capacity:]
+        return states, actions, old_log_probs, values, rewards, dones
+
+
+def compute_gae(rewards, dones, values, last_value, gamma=0.99, lam=0.95):
+    # rewards: list of scalars length T
+    # dones: list of bools length T
+    # values: tensor shape (T,)    (values for states 0..T-1)
+    # last_value: scalar (value estimate for final next state)
+    import torch
+    T = len(rewards)
+    returns = torch.zeros(T, device=device)
+    advantages = torch.zeros(T, device=device)
+    prev_return = last_value
+    prev_value = last_value
+    prev_adv = 0.0
+    for t in reversed(range(T)):
+        mask = 1.0 - float(dones[t])
+        delta = rewards[t] + gamma * prev_value * mask - values[t]
+        adv = delta + gamma * lam * prev_adv * mask
+        advantages[t] = adv
+        prev_adv = adv
+        prev_value = values[t]
+        prev_return = rewards[t] + gamma * prev_return * mask
+        returns[t] = prev_return
+    return returns, advantages
+
+
 class Actor(nn.Module):
     def __init__(self):
         super(Actor, self).__init__()
@@ -25,7 +85,7 @@ class Actor(nn.Module):
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Linear(HIDDEN_SIZE, 3),
-            nn.Softmax(dim=0),
+            nn.Softmax(dim=-1),
         )
 
     def forward(self, x):
@@ -61,6 +121,7 @@ class ActorLoss(nn.Module):
 class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
+        self.buffer = options.get("buffer", RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device))
         self.actor_losses = []
         self.critic_losses = []
         self.last_choice = None
@@ -132,6 +193,59 @@ class Agent(Optimizer):
             ]
         return torch.tensor(vector, dtype=torch.float)
 
+    def ppo_update(self, buffer, epochs=4, minibatch_size=64, clip_eps=0.2, value_coef=0.5, entropy_coef=0.01):
+        states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
+        # get last value for bootstrap
+        with torch.no_grad():
+            last_value = self.critic(states[-1].unsqueeze(0).to(device)).squeeze(
+                0).cpu().item() if buffer.size() > 0 else 0.0
+        returns, advantages = compute_gae(rewards, dones, values.detach().cpu(), last_value, gamma=DISCOUNT_FACTOR,
+                                          lam=0.95)
+        advantages = advantages.to(device)
+        returns = returns.to(device)
+        # normalize advantages
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        # multiple epochs of minibatch updates
+        dataset_size = states.shape[0]
+        for epoch in range(epochs):
+            # shuffle indices
+            indices = np.arange(dataset_size)
+            np.random.shuffle(indices)
+            for start in range(0, dataset_size, minibatch_size):
+                mb_idx = indices[start: start + minibatch_size]
+                mb_states = states[mb_idx]
+                mb_actions = actions[mb_idx]
+                mb_old_log_probs = old_log_probs[mb_idx]
+                mb_returns = returns[mb_idx]
+                mb_advantages = advantages[mb_idx]
+
+                # forward
+                policy = self.actor(mb_states)
+                dist_log_probs = torch.log(policy.gather(1, mb_actions.unsqueeze(1)).squeeze(1) + 1e-12)
+                entropy = -(policy * torch.log(policy + 1e-12)).sum(dim=1).mean()
+
+                # ratio and clipped surrogate
+                ratio = torch.exp(dist_log_probs - mb_old_log_probs)
+                surr1 = ratio * mb_advantages
+                surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * mb_advantages
+                actor_loss = -torch.min(surr1, surr2).mean()
+
+                # value loss
+                values_pred = self.critic(mb_states).squeeze(1)
+                value_loss = torch.nn.functional.mse_loss(values_pred, mb_returns)
+
+                loss = actor_loss + value_coef * value_loss - entropy_coef * entropy
+
+                # optimize
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
+
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
             if not np.isscalar(y):
@@ -187,6 +301,7 @@ class Agent(Optimizer):
         results["_n_generations"] = self._n_generations
         results["actor_losses"] = self.actor_losses
         results["critic_losses"] = self.critic_losses
+        results["buffer"] = self.buffer
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
@@ -194,67 +309,52 @@ class Agent(Optimizer):
             "critic_optimizer": self.critic_optimizer.state_dict(),
         }
 
-    def learn(self, advantage, log_prob):
-        advantage = torch.clamp(advantage, -5.0, 5.0)
-        actor_loss = self.actor_loss_fn(advantage.detach(), log_prob)
-        critic_loss = self.critic_loss_fn(advantage, torch.zeros_like(advantage))
-
-        self.actor_losses.append(actor_loss.item())
-        self.critic_losses.append(critic_loss.item())
-
-        # actor update
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-        self.actor_optimizer.step()
-
-        # critic update
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
-        self.critic_optimizer.step()
-
     def optimize(self, fitness_function=None, args=None):
         self.start_time = time.time()
         if fitness_function is not None:
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
-        old_state = None
+
+        batch_size = self.options.get("ppo_batch_size", 1024)
+        ppo_epochs = self.options.get("ppo_epochs", 4)
+        minibatch_size = self.options.get("ppo_minibatch_size", 64)
+        clip_eps = self.options.get("ppo_eps", 0.2)
+        entropy_coef = self.options.get("ppo_entropy", 0.01)
+        value_coef = self.options.get("ppo_value_coef", 0.5)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
         while not self._check_terminations():
-            state = self.get_state(x, y)
+            state = self.get_state(x, y).unsqueeze(0)
             with torch.no_grad():
-                future_policy = self.actor(state.to(device))
-                future_value = self.critic(state.to(device))
-            if reward is not None and self.train_mode:
-                current_value = DISCOUNT_FACTOR * future_value.detach() + reward
-                predicted_policy = self.actor(old_state.to(device))
-                predicted_value = self.critic(old_state.to(device))
-                log_prob = torch.log(predicted_policy[self.last_choice])
-                advantage = current_value - predicted_value
-                self.learn(advantage, log_prob)
-            probabilities = future_policy.cpu().detach().numpy()
-            probabilities /= probabilities.sum()
-            self.last_choice = (
-                np.random.choice([0, 1, 2], p=probabilities)
-                if self.train_mode
-                else np.argmax(probabilities)
-            )
+                policy = self.actor(state.to(device))
+                value = self.critic(state.to(device))
+            probs = policy.cpu().numpy().squeeze(0)
+            probs = probs / probs.sum()
+            action = np.random.choice(len(probs), p=probs) if self.train_mode else np.argmax(probs)
+            log_prob = torch.log(policy[0, action] + 1e-12).detach()
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
                 self.n_function_evaluations + self.sub_optimizer_max_fe,
                 self.max_function_evaluations,
             )
             action_options["verbose"] = False
-            optimizer = self.ACTIONS[self.last_choice](self.problem, action_options)
+            optimizer = self.ACTIONS[action](self.problem, action_options)
             optimizer.n_function_evaluations = self.n_function_evaluations
             optimizer._n_generations = 0
             best_parent = np.min(y) if y is not None else float("inf")
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")
+
             reward = self.get_reward(y, best_parent)
+            self.buffer.add(state.squeeze(0).to(device), action, float(reward), False, log_prob, value.detach())
+
+            self.n_function_evaluations = optimizer.n_function_evaluations
+            # every batch_size steps or on termination, run ppo update
+            if self.train_mode and self.buffer.size() >= batch_size:
+                self.ppo_update(self.buffer, epochs=ppo_epochs, minibatch_size=minibatch_size, clip_eps=clip_eps,
+                                value_coef=value_coef, entropy_coef=entropy_coef)
+
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
@@ -262,8 +362,9 @@ class Agent(Optimizer):
                 )
             else:
                 self.stagnation_count = 0
+
             self.n_function_evaluations = optimizer.n_function_evaluations
-            old_state = state.clone()
+        # self.buffer.clear()
         return self._collect(fitness, self.best_so_far_y)
 
     def get_reward(self, y, best_parent):
