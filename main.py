@@ -37,7 +37,15 @@ def coco_bbob(
     all_actor_losses = []
     all_critic_losses = []
     if train:
-        agent_state = {i: None for i in ('actor_params', 'critic_params', 'actor_optimizer', 'critic_optimizer')}
+        agent_state = {
+            i: None
+            for i in (
+                "actor_params",
+                "critic_params",
+                "actor_optimizer",
+                "critic_optimizer",
+            )
+        }
 
     else:
         agent_state = torch.load("state.pth")
@@ -108,7 +116,7 @@ if __name__ == "__main__":
     coco_bbob(
         Agent,
         {"sub_optimization_ratio": 10, "n_individuals": n},
-        name="DAS_test",
+        name="DAS_test_PPO4",
         evaluations_multiplier=multiplier,
         train=False,
     )
@@ -133,7 +141,7 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )"""
-    cocopp.main("exdata/DAS_test-0014")
+    cocopp.main("exdata/DAS_test_PPO4")
     # cocopp.main("exdata/LMCMAES-0001")
     # cocopp.main("exdata/G3PCX-0001")
     # cocopp.main("exdata/SPSO-0001")

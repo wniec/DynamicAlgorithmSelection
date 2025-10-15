@@ -11,6 +11,7 @@ from torch import nn
 
 DISCOUNT_FACTOR = 0.9
 HIDDEN_SIZE = 128
+STATE_SIZE = 45
 device = "cuda" if torch.cuda.is_available() else ""
 
 
@@ -41,12 +42,21 @@ class RolloutBuffer:
 
     def as_tensors(self):
         import torch
-        states = torch.stack(self.states)[-self.capacity:].to(self.device)      # shape (T, state_dim)
-        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[-self.capacity:]  # (T,)
-        old_log_probs = torch.stack(self.log_probs).to(self.device)[-self.capacity:]  # (T,)
-        values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity:] # (T,)
-        rewards = self.rewards[-self.capacity:]
-        dones = self.dones[-self.capacity:]
+
+        states = torch.stack(self.states)[-self.capacity :].to(
+            self.device
+        )  # shape (T, state_dim)
+        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[
+            -self.capacity :
+        ]  # (T,)
+        old_log_probs = torch.stack(self.log_probs).to(self.device)[
+            -self.capacity :
+        ]  # (T,)
+        values = (
+            torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
+        )  # (T,)
+        rewards = self.rewards[-self.capacity :]
+        dones = self.dones[-self.capacity :]
         return states, actions, old_log_probs, values, rewards, dones
 
 
@@ -56,6 +66,7 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.99, lam=0.95):
     # values: tensor shape (T,)    (values for states 0..T-1)
     # last_value: scalar (value estimate for final next state)
     import torch
+
     T = len(rewards)
     returns = torch.zeros(T, device=device)
     advantages = torch.zeros(T, device=device)
@@ -78,7 +89,7 @@ class Actor(nn.Module):
     def __init__(self):
         super(Actor, self).__init__()
         self.actor = nn.Sequential(
-            nn.Linear(17, HIDDEN_SIZE),
+            nn.Linear(STATE_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
@@ -97,7 +108,7 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
 
         self.critic = nn.Sequential(
-            nn.Linear(17, HIDDEN_SIZE),
+            nn.Linear(STATE_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
@@ -121,10 +132,13 @@ class ActorLoss(nn.Module):
 class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
-        self.buffer = options.get("buffer", RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device))
+        self.buffer = options.get(
+            "buffer",
+            RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device),
+        )
         self.actor_losses = []
         self.critic_losses = []
-        self.last_choice = None
+        self.choices_history = []
         self.stagnation_count = 0
         self._n_generations = 0
         self.problem = problem
@@ -134,8 +148,8 @@ class Agent(Optimizer):
         self.critic = Critic().to(device)
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-6)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-6)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=3e-6)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=8e-6)
 
         self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters"):
@@ -155,28 +169,72 @@ class Agent(Optimizer):
 
     def get_state(self, x: np.ndarray, y: np.ndarray) -> torch.Tensor:
         # Definition of state is inspired by its representation in DE-DDQN article
+        last_action_index = (
+            self.choices_history[-1] if self.choices_history else len(self.ACTIONS)
+        )
+        last_action_encoded = [
+            float(i) for i in np.binary_repr(last_action_index, width=4)[-2:]
+        ]
+        same_action_counter = 0
+        choices_count = [
+            sum(1 for i in self.choices_history if i == j)
+            / (len(self.choices_history) or 1)
+            for j in range(len(self.ACTIONS))
+        ]
+        for i in reversed(self.choices_history):
+            if i == last_action_index:
+                same_action_counter += 1
         if x is None or y is None:
             vector = [
+                0.0,  # second weighted central moment
+                0.0,  # normalized domination of best solution
+                0.0,  # normalized radius of the smallest sphere containing entire population
                 0.5,  # normalized relative fitness difference
                 0.5,  # average_y relative to best
                 1.0,  # variance measure
                 1.0,  # full remaining budget (max evaluations)
                 self.ndim_problem / 40,  # normalized problem dimension
                 0.0,  # stagnation count
-                *([0.5] * 11)
+                *([0.0] * 29),
+                *last_action_encoded,
+                *([0.0] * 5),
             ]
         else:
             dist = lambda x1, x2: np.linalg.norm(x1 - x2)
             dist_max = dist(self.lower_boundary, self.upper_boundary)
+
+            norm_dist = lambda x1, x2: (dist(x1, x2) / dist_max)
             average_y = sum(self.history) / (len(self.history) or 1)
+            average_x = x.mean(axis=0)
+            population_relative = x - average_x
+            population_radius = np.sqrt(
+                np.sum(
+                    (population_relative.max(axis=0) - population_relative.min(axis=0))
+                    ** 2
+                )
+            )
+            lower_x = x.min(axis=0)
+            upper_x = x.max(axis=0)
             mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
-            measured_individuals = [self.n_individuals // i for i in (2, 3, 4, 6, 9)]
+            weights = 1.0 - (y - y.min()) / ((y.max() - y.min()) or 1)
+            second_central_weighted_moment = (
+                weights * np.linalg.norm(population_relative, ord=2, axis=1)
+            ).sum() / (np.linalg.norm(weights) or 1) / np.linalg.norm(
+                (np.linalg.norm(population_relative, ord=2, axis=1))
+            ) or 1
+
+            measured_individuals = [i for i in (1, 2, 3, 4, 5, 6, 9, 12, 15)]
             vector = [
-                (np.argmin(y) - self.best_so_far_y)
+                second_central_weighted_moment,
+                (y - self.best_so_far_y).sum() / ((y.max() - self.best_so_far_y) or 1),
+                population_radius / dist_max,
+                max(0.0, (np.argmin(y) - self.best_so_far_y))
                 / ((self.worst_so_far_y - self.best_so_far_y) or 1),
                 (average_y - self.best_so_far_y)
                 / ((self.worst_so_far_y - self.best_so_far_y) or 1),
-                sum((i - average_y) ** 2 for i in self.history)
+                sum(
+                    (i - average_y) ** 2 for i in self.history
+                )  # wcześniejsze najlepsze y
                 / (self.best_so_far_y - mid_so_far) ** 2
                 / len(self.history),
                 (self.max_function_evaluations - self.n_function_evaluations)
@@ -184,23 +242,51 @@ class Agent(Optimizer):
                 self.ndim_problem
                 / 40,  # maximum dimensionality in this COCO benchmark is 40
                 self.stagnation_count / self.max_function_evaluations,
-                *(dist(x[i], self.best_so_far_x) / dist_max for i in measured_individuals),
-                (dist(x[np.argmin(y)], self.best_so_far_x) / dist_max),
+                *(norm_dist(x[i], self.best_so_far_x) for i in measured_individuals),
+                (norm_dist(x[np.argmin(y)], self.best_so_far_x)),
+                *(norm_dist(x[i], average_x) for i in measured_individuals + [0]),
                 *(
-                    (y[i] - np.min(y)) / ((self.worst_so_far_y - self.best_so_far_y) or 1)
+                    (y[i] - np.min(y))
+                    / ((self.worst_so_far_y - self.best_so_far_y) or 1)
                     for i in measured_individuals
                 ),
+                *last_action_encoded,
+                same_action_counter
+                / (self.max_function_evaluations / self.sub_optimizer_max_fe),
+                *choices_count,
+                (
+                    np.prod(upper_x - lower_x)
+                    / np.prod(self.upper_boundary - self.lower_boundary)
+                )
+                ** (1 / self.ndim_problem),  # searched volume
             ]
         return torch.tensor(vector, dtype=torch.float)
 
-    def ppo_update(self, buffer, epochs=4, minibatch_size=64, clip_eps=0.2, value_coef=0.5, entropy_coef=0.01):
+    def ppo_update(
+        self,
+        buffer,
+        epochs=4,
+        minibatch_size=64,
+        clip_eps=0.2,
+        value_coef=0.5,
+        entropy_coef=0.01,
+    ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
         # get last value for bootstrap
         with torch.no_grad():
-            last_value = self.critic(states[-1].unsqueeze(0).to(device)).squeeze(
-                0).cpu().item() if buffer.size() > 0 else 0.0
-        returns, advantages = compute_gae(rewards, dones, values.detach().cpu(), last_value, gamma=DISCOUNT_FACTOR,
-                                          lam=0.95)
+            last_value = (
+                self.critic(states[-1].unsqueeze(0).to(device)).squeeze(0).cpu().item()
+                if buffer.size() > 0
+                else 0.0
+            )
+        returns, advantages = compute_gae(
+            rewards,
+            dones,
+            values.detach().cpu(),
+            last_value,
+            gamma=DISCOUNT_FACTOR,
+            lam=0.95,
+        )
         advantages = advantages.to(device)
         returns = returns.to(device)
         # normalize advantages
@@ -213,7 +299,7 @@ class Agent(Optimizer):
             indices = np.arange(dataset_size)
             np.random.shuffle(indices)
             for start in range(0, dataset_size, minibatch_size):
-                mb_idx = indices[start: start + minibatch_size]
+                mb_idx = indices[start : start + minibatch_size]
                 mb_states = states[mb_idx]
                 mb_actions = actions[mb_idx]
                 mb_old_log_probs = old_log_probs[mb_idx]
@@ -222,28 +308,36 @@ class Agent(Optimizer):
 
                 # forward
                 policy = self.actor(mb_states)
-                dist_log_probs = torch.log(policy.gather(1, mb_actions.unsqueeze(1)).squeeze(1) + 1e-12)
+                dist_log_probs = torch.log(
+                    policy.gather(1, mb_actions.unsqueeze(1)).squeeze(1) + 1e-12
+                )
                 entropy = -(policy * torch.log(policy + 1e-12)).sum(dim=1).mean()
 
                 # ratio and clipped surrogate
                 ratio = torch.exp(dist_log_probs - mb_old_log_probs)
                 surr1 = ratio * mb_advantages
-                surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * mb_advantages
+                surr2 = (
+                    torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * mb_advantages
+                )
                 actor_loss = -torch.min(surr1, surr2).mean()
 
                 # value loss
                 values_pred = self.critic(mb_states).squeeze(1)
                 value_loss = torch.nn.functional.mse_loss(values_pred, mb_returns)
 
-                loss = actor_loss + value_coef * value_loss - entropy_coef * entropy
+                actor_loss = actor_loss - entropy_coef * entropy
+                critic_loss = value_coef * value_loss
+                self.actor_losses.append(actor_loss.detach().tolist())
+                self.critic_losses.append(critic_loss.detach().tolist())
 
-                # optimize
                 self.actor_optimizer.zero_grad()
-                self.critic_optimizer.zero_grad()
-                loss.backward()
+                actor_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
                 self.actor_optimizer.step()
+
+                self.critic_optimizer.zero_grad()
+                value_loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
                 self.critic_optimizer.step()
 
     def _print_verbose_info(self, fitness, y):
@@ -331,7 +425,12 @@ class Agent(Optimizer):
                 value = self.critic(state.to(device))
             probs = policy.cpu().numpy().squeeze(0)
             probs = probs / probs.sum()
-            action = np.random.choice(len(probs), p=probs) if self.train_mode else np.argmax(probs)
+            action = (
+                np.random.choice(len(probs), p=probs)
+                if self.train_mode
+                else np.argmax(probs)
+            )
+            self.choices_history.append(action)
             log_prob = torch.log(policy[0, action] + 1e-12).detach()
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
@@ -347,13 +446,26 @@ class Agent(Optimizer):
             x, y = iteration_result.get("x"), iteration_result.get("y")
 
             reward = self.get_reward(y, best_parent)
-            self.buffer.add(state.squeeze(0).to(device), action, float(reward), False, log_prob, value.detach())
+            self.buffer.add(
+                state.squeeze(0).to(device),
+                action,
+                float(reward),
+                False,
+                log_prob,
+                value.detach(),
+            )
 
             self.n_function_evaluations = optimizer.n_function_evaluations
             # every batch_size steps or on termination, run ppo update
             if self.train_mode and self.buffer.size() >= batch_size:
-                self.ppo_update(self.buffer, epochs=ppo_epochs, minibatch_size=minibatch_size, clip_eps=clip_eps,
-                                value_coef=value_coef, entropy_coef=entropy_coef)
+                self.ppo_update(
+                    self.buffer,
+                    epochs=ppo_epochs,
+                    minibatch_size=minibatch_size,
+                    clip_eps=clip_eps,
+                    value_coef=value_coef,
+                    entropy_coef=entropy_coef,
+                )
 
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
@@ -368,9 +480,11 @@ class Agent(Optimizer):
         return self._collect(fitness, self.best_so_far_y)
 
     def get_reward(self, y, best_parent):
-        # reference = min(self.worst_so_far_y, best_parent)
-        improvement = best_parent - np.min(y)
-        reward = np.sign(
-            improvement
-        )  # 1 for improvement, 0 for no change, and -1 for worsening
+        reference = self.history[0] if self.history else y.max()
+        improvement = (
+            best_parent - np.min(y)
+            if best_parent and best_parent != float("inf")
+            else y.max()
+        )
+        reward = improvement / reference
         return reward
