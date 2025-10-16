@@ -65,6 +65,8 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.99, lam=0.95):
     # dones: list of bools length T
     # values: tensor shape (T,)    (values for states 0..T-1)
     # last_value: scalar (value estimate for final next state)
+    rewards = np.array(rewards)
+    rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
     import torch
 
     T = len(rewards)
@@ -140,6 +142,7 @@ def get_weighted_central_moment(n: int, weights, norms_squared):
 class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
+        self.rewards = []
         self.buffer = options.get(
             "buffer",
             RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device),
@@ -157,7 +160,7 @@ class Agent(Optimizer):
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=3e-6)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=8e-6)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
 
         self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters"):
@@ -169,6 +172,7 @@ class Agent(Optimizer):
         if p := options.get("critic_optimizer"):
             self.critic_optimizer.load_state_dict(p)
         sub_optimization_ratio = options["sub_optimization_ratio"]
+        self.run = options.get("run", None)
         self.sub_optimizer_max_fe = (
             self.max_function_evaluations / sub_optimization_ratio
         )
@@ -222,10 +226,11 @@ class Agent(Optimizer):
             lower_x = x.min(axis=0)
             upper_x = x.max(axis=0)
             mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
-            weights = (1.0 - (y - y.min()) / (y.max() - y.min())) if (y.max() - y.min() > 1e-6) else (np.ones_like(y) / self.n_individuals)
+            weights = (1.0 - (y - y.min()) / (y.max() - y.min())) if (y.max() - y.min() > 1e-6) else np.ones_like(y)
+            weights_normalized = weights / weights.sum()
             norms = np.linalg.norm(population_relative, ord=2, axis=1)  # shape (pop,)
-            second_weighted_central_moment = get_weighted_central_moment(2, weights, norms)
-            third_weighted_central_moment = get_weighted_central_moment(3, weights, norms)
+            second_weighted_central_moment = get_weighted_central_moment(2, weights_normalized, norms)
+            third_weighted_central_moment = get_weighted_central_moment(3, weights_normalized, norms)
             measured_individuals = [i for i in (1, 2, 3, 4, 5, 6, 9, 12, 15)]
             vector = [
                 third_weighted_central_moment,
@@ -263,7 +268,6 @@ class Agent(Optimizer):
                 )
                 ** (1 / self.ndim_problem),  # searched volume
             ]
-        print(vector)
         return torch.tensor(vector, dtype=torch.float)
 
     def ppo_update(
@@ -272,7 +276,7 @@ class Agent(Optimizer):
         epochs=4,
         minibatch_size=64,
         clip_eps=0.2,
-        value_coef=0.5,
+        value_coef=0.4,
         entropy_coef=0.01,
     ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
@@ -331,8 +335,14 @@ class Agent(Optimizer):
 
                 actor_loss = actor_loss - entropy_coef * entropy
                 critic_loss = value_coef * value_loss
+
+
                 self.actor_losses.append(actor_loss.detach().tolist())
                 self.critic_losses.append(critic_loss.detach().tolist())
+
+                if self.run:
+                    self.run.log({"actor_loss": actor_loss.detach().tolist(),
+                                  "critic_loss": critic_loss.detach().tolist()})
 
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
@@ -450,6 +460,9 @@ class Agent(Optimizer):
             x, y = iteration_result.get("x"), iteration_result.get("y")
 
             reward = self.get_reward(y, best_parent)
+            if self.run:
+                self.run.log({"reward": reward})
+            self.rewards.append(reward)
             self.buffer.add(
                 state.squeeze(0).to(device),
                 action,
@@ -491,5 +504,4 @@ class Agent(Optimizer):
             else y.max()
         )
         reward = improvement / reference
-        print(reward)
         return np.tanh(reward)  # to the 1/dim power ?

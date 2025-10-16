@@ -6,6 +6,7 @@ import cocopp
 import numpy as np
 import torch
 from tqdm import tqdm
+import wandb
 
 from agent import Agent
 from optimizers.G3PCX import G3PCX
@@ -104,15 +105,24 @@ def coco_bbob_single_function(
 
 
 if __name__ == "__main__":
+    run = wandb.init(
+        name="smoothing reward2",
+        entity="niecwladek-agh",
+        project="RL-DAS",
+        config={
+            "dataset": "COCO-BBOB",
+        },
+    )
     n = 20
     multiplier = 10_000
     coco_bbob(
         Agent,
-        {"sub_optimization_ratio": 10, "n_individuals": n},
+        {"sub_optimization_ratio": 10, "n_individuals": n, "run": run},
         name="DAS_train",
         evaluations_multiplier=multiplier,
         train=True,
     )
+    run.finish()
     coco_bbob(
         Agent,
         {"sub_optimization_ratio": 10, "n_individuals": n},
