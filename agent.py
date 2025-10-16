@@ -11,7 +11,7 @@ from torch import nn
 
 DISCOUNT_FACTOR = 0.9
 HIDDEN_SIZE = 128
-STATE_SIZE = 45
+STATE_SIZE = 46
 device = "cuda" if torch.cuda.is_available() else ""
 
 
@@ -129,6 +129,14 @@ class ActorLoss(nn.Module):
         return -advantage * log_prob
 
 
+def get_weighted_central_moment(n: int, weights, norms_squared):
+    exponent = n / 2
+    numerator = min((weights * norms_squared ** exponent).sum(), 1e8)
+    inertia_denom_w = np.linalg.norm(weights)
+    inertia_denom_n = np.linalg.norm(norms_squared ** exponent)
+    return numerator / max(1e-5, inertia_denom_w * max(1e-5, inertia_denom_n))
+
+
 class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
@@ -184,8 +192,11 @@ class Agent(Optimizer):
         for i in reversed(self.choices_history):
             if i == last_action_index:
                 same_action_counter += 1
+            else:
+                break
         if x is None or y is None:
             vector = [
+                0.0,  # third weighted central moment
                 0.0,  # second weighted central moment
                 0.0,  # normalized domination of best solution
                 0.0,  # normalized radius of the smallest sphere containing entire population
@@ -207,28 +218,21 @@ class Agent(Optimizer):
             average_y = sum(self.history) / (len(self.history) or 1)
             average_x = x.mean(axis=0)
             population_relative = x - average_x
-            population_radius = np.sqrt(
-                np.sum(
-                    (population_relative.max(axis=0) - population_relative.min(axis=0))
-                    ** 2
-                )
-            )
+            population_radius = np.linalg.norm(population_relative.max(axis=0) - population_relative.min(axis=0))
             lower_x = x.min(axis=0)
             upper_x = x.max(axis=0)
             mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
-            weights = 1.0 - (y - y.min()) / ((y.max() - y.min()) or 1)
-            second_central_weighted_moment = (
-                weights * np.linalg.norm(population_relative, ord=2, axis=1)
-            ).sum() / (np.linalg.norm(weights) or 1) / np.linalg.norm(
-                (np.linalg.norm(population_relative, ord=2, axis=1))
-            ) or 1
-
+            weights = (1.0 - (y - y.min()) / (y.max() - y.min())) if (y.max() - y.min() > 1e-6) else (np.ones_like(y) / self.n_individuals)
+            norms = np.linalg.norm(population_relative, ord=2, axis=1)  # shape (pop,)
+            second_weighted_central_moment = get_weighted_central_moment(2, weights, norms)
+            third_weighted_central_moment = get_weighted_central_moment(3, weights, norms)
             measured_individuals = [i for i in (1, 2, 3, 4, 5, 6, 9, 12, 15)]
             vector = [
-                second_central_weighted_moment,
-                (y - self.best_so_far_y).sum() / ((y.max() - self.best_so_far_y) or 1),
+                third_weighted_central_moment,
+                second_weighted_central_moment,
+                (y - self.best_so_far_y).mean() / (max((y.max() - self.best_so_far_y), (y - self.best_so_far_y).sum()) or 1),
                 population_radius / dist_max,
-                max(0.0, (np.argmin(y) - self.best_so_far_y))
+                max(0.0, (np.min(y) - self.best_so_far_y))
                 / ((self.worst_so_far_y - self.best_so_far_y) or 1),
                 (average_y - self.best_so_far_y)
                 / ((self.worst_so_far_y - self.best_so_far_y) or 1),
@@ -247,7 +251,7 @@ class Agent(Optimizer):
                 *(norm_dist(x[i], average_x) for i in measured_individuals + [0]),
                 *(
                     (y[i] - np.min(y))
-                    / ((self.worst_so_far_y - self.best_so_far_y) or 1)
+                    / max((self.worst_so_far_y - self.best_so_far_y), 1e-6)
                     for i in measured_individuals
                 ),
                 *last_action_encoded,
@@ -255,11 +259,11 @@ class Agent(Optimizer):
                 / (self.max_function_evaluations / self.sub_optimizer_max_fe),
                 *choices_count,
                 (
-                    np.prod(upper_x - lower_x)
-                    / np.prod(self.upper_boundary - self.lower_boundary)
+                    np.prod((upper_x - lower_x) / (self.upper_boundary - self.lower_boundary))
                 )
                 ** (1 / self.ndim_problem),  # searched volume
             ]
+        print(vector)
         return torch.tensor(vector, dtype=torch.float)
 
     def ppo_update(
@@ -410,7 +414,7 @@ class Agent(Optimizer):
         fitness = []  # to store all fitness generated during evolution/optimization
 
         batch_size = self.options.get("ppo_batch_size", 1024)
-        ppo_epochs = self.options.get("ppo_epochs", 4)
+        ppo_epochs = self.options.get("ppo_epochs", 8)
         minibatch_size = self.options.get("ppo_minibatch_size", 64)
         clip_eps = self.options.get("ppo_eps", 0.2)
         entropy_coef = self.options.get("ppo_entropy", 0.01)
@@ -480,11 +484,12 @@ class Agent(Optimizer):
         return self._collect(fitness, self.best_so_far_y)
 
     def get_reward(self, y, best_parent):
-        reference = self.history[0] if self.history else y.max()
+        reference = self.history[0] if len(self.history) > 1 else y.max()
         improvement = (
             best_parent - np.min(y)
             if best_parent and best_parent != float("inf")
             else y.max()
         )
         reward = improvement / reference
-        return reward
+        print(reward)
+        return np.tanh(reward)  # to the 1/dim power ?
