@@ -49,7 +49,7 @@ def coco_bbob(
         }
 
     else:
-        agent_state = torch.load("state.pth")
+        agent_state = torch.load(f"{name}.pth")
     suite, output = "bbob", name
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
@@ -76,11 +76,10 @@ def coco_bbob(
             results, agent_state = coco_bbob_single_function(
                 optimizer, problem_instance, options
             )
-            options["buffer"] = results["buffer"]
         else:
             coco_bbob_single_function(optimizer, problem_instance, options)
     if train:
-        torch.save(agent_state, "state.pth")
+        torch.save(agent_state, f"{name}.pth")
     return observer.result_folder
 
 
@@ -99,7 +98,7 @@ def coco_bbob_single_function(
 
 
 if __name__ == "__main__":
-    name = "PPO_tanh_reward"
+    name = "PPO_discrete_small_buffer"
     run = wandb.init(
         name=name,
         entity="niecwladek-agh",

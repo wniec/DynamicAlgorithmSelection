@@ -142,10 +142,7 @@ class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
         self.rewards = []
-        self.buffer = options.get(
-            "buffer",
-            RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device),
-        )
+        self.buffer = RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device)
         self.choices_history = []
         self.stagnation_count = 0
         self._n_generations = 0
@@ -273,8 +270,8 @@ class Agent(Optimizer):
     def ppo_update(
         self,
         buffer,
-        epochs=4,
-        minibatch_size=64,
+        epochs=5,
+        minibatch_size=2,
         clip_eps=0.2,
         value_coef=0.4,
         entropy_coef=0.01,
@@ -406,7 +403,6 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
-        results["buffer"] = self.buffer
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
@@ -420,9 +416,9 @@ class Agent(Optimizer):
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
 
-        batch_size = self.options.get("ppo_batch_size", 1024)
-        ppo_epochs = self.options.get("ppo_epochs", 8)
-        minibatch_size = self.options.get("ppo_minibatch_size", 64)
+        batch_size = self.options.get("sub_optimization_ratio", 10)
+        ppo_epochs = self.options.get("ppo_epochs", 3)
+        minibatch_size = self.options.get("sub_optimization_ratio", 10)
         clip_eps = self.options.get("ppo_eps", 0.2)
         entropy_coef = self.options.get("ppo_entropy", 0.01)
         value_coef = self.options.get("ppo_value_coef", 0.5)
@@ -440,13 +436,7 @@ class Agent(Optimizer):
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
 
-            action = (
-                (np.random.choice(len(probs), p=probs)# if
-                 # self.buffer.size() >= batch_size else np.random.choice(len(probs)))
-                # if self.train_mode
-                # else np.argmax(probs)
-            )
-            )
+            action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
             log_prob = torch.log(policy[0, action] + 1e-12).detach()
             action_options = {k: v for k, v in self.options.items()}
