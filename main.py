@@ -77,16 +77,10 @@ def coco_bbob(
                 optimizer, problem_instance, options
             )
             options["buffer"] = results["buffer"]
-            all_actor_losses.extend(results["actor_losses"])
-            all_critic_losses.extend(results["critic_losses"])
         else:
             coco_bbob_single_function(optimizer, problem_instance, options)
     if train:
         torch.save(agent_state, "state.pth")
-        with open("actor_losses.json", "w") as file:
-            json.dump(all_actor_losses, file)
-        with open("critic_losses.json", "w") as file:
-            json.dump(all_critic_losses, file)
     return observer.result_folder
 
 
@@ -105,8 +99,9 @@ def coco_bbob_single_function(
 
 
 if __name__ == "__main__":
+    name = "PPO_tanh_reward"
     run = wandb.init(
-        name="smoothing reward2",
+        name=name,
         entity="niecwladek-agh",
         project="RL-DAS",
         config={
@@ -118,7 +113,7 @@ if __name__ == "__main__":
     coco_bbob(
         Agent,
         {"sub_optimization_ratio": 10, "n_individuals": n, "run": run},
-        name="DAS_train",
+        name=f"DAS_train_{name}",
         evaluations_multiplier=multiplier,
         train=True,
     )
@@ -126,14 +121,14 @@ if __name__ == "__main__":
     coco_bbob(
         Agent,
         {"sub_optimization_ratio": 10, "n_individuals": n},
-        name="DAS_test_PPO4",
+        name=f"DAS_test_{name}",
         evaluations_multiplier=multiplier,
         train=False,
     )
     """coco_bbob(
         LMCMAES,
         {"n_individuals": n},
-        name="LMCMAES",
+        name="LMCMAES-20",
         evaluations_multiplier=multiplier,
         train=False,
     )"""
@@ -151,7 +146,7 @@ if __name__ == "__main__":
         evaluations_multiplier=multiplier,
         train=False,
     )"""
-    cocopp.main("exdata/DAS_test_PPO4")
+    cocopp.main(f"exdata/DAS_test_{name}")
     # cocopp.main("exdata/LMCMAES-0001")
     # cocopp.main("exdata/G3PCX-0001")
     # cocopp.main("exdata/SPSO-0001")

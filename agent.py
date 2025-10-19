@@ -12,6 +12,7 @@ from torch import nn
 DISCOUNT_FACTOR = 0.9
 HIDDEN_SIZE = 128
 STATE_SIZE = 46
+ALPHA = 0.3
 device = "cuda" if torch.cuda.is_available() else ""
 
 
@@ -65,8 +66,6 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.99, lam=0.95):
     # dones: list of bools length T
     # values: tensor shape (T,)    (values for states 0..T-1)
     # last_value: scalar (value estimate for final next state)
-    rewards = np.array(rewards)
-    rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
     import torch
 
     T = len(rewards)
@@ -147,21 +146,20 @@ class Agent(Optimizer):
             "buffer",
             RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=device),
         )
-        self.actor_losses = []
-        self.critic_losses = []
         self.choices_history = []
         self.stagnation_count = 0
         self._n_generations = 0
         self.problem = problem
+        self.rewards = []
         self.options = options
         self.history = []
         self.actor = Actor().to(device)
         self.critic = Critic().to(device)
         self.actor_loss_fn = ActorLoss().to(device)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=3e-6)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
-
+        decay_gamma = self.options.get("lr_decay_gamma", 0.99999)
         self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters"):
             self.actor.load_state_dict(p)
@@ -171,6 +169,8 @@ class Agent(Optimizer):
             self.actor_optimizer.load_state_dict(p)
         if p := options.get("critic_optimizer"):
             self.critic_optimizer.load_state_dict(p)
+        self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.actor_optimizer, gamma=decay_gamma)
+        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.critic_optimizer, gamma=decay_gamma)
         sub_optimization_ratio = options["sub_optimization_ratio"]
         self.run = options.get("run", None)
         self.sub_optimizer_max_fe = (
@@ -298,7 +298,8 @@ class Agent(Optimizer):
         advantages = advantages.to(device)
         returns = returns.to(device)
         # normalize advantages
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        advantages = advantages / (advantages.std() + 1e-8)
+        advantages = torch.clamp(advantages, -5, 5)
 
         # multiple epochs of minibatch updates
         dataset_size = states.shape[0]
@@ -336,10 +337,6 @@ class Agent(Optimizer):
                 actor_loss = actor_loss - entropy_coef * entropy
                 critic_loss = value_coef * value_loss
 
-
-                self.actor_losses.append(actor_loss.detach().tolist())
-                self.critic_losses.append(critic_loss.detach().tolist())
-
                 if self.run:
                     self.run.log({"actor_loss": actor_loss.detach().tolist(),
                                   "critic_loss": critic_loss.detach().tolist()})
@@ -354,6 +351,8 @@ class Agent(Optimizer):
                 torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
                 self.critic_optimizer.step()
 
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
             if not np.isscalar(y):
@@ -407,8 +406,6 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
-        results["actor_losses"] = self.actor_losses
-        results["critic_losses"] = self.critic_losses
         results["buffer"] = self.buffer
         return results, {
             "actor_parameters": self.actor.state_dict(),
@@ -434,15 +431,21 @@ class Agent(Optimizer):
         iteration_result = {"x": x, "y": y}
         while not self._check_terminations():
             state = self.get_state(x, y).unsqueeze(0)
+            state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
             with torch.no_grad():
                 policy = self.actor(state.to(device))
                 value = self.critic(state.to(device))
+
             probs = policy.cpu().numpy().squeeze(0)
-            probs = probs / probs.sum()
+            probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
+            probs /= probs.sum()
+
             action = (
-                np.random.choice(len(probs), p=probs)
-                if self.train_mode
-                else np.argmax(probs)
+                (np.random.choice(len(probs), p=probs)# if
+                 # self.buffer.size() >= batch_size else np.random.choice(len(probs)))
+                # if self.train_mode
+                # else np.argmax(probs)
+            )
             )
             self.choices_history.append(action)
             log_prob = torch.log(policy[0, action] + 1e-12).detach()
@@ -460,9 +463,9 @@ class Agent(Optimizer):
             x, y = iteration_result.get("x"), iteration_result.get("y")
 
             reward = self.get_reward(y, best_parent)
+            self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})
-            self.rewards.append(reward)
             self.buffer.add(
                 state.squeeze(0).to(device),
                 action,
@@ -497,11 +500,12 @@ class Agent(Optimizer):
         return self._collect(fitness, self.best_so_far_y)
 
     def get_reward(self, y, best_parent):
-        reference = self.history[0] if len(self.history) > 1 else y.max()
         improvement = (
             best_parent - np.min(y)
-            if best_parent and best_parent != float("inf")
-            else y.max()
         )
-        reward = improvement / reference
-        return np.tanh(reward)  # to the 1/dim power ?
+        reward = np.tanh(improvement)
+        if len(self.choices_history) > 1:
+            last_reward = self.rewards[-1]
+            reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
+            reward = (1 - ALPHA) * reward + ALPHA * last_reward
+        return reward  # to the 1/dim power ?
