@@ -4,136 +4,17 @@ from operator import itemgetter
 import numpy as np
 import torch
 
+from agent_utils import (
+    RolloutBuffer,
+    DEVICE,
+    get_weighted_central_moment,
+    compute_gae,
+    DISCOUNT_FACTOR,
+    Actor,
+    Critic,
+    ActorLoss,
+)
 from optimizers.Optimizer import Optimizer
-from torch import nn
-
-DISCOUNT_FACTOR = 0.9
-HIDDEN_SIZE = 128
-STATE_SIZE = 63
-ALPHA = 0.3
-device = "cuda" if torch.cuda.is_available() else ""
-
-
-class RolloutBuffer:
-    def __init__(self, capacity, device="cpu"):
-        self.capacity = capacity
-        self.device = device
-        self.clear()
-
-    def clear(self):
-        self.states = []
-        self.actions = []
-        self.rewards = []
-        self.dones = []
-        self.log_probs = []
-        self.values = []
-
-    def add(self, state, action, reward, done, log_prob, value):
-        self.states.append(state)
-        self.actions.append(action)
-        self.rewards.append(reward)
-        self.dones.append(done)
-        self.log_probs.append(log_prob)
-        self.values.append(value)
-
-    def size(self):
-        return len(self.states)
-
-    def as_tensors(self):
-        import torch
-
-        states = torch.stack(self.states)[-self.capacity :].to(
-            self.device
-        )  # shape (T, state_dim)
-        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[
-            -self.capacity :
-        ]  # (T,)
-        old_log_probs = torch.stack(self.log_probs).to(self.device)[
-            -self.capacity :
-        ]  # (T,)
-        values = (
-            torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
-        )  # (T,)
-        rewards = self.rewards[-self.capacity :]
-        dones = self.dones[-self.capacity :]
-        return states, actions, old_log_probs, values, rewards, dones
-
-
-def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
-    # rewards: list of scalars length T
-    # dones: list of bools length T
-    # values: tensor shape (T,)    (values for states 0..T-1)
-    # last_value: scalar (value estimate for final next state)
-    import torch
-
-    T = len(rewards)
-    returns = torch.zeros(T, device=device)
-    advantages = torch.zeros(T, device=device)
-    prev_return = last_value
-    prev_value = last_value
-    prev_adv = 0.0
-    for t in reversed(range(T)):
-        mask = 1.0 - float(dones[t])
-        delta = rewards[t] + gamma * prev_value * mask - values[t]
-        adv = delta + gamma * lam * prev_adv * mask
-        advantages[t] = adv
-        prev_adv = adv
-        prev_value = values[t]
-        prev_return = rewards[t] + gamma * prev_return * mask
-        returns[t] = prev_return
-    return returns, advantages
-
-
-class Actor(nn.Module):
-    def __init__(self):
-        super(Actor, self).__init__()
-        self.actor = nn.Sequential(
-            nn.Linear(STATE_SIZE, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Linear(HIDDEN_SIZE, 3),
-            nn.Softmax(dim=-1),
-        )
-
-    def forward(self, x):
-        return self.actor(x)
-
-
-class Critic(nn.Module):
-    def __init__(self):
-        super(Critic, self).__init__()
-
-        self.critic = nn.Sequential(
-            nn.Linear(STATE_SIZE, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Linear(HIDDEN_SIZE, 1),
-        )
-
-    def forward(self, x):
-        return self.critic(x)
-
-
-class ActorLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, advantage, log_prob):
-        return -advantage * log_prob
-
-
-def get_weighted_central_moment(n: int, weights, norms_squared):
-    exponent = n / 2
-    numerator = min((weights * norms_squared**exponent).sum(), 1e8)
-    inertia_denom_w = np.linalg.norm(weights)
-    inertia_denom_n = np.linalg.norm(norms_squared**exponent)
-    return numerator / max(1e-5, inertia_denom_w * max(1e-5, inertia_denom_n))
 
 
 class Agent(Optimizer):
@@ -141,7 +22,7 @@ class Agent(Optimizer):
         Optimizer.__init__(self, problem, options)
         self.rewards = []
         self.buffer = RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 1024), device=device
+            capacity=options.get("ppo_batch_size", 1024), device=DEVICE
         )
         self.choices_history = []
         self.stagnation_count = 0
@@ -150,9 +31,9 @@ class Agent(Optimizer):
         self.rewards = []
         self.options = options
         self.history = []
-        self.actor = Actor().to(device)
-        self.critic = Critic().to(device)
-        self.actor_loss_fn = ActorLoss().to(device)
+        self.actor = Actor().to(DEVICE)
+        self.critic = Critic().to(DEVICE)
+        self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=8e-6)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-7)
@@ -337,7 +218,7 @@ class Agent(Optimizer):
 
         with torch.no_grad():
             last_value = (
-                self.critic(states[-1].unsqueeze(0).to(device)).squeeze(0).cpu().item()
+                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
             )
         returns, advantages = compute_gae(
             rewards,
@@ -458,8 +339,8 @@ class Agent(Optimizer):
             state = self.get_state(x, y).unsqueeze(0)
             state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
             with torch.no_grad():
-                policy = self.actor(state.to(device))
-                value = self.critic(state.to(device))
+                policy = self.actor(state.to(DEVICE))
+                value = self.critic(state.to(DEVICE))
 
             probs = policy.cpu().numpy().squeeze(0)
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
@@ -486,7 +367,7 @@ class Agent(Optimizer):
             if self.run:
                 self.run.log({"reward": reward})
             self.buffer.add(
-                state.squeeze(0).to(device),
+                state.squeeze(0).to(DEVICE),
                 action,
                 float(reward),
                 False,

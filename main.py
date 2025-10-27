@@ -1,146 +1,160 @@
-from itertools import product
+import argparse
+import os
+import shutil
 from typing import List, Type
-
-import cocoex
 import cocopp
-import numpy as np
-import torch
-from tqdm import tqdm
 import wandb
 
 from agent import Agent
-from optimizers.G3PCX import G3PCX
-from optimizers.IPSO import IPSO
+from experiment import coco_bbob
+import optimizers
 from optimizers.Optimizer import Optimizer
-from optimizers.SPSO import SPSO
-from optimizers.LMCMAES import LMCMAES
-from optimizers.SPSOL import SPSOL
-
-"""
-**BBOB (F1-F24)**
-| Difficulty Mode | Training Set | Testing Set |
-|-----------------|--------------|-------------|
-| **easy**        | 4, 6-14, 18-20, 22-24 | 1, 2, 3, 5, 15, 16, 17, 21 |
-| **difficult**   | 1, 2, 3, 5, 15, 16, 17, 21 | 4, 6-14, 18-20, 22-24 |
-"""
-EASY_TRAIN_BBOB = {4, *range(6, 15), 18, 19, 20, 22, 23, 24}
-ALL_FUNCTIONS = {_ for _ in range(1, 25)}
-INSTANCE_IDS = [1, 2, 3, 4, 5, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]
-DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
-def coco_bbob(
-    optimizer: Type[Optimizer],
-    options: dict,
-    name: str,
-    evaluations_multiplier: int = 1_000,
-    train: bool = True,
-    easy_mode: bool = True,
-):
-    if train:
-        agent_state = {
-            i: None
-            for i in (
-                "actor_params",
-                "critic_params",
-                "actor_optimizer",
-                "critic_optimizer",
-            )
-        }
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Dynamic algorithm selection")
 
-    else:
-        agent_state = torch.load(f"{name.replace('test', 'train')}.pth")
-    suite, output = "bbob", name
-    observer = cocoex.Observer(suite, "result_folder: " + output)
-    cocoex.utilities.MiniPrint()
-    function_ids = (
-        EASY_TRAIN_BBOB
-        if ((easy_mode and train) or (not easy_mode and not train))
-        else ALL_FUNCTIONS.difference(EASY_TRAIN_BBOB)
+    parser.add_argument(
+        "name", type=str, help="Name tag (mandatory positional argument)"
     )
-    problems_suite = cocoex.Suite(suite, "", "")
-    problem_ids = [
-        f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-        for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)
-    ]
-    for problem_id in tqdm(np.random.permutation(problem_ids)):
-        problem_instance = problems_suite.get_problem(problem_id)
-        problem_instance.observe_with(observer)
-        options["max_function_evaluations"] = (
-            evaluations_multiplier * problem_instance.dimension
-        )
-        options.update(agent_state)
-        options["train"] = train
-        options["verbose"] = False
-        if train:
-            results, agent_state = coco_bbob_single_function(
-                optimizer, problem_instance, options
-            )
+
+    parser.add_argument(
+        "-p",
+        "--portfolio",
+        nargs="+",
+        default=["SPSO", "IPSO", "SPSOL"],
+        help="List of portfolio algorithms (default: SPSO IPSO SPSOL)",
+    )
+
+    parser.add_argument(
+        "-m",
+        "--population_size",
+        type=int,
+        default=20,
+        help="Population size (default: 20)",
+    )
+    parser.add_argument(
+        "-s",
+        "--sub_optimization_ratio",
+        type=int,
+        default=10,
+        help="ratio of max FE that each sub optimization episode recieves",
+    )
+
+    parser.add_argument(
+        "-f",
+        "--fe_multiplier",
+        type=int,
+        default=10_000,
+        help="Function evaluation multiplier (default: 10 000)",
+    )
+
+    parser.add_argument(
+        "-t",
+        "--test",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run also in test mode (default: True)",
+    )
+
+    parser.add_argument(
+        "-c",
+        "--compare",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable comparison with each algorithm alone (False by default)",
+    )
+
+    parser.add_argument(
+        "-e",
+        "--wandb_entity",
+        type=str,
+        default=None,
+        help="Enable comparison with each algorithm alone (False by default)",
+    )
+
+    parser.add_argument(
+        "-w",
+        "--wandb_project",
+        type=str,
+        default=None,
+        help="Enable comparison with each algorithm alone (False by default)",
+    )
+
+    return parser.parse_args()
+
+
+def main(args):
+    available_optimizers = optimizers.available_optimizers
+    action_space: List[Type[Optimizer]] = []
+    for optimizer in args.portfolio:
+        if optimizer not in available_optimizers:
+            raise ValueError(f'Unknown optimizer "{optimizer}"')
         else:
-            coco_bbob_single_function(optimizer, problem_instance, options)
-    if train:
-        torch.save(agent_state, f"{name}.pth")
-    return observer.result_folder
-
-
-def coco_bbob_single_function(
-    optimizer: Type[Optimizer], function: cocoex.interface.Problem, options
-):
-    problem = {
-        "fitness_function": function,
-        "ndim_problem": function.dimension,
-        "lower_boundary": function.lower_bounds,
-        "upper_boundary": function.upper_bounds,
-    }
-    # run black-box optimizer
-    results = optimizer(problem, options).optimize()
-    return results
-
-
-if __name__ == "__main__":
-    action_space: List[Type[Optimizer]] = [SPSO, IPSO, SPSOL]
-    name = "PPO_BrutalPolicy_3_PSO_policy"
-    run = wandb.init(
-        name=name,
-        entity="niecwladek-agh",
-        project="RL-DAS",
-        config={
-            "dataset": "COCO-BBOB",
-        },
-    )
-    n = 20
-    multiplier = 10_000
+            action_space.append(available_optimizers[optimizer])
+    run = None
+    if args.wandb_entity is not None and args.wandb_project is not None:
+        run = wandb.init(
+            name=args.name,
+            entity=args.wandb_entity,
+            project=args.wandb_project,
+            config={
+                "dataset": "COCO-BBOB",
+            },
+        )
     coco_bbob(
         Agent,
         {
-            "sub_optimization_ratio": 10,
-            "n_individuals": n,
+            "sub_optimization_ratio": args.sub_optimization_ratio,
+            "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,
         },
-        name=f"DAS_train_{name}",
-        evaluations_multiplier=multiplier,
+        name=f"DAS_train_{args.name}",
+        evaluations_multiplier=args.fe_multiplier,
         train=True,
     )
-    run.finish()
-    coco_bbob(
-        Agent,
-        {
-            "sub_optimization_ratio": 10,
-            "n_individuals": n,
-            "action_space": action_space,
-        },
-        name=f"DAS_test_{name}",
-        evaluations_multiplier=multiplier,
-        train=False,
-    )
-    cocopp.main(f"exdata/DAS_test_{name}")
-    for optimizer in action_space:
+    if run is not None:
+        run.finish()
+    if args.test:
+        if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
+            shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
         coco_bbob(
-            optimizer,
-            {"n_individuals": n},
-            name=optimizer.__name__,
-            evaluations_multiplier=multiplier,
+            Agent,
+            {
+                "sub_optimization_ratio": args.sub_optimization_ratio,
+                "n_individuals": args.population_size,
+                "action_space": action_space,
+            },
+            name=f"DAS_test_{args.name}",
+            evaluations_multiplier=args.fe_multiplier,
             train=False,
         )
-        cocopp.main(f"exdata/{optimizer.__name__}")
+        cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
+    if args.compare:
+        for optimizer in action_space:
+            if os.path.exists(os.path.join("exdata", optimizer.__name__)):
+                shutil.rmtree(os.path.join("exdata", optimizer.__name__))
+            coco_bbob(
+                optimizer,
+                {"n_individuals": args.population_size},
+                name=optimizer.__name__,
+                evaluations_multiplier=args.multiplier,
+                train=False,
+            )
+            cocopp.main(os.path.join("exdata", optimizer.__name__))
+
+
+if __name__ == "__main__":
+    args = parse_arguments()
+    print("Running an experiment with the following arguments:")
+
+    print("Experiment name: ", args.name)
+    print("Portfolio: ", args.portfolio)
+    print("Population size: ", args.population_size)
+    print("Function eval multiplier: ", args.fe_multiplier)
+    print("Test mode: ", args.test)
+    print("Compare mode: ", args.compare)
+    print("Weights and Biases entity: ", args.wandb_entity)
+    print("Weights and Biases project: ", args.wandb_project)
+    main(args)

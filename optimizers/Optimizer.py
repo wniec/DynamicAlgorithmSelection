@@ -1,5 +1,4 @@
 import time
-from enum import IntEnum
 
 import numpy as np  # engine for numerical computing
 from pypop7.optimizers.core import Terminations
