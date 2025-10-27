@@ -160,13 +160,19 @@ class Optimizer(object):
         if (
             (self.upper_boundary is not None)
             and (self.lower_boundary is not None)
+            and self.best_so_far_x is not None
             and (
                 np.any(self.lower_boundary > self.best_so_far_x)
                 or np.any(self.best_so_far_x > self.upper_boundary)
             )
         ):
             return False
-        elif np.isnan(self.best_so_far_y) or np.any(np.isnan(self.best_so_far_x)):
+        elif (
+            self.best_so_far_y is None
+            or np.isnan(self.best_so_far_y)
+            or self.best_so_far_x is None
+            or np.any(np.isnan(self.best_so_far_x))
+        ):
             return False
         return True
 

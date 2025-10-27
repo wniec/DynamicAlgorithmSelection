@@ -1,5 +1,5 @@
-import json
 from itertools import product
+from typing import List, Type
 
 import cocoex
 import cocopp
@@ -10,9 +10,11 @@ import wandb
 
 from agent import Agent
 from optimizers.G3PCX import G3PCX
+from optimizers.IPSO import IPSO
 from optimizers.Optimizer import Optimizer
 from optimizers.SPSO import SPSO
 from optimizers.LMCMAES import LMCMAES
+from optimizers.SPSOL import SPSOL
 
 """
 **BBOB (F1-F24)**
@@ -28,15 +30,13 @@ DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
 def coco_bbob(
-    optimizer: Optimizer,
+    optimizer: Type[Optimizer],
     options: dict,
     name: str,
     evaluations_multiplier: int = 1_000,
     train: bool = True,
     easy_mode: bool = True,
 ):
-    all_actor_losses = []
-    all_critic_losses = []
     if train:
         agent_state = {
             i: None
@@ -49,7 +49,7 @@ def coco_bbob(
         }
 
     else:
-        agent_state = torch.load(f"{name}.pth")
+        agent_state = torch.load(f"{name.replace('test', 'train')}.pth")
     suite, output = "bbob", name
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
@@ -84,7 +84,7 @@ def coco_bbob(
 
 
 def coco_bbob_single_function(
-    optimizer: Optimizer, function: cocoex.interface.Problem, options
+    optimizer: Type[Optimizer], function: cocoex.interface.Problem, options
 ):
     problem = {
         "fitness_function": function,
@@ -98,7 +98,8 @@ def coco_bbob_single_function(
 
 
 if __name__ == "__main__":
-    name = "PPO_discrete_small_buffer"
+    action_space: List[Type[Optimizer]] = [SPSO, IPSO, SPSOL]
+    name = "PPO_BrutalPolicy_3_PSO_policy"
     run = wandb.init(
         name=name,
         entity="niecwladek-agh",
@@ -111,7 +112,12 @@ if __name__ == "__main__":
     multiplier = 10_000
     coco_bbob(
         Agent,
-        {"sub_optimization_ratio": 10, "n_individuals": n, "run": run},
+        {
+            "sub_optimization_ratio": 10,
+            "n_individuals": n,
+            "run": run,
+            "action_space": action_space,
+        },
         name=f"DAS_train_{name}",
         evaluations_multiplier=multiplier,
         train=True,
@@ -119,35 +125,22 @@ if __name__ == "__main__":
     run.finish()
     coco_bbob(
         Agent,
-        {"sub_optimization_ratio": 10, "n_individuals": n},
+        {
+            "sub_optimization_ratio": 10,
+            "n_individuals": n,
+            "action_space": action_space,
+        },
         name=f"DAS_test_{name}",
         evaluations_multiplier=multiplier,
         train=False,
     )
-    """coco_bbob(
-        LMCMAES,
-        {"n_individuals": n},
-        name="LMCMAES-20",
-        evaluations_multiplier=multiplier,
-        train=False,
-    )"""
-    """coco_bbob(
-        G3PCX,
-        {"n_individuals": n},
-        name="G3PCX",
-        evaluations_multiplier=multiplier,
-        train=False,
-    )"""
-    """coco_bbob(
-        SPSO,
-        {"n_individuals": n},
-        name="SPSO",
-        evaluations_multiplier=multiplier,
-        train=False,
-    )"""
     cocopp.main(f"exdata/DAS_test_{name}")
-    # cocopp.main("exdata/LMCMAES-0001")
-    # cocopp.main("exdata/G3PCX-0001")
-    # cocopp.main("exdata/SPSO-0001")
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    for optimizer in action_space:
+        coco_bbob(
+            optimizer,
+            {"n_individuals": n},
+            name=optimizer.__name__,
+            evaluations_multiplier=multiplier,
+            train=False,
+        )
+        cocopp.main(f"exdata/{optimizer.__name__}")
