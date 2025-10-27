@@ -207,14 +207,28 @@ class LMCMAES(Optimizer):
         )  # list of number of generations for each restart
         return results
 
-    def initialize(self, is_restart=False, mean=None, x=None, p_c=None, s=None, vm=None, pm=None, b=None, d=None, y=None):
+    def initialize(
+        self,
+        is_restart=False,
+        mean=None,
+        x=None,
+        p_c=None,
+        s=None,
+        vm=None,
+        pm=None,
+        b=None,
+        d=None,
+        y=None,
+    ):
         mean = (
             mean if mean is not None else self._initialize_mean(is_restart)
         )  # mean of Gaussian search distribution
         x = (
             x if x is not None else np.empty((self.n_individuals, self.ndim_problem))
         )  # offspring population
-        p_c = p_c if p_c is not None else np.zeros((self.ndim_problem,))  # evolution path
+        p_c = (
+            p_c if p_c is not None else np.zeros((self.ndim_problem,))
+        )  # evolution path
         s = s if s is not None else 0.0  # for PSR of global step-size adaptation
         vm = vm if vm is not None else np.empty((self.m, self.ndim_problem))
         pm = pm if pm is not None else np.empty((self.m, self.ndim_problem))
@@ -322,7 +336,9 @@ class LMCMAES(Optimizer):
         b = self.start_conditions.get("b", None)
         d = self.start_conditions.get("d", None)
         y = self.start_conditions.get("y", None)
-        mean, x, p_c, s, vm, pm, b, d, y = self.initialize(args, mean, x, p_c, s, vm, pm, b, d, y)
+        mean, x, p_c, s, vm, pm, b, d, y = self.initialize(
+            args, mean, x, p_c, s, vm, pm, b, d, y
+        )
         while not self.termination_signal:
             y_bak = np.copy(y)
             # sample and evaluate offspring population
@@ -331,7 +347,12 @@ class LMCMAES(Optimizer):
             mean, p_c, s, vm, pm, b, d = self._update_distribution(
                 mean, x, p_c, s, vm, pm, b, d, y, y_bak
             )
-            self.results.update({i: locals()[i] for i in ('p_c', 's', 'vm', 'pm', 'b', 'd', 'x', 'y', 'mean')})
+            self.results.update(
+                {
+                    i: locals()[i]
+                    for i in ("p_c", "s", "vm", "pm", "b", "d", "x", "y", "mean")
+                }
+            )
             if self._check_terminations():
                 break
             self._print_verbose_info(fitness, y)
@@ -345,16 +366,32 @@ class LMCMAES(Optimizer):
         results["s"] = s
         return results
 
-    def set_data(self, x, y, mean=None, p_c=None, s=None, vm=None, pm=None, b=None, d=None, *args, **kwargs):
+    def set_data(
+        self,
+        x,
+        y,
+        mean=None,
+        p_c=None,
+        s=None,
+        vm=None,
+        pm=None,
+        b=None,
+        d=None,
+        *args,
+        **kwargs,
+    ):
         if x is None or y is None:
             self.start_conditions = {"x": None, "y": None, "mean": None}
         else:
             indices = np.argsort(y)[: self.individuals_at_start]
-            start_conditions = {i: locals()[i] for i in ('p_c', 's', 'vm', 'pm', 'b', 'd')}
-            start_conditions.update({
-                "x": x[indices],
-                "y": y[indices],
-                "mean": (x.mean(axis=0) if x is not None else None),
-
-            })
+            start_conditions = {
+                i: locals()[i] for i in ("p_c", "s", "vm", "pm", "b", "d")
+            }
+            start_conditions.update(
+                {
+                    "x": x[indices],
+                    "y": y[indices],
+                    "mean": (x.mean(axis=0) if x is not None else None),
+                }
+            )
             self.start_conditions = start_conditions

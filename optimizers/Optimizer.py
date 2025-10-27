@@ -1,10 +1,11 @@
 import time
-from enum import IntEnum
 
 import numpy as np  # engine for numerical computing
 from pypop7.optimizers.core import Terminations
 
-ALL_START_CONDITONS_PARAMETERS = ['v', 'x', 'y', 'p_x', 'p_y', 'n_x', '']
+ALL_START_CONDITONS_PARAMETERS = ["v", "x", "y", "p_x", "p_y", "n_x", ""]
+
+
 class Optimizer(object):
     """Base (abstract) class of all optimizers for continuous black-box **minimization**.
 
@@ -158,13 +159,19 @@ class Optimizer(object):
         if (
             (self.upper_boundary is not None)
             and (self.lower_boundary is not None)
+            and self.best_so_far_x is not None
             and (
                 np.any(self.lower_boundary > self.best_so_far_x)
                 or np.any(self.best_so_far_x > self.upper_boundary)
             )
         ):
             return False
-        elif np.isnan(self.best_so_far_y) or np.any(np.isnan(self.best_so_far_x)):
+        elif (
+            self.best_so_far_y is None
+            or np.isnan(self.best_so_far_y)
+            or self.best_so_far_x is None
+            or np.any(np.isnan(self.best_so_far_x))
+        ):
             return False
         return True
 
@@ -202,4 +209,3 @@ class Optimizer(object):
 
     def get_data(self):
         return self.results or self.start_conditions
-
