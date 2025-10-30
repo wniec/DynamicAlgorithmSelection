@@ -40,13 +40,13 @@ class Agent(Optimizer):
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
         decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
         self.train_mode = options.get("train_mode", True)
-        if p := options.get("actor_parameters"):
+        if p := options.get("actor_parameters", None):
             self.actor.load_state_dict(p)
-        if p := options.get("critic_parameters"):
+        if p := options.get("critic_parameters", None):
             self.critic.load_state_dict(p)
-        if p := options.get("actor_optimizer"):
+        if p := options.get("actor_optimizer", None):
             self.actor_optimizer.load_state_dict(p)
-        if p := options.get("critic_optimizer"):
+        if p := options.get("critic_optimizer", None):
             self.critic_optimizer.load_state_dict(p)
         self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.actor_optimizer, gamma=decay_gamma
@@ -413,8 +413,10 @@ class Agent(Optimizer):
             - (self.best_so_far_y if best_parent == float("inf") else best_parent),
             1e-5,
         )
-
-        improvement = best_parent - np.min(y)
+        best_individual = np.min(y)
+        improvement = (
+            (best_parent - best_individual) if best_individual is not None else 0
+        )
         # used_fe = self.n_function_evaluations / self.max_function_evaluations
         reward = log_scale(improvement) / log_scale(reference)
         if len(self.choices_history) > 1:

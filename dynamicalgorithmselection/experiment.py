@@ -30,21 +30,6 @@ def coco_bbob(
     train: bool = True,
     easy_mode: bool = True,
 ):
-    if train:
-        agent_state = {
-            i: None
-            for i in (
-                "actor_params",
-                "critic_params",
-                "actor_optimizer",
-                "critic_optimizer",
-            )
-        }
-
-    elif optimizer is Agent:
-        agent_state = torch.load(f"{name}.pth")
-    else:
-        agent_state = {}
     suite, output = "bbob", name
     observer = cocoex.Observer(suite, "result_folder: " + output)
     cocoex.utilities.MiniPrint()
@@ -58,6 +43,7 @@ def coco_bbob(
         f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
         for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)
     ]
+    agent_state = {}
     for problem_id in tqdm(np.random.permutation(problem_ids)):
         problem_instance = problems_suite.get_problem(problem_id)
         problem_instance.observe_with(observer)
