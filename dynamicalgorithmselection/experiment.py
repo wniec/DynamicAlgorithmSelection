@@ -42,7 +42,7 @@ def coco_bbob(
         }
 
     elif optimizer is Agent:
-        agent_state = torch.load(f"{name.replace('test', 'train')}.pth")
+        agent_state = torch.load(f"{name}.pth")
     else:
         agent_state = {}
     suite, output = "bbob", name

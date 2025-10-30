@@ -17,12 +17,12 @@ This project explores **Reinforcement Learning (RL)-based meta–black-box optim
 
 ## Features & Structure
 
-| Component | Description |
-|------------|--------------|
-| **RL Agent** | Learns dynamic optimizer selection policies |
-| **Metaheuristics** | LM-CMAES, PSO, IPSO, PSOL, G3PCX |
-| **Population Handling** | Shared `n_individuals` across all optimizers |
-| **Evaluation** | Trained RL model compared to standalone optimizers |
+| Component                 | Description                                        |
+|---------------------------|----------------------------------------------------|
+| **RL Agent**              | Learns dynamic optimizer selection policies        |
+| **Metaheuristics**        | LM-CMAES, PSO, IPSO, PSOL, G3PCX                   |
+| **Population Handling**   | Shared `n_individuals` across all optimizers       |
+| **Evaluation**            | Trained RL model compared to standalone optimizers |
 
 ---
 

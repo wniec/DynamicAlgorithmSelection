@@ -31,12 +31,13 @@ class Agent(Optimizer):
         self.rewards = []
         self.options = options
         self.history = []
-        self.actor = Actor().to(DEVICE)
-        self.critic = Critic().to(DEVICE)
+        self.actions = options.get("action_space")
+        self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
+        self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=8e-6)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-7)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
         decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
         self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters"):
@@ -58,8 +59,6 @@ class Agent(Optimizer):
         self.sub_optimizer_max_fe = (
             self.max_function_evaluations / sub_optimization_ratio
         )
-
-        self.actions = options.get("action_space")
 
     def get_state(self, x: np.ndarray, y: np.ndarray) -> torch.Tensor:
         # Definition of state is inspired by its representation in DE-DDQN article
@@ -94,7 +93,8 @@ class Agent(Optimizer):
                 0.0,  # stagnation count
                 *([0.0] * 29),
                 *last_action_encoded,
-                *([0.0] * 22),
+                *(0.0 for _ in self.actions),
+                *([0.0] * 19),
             ]
         else:
             dist = lambda x1, x2: np.linalg.norm(x1 - x2)
@@ -212,7 +212,7 @@ class Agent(Optimizer):
         return torch.tensor(vector, dtype=torch.float)
 
     def ppo_update(
-        self, buffer, epochs=2, clip_eps=0.2, value_coef=0.5, entropy_coef=0.01
+        self, buffer, epochs=2, clip_eps=0.2, value_coef=0.05, entropy_coef=0.05
     ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
 
@@ -228,6 +228,7 @@ class Agent(Optimizer):
             gamma=DISCOUNT_FACTOR,
             lam=0.95,
         )
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         advantages = torch.clamp(advantages, -5, 5)
 
@@ -314,6 +315,13 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
+        if self.run:
+            choices_count = {
+                self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
+                / (len(self.choices_history) or 1)
+                for j in range(len(self.actions))
+            }
+            self.run.log(choices_count)
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
@@ -330,8 +338,8 @@ class Agent(Optimizer):
         batch_size = self.options.get("sub_optimization_ratio", 10)
         ppo_epochs = self.options.get("ppo_epochs", 10)
         clip_eps = self.options.get("ppo_eps", 0.2)
-        entropy_coef = self.options.get("ppo_entropy", 0.01)
-        value_coef = self.options.get("ppo_value_coef", 0.5)
+        entropy_coef = self.options.get("ppo_entropy", 0.05)
+        value_coef = self.options.get("ppo_value_coef", 0.3)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
@@ -385,7 +393,7 @@ class Agent(Optimizer):
                     value_coef=value_coef,
                     entropy_coef=entropy_coef,
                 )
-            entropy_coef = max(entropy_coef * 0.999, 0.0005)
+            entropy_coef = max(entropy_coef * 0.999, 0.01)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
@@ -399,16 +407,20 @@ class Agent(Optimizer):
         return self._collect(fitness, self.best_so_far_y)
 
     def get_reward(self, y, best_parent):
+        log_scale = lambda x: np.log(np.clip(x, a_min=0, a_max=None) + 1)
+        reference = max(
+            self.worst_so_far_y
+            - (self.best_so_far_y if best_parent == float("inf") else best_parent),
+            1e-5,
+        )
+
         improvement = best_parent - np.min(y)
-        reference = self.worst_so_far_y - self.best_so_far_y
-        used_fe = self.n_function_evaluations / self.max_function_evaluations
-        """
-        scaled = 100 * improvement / reference
-        log_scaled = np.sign(scaled) * np.log(np.abs(scaled) + 1)
-        reward = np.tanh(log_scaled)
+        # used_fe = self.n_function_evaluations / self.max_function_evaluations
+        reward = log_scale(improvement) / log_scale(reference)
         if len(self.choices_history) > 1:
-            reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
+            pass
+            # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
-            return 0"""
-        reward = np.sign(improvement) * used_fe
-        return reward  # to the 1/dim power ?
+            return 0
+        # reward = np.sign(improvement)#  * used_fe
+        return np.clip(np.cbrt(reward), a_min=-0.0, a_max=0.5)  # to the 1/dim power ?
