@@ -4,8 +4,8 @@ from torch import nn
 
 
 DISCOUNT_FACTOR = 0.9
-HIDDEN_SIZE = 128
-STATE_SIZE = 63
+HIDDEN_SIZE = 192
+BASE_STATE_SIZE = 60
 ALPHA = 0.3
 DEVICE = "cuda" if torch.cuda.is_available() else ""
 
@@ -56,12 +56,8 @@ class RolloutBuffer:
 
 
 def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
-    # rewards: list of scalars length T
-    # dones: list of bools length T
-    # values: tensor shape (T,)    (values for states 0..T-1)
-    # last_value: scalar (value estimate for final next state)
-    import torch
-
+    # rewards_arr = np.array(rewards)
+    # rewards = (rewards_arr - rewards_arr.mean()) / (rewards_arr.std() + 1e-5)
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)
@@ -81,16 +77,18 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
 
 
 class Actor(nn.Module):
-    def __init__(self):
+    def __init__(self, n_actions: int, dropout_p: float = 0.15):
         super(Actor, self).__init__()
         self.actor = nn.Sequential(
-            nn.Linear(STATE_SIZE, HIDDEN_SIZE),
+            nn.Linear(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
+            nn.Dropout(p=dropout_p),
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Linear(HIDDEN_SIZE, 3),
+            nn.Dropout(p=dropout_p),
+            nn.Linear(HIDDEN_SIZE, n_actions),
             nn.Softmax(dim=-1),
         )
 
@@ -99,13 +97,14 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self):
+    def __init__(self, n_actions: int):
         super(Critic, self).__init__()
 
         self.critic = nn.Sequential(
-            nn.Linear(STATE_SIZE, HIDDEN_SIZE),
+            nn.Linear(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
+            nn.Dropout(p=0.1),
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),

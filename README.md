@@ -17,36 +17,40 @@ This project explores **Reinforcement Learning (RL)-based meta–black-box optim
 
 ## Features & Structure
 
-| Component | Description |
-|------------|--------------|
-| **RL Agent** | Learns dynamic optimizer selection policies |
-| **Metaheuristics** | LM-CMAES, PSO, IPSO, PSOL, G3PCX |
-| **Population Handling** | Shared `n_individuals` across all optimizers |
-| **Evaluation** | Trained RL model compared to standalone optimizers |
+| Component                 | Description                                        |
+|---------------------------|----------------------------------------------------|
+| **RL Agent**              | Learns dynamic optimizer selection policies        |
+| **Metaheuristics**        | LM-CMAES, PSO, IPSO, PSOL, G3PCX                   |
+| **Population Handling**   | Shared `n_individuals` across all optimizers       |
+| **Evaluation**            | Trained RL model compared to standalone optimizers |
 
 ---
 
 ## Command-Line Interface (CLI)
 
 The project supports flexible configuration through command-line arguments.
-
+### **Installation**
+The project can be Installed by just one command:
+```bash
+uv sync
+```
 ### **Usage**
 ```bash
-python3 main.py <name> [options]
+uv run <name> [options]
 ```
 
 
-| Argument                           | Type               | Default                     | Description                                        |
-|------------------------------------|--------------------|-----------------------------|----------------------------------------------------|
-| `name`                             | `str` (positional) | —                           | **Required name tag** for the run or experiment    |
-| `-p`, `--portfolio`                | `list[str]`        | `['SPSO', 'IPSO', 'SPSOL']` | Portfolio of sub-optimizers to include             |
-| `-m`, `--population_size`          | `int`              | `20`                        | Population size for all fixed-pop-size optimizers  |
-| `-f`, `--fe_multiplier`            | `int`              | `10_000`                    | Function evaluation multiplier                     |
-| `-s`, `--sub_optimization_ratio`   | `int`              | `10`                        | ratio of max_fe, for each sub-optimization episode |
-| `-t`, `--test` / `--no-test`       | `bool`             | `True`                      | Whether to run in test mode                        |
-| `-c`, `--compare` / `--no-compare` | `bool`             | `False`                     | Whether to compare against standalone optimizers   |
-| `-e`, `--wandb_entity`             | `str` (Optional)   | `None`                      | Weights and Biases entity name                     |
-| `-w`, `--wandb_project`            | `str` (Optional)   | `None`                      | Weights and Biases project name                    |
+| Argument                           | Type               | Default                   | Description                                        |
+|------------------------------------|--------------------|---------------------------|----------------------------------------------------|
+| `name`                             | `str` (positional) | —                         | **Required name tag** for the run or experiment    |
+| `-p`, `--portfolio`                | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include             |
+| `-m`, `--population_size`          | `int`              | `20`                      | Population size for all fixed-pop-size optimizers  |
+| `-f`, `--fe_multiplier`            | `int`              | `10_000`                  | Function evaluation multiplier                     |
+| `-s`, `--sub_optimization_ratio`   | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode |
+| `-t`, `--test` / `--no-test`       | `bool`             | `True`                    | Whether to run in test mode                        |
+| `-c`, `--compare` / `--no-compare` | `bool`             | `False`                   | Whether to compare against standalone optimizers   |
+| `-e`, `--wandb_entity`             | `str` (Optional)   | `None`                    | Weights and Biases entity name                     |
+| `-w`, `--wandb_project`            | `str` (Optional)   | `None`                    | Weights and Biases project name                    |
 
 ## Acknowledgment
 
@@ -58,6 +62,4 @@ Much of the implementation is adapted from:
 
 * Add more sub-optimizers (OPOA methods etc.)
 
-* Enable larger portfolio (size 4 and 5).
-
-* Enable additional parameters specifying agent's model architecture.
+* Enable additional parameters specifying agent's model architecture and behaviour.

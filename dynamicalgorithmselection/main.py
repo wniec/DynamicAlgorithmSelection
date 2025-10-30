@@ -3,6 +3,7 @@ import os
 import shutil
 from typing import List, Type
 import cocopp
+import torch
 import wandb
 
 from dynamicalgorithmselection.agent import Agent
@@ -97,6 +98,26 @@ def print_info(args):
     print("Weights and Biases project: ", args.wandb_project)
 
 
+def test(args, action_space):
+    if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
+        shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
+    agent_state = torch.load(f"DAS_train_{args.name}.pth")
+    options = {
+        "sub_optimization_ratio": args.sub_optimization_ratio,
+        "n_individuals": args.population_size,
+        "action_space": action_space,
+    }
+    options.update(agent_state)
+    coco_bbob(
+        Agent,
+        options,
+        name=f"DAS_test_{args.name}",
+        evaluations_multiplier=args.fe_multiplier,
+        train=False,
+    )
+    cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
+
+
 def main():
     args = parse_arguments()
     print_info(args)
@@ -132,20 +153,7 @@ def main():
     if run is not None:
         run.finish()
     if args.test:
-        if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
-            shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
-        coco_bbob(
-            Agent,
-            {
-                "sub_optimization_ratio": args.sub_optimization_ratio,
-                "n_individuals": args.population_size,
-                "action_space": action_space,
-            },
-            name=f"DAS_test_{args.name}",
-            evaluations_multiplier=args.fe_multiplier,
-            train=False,
-        )
-        cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
+        test(args, action_space)
     if args.compare:
         for optimizer in action_space:
             if os.path.exists(os.path.join("exdata", optimizer.__name__)):
