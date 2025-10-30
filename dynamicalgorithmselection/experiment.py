@@ -5,8 +5,8 @@ import cocoex
 import numpy as np
 import torch
 from tqdm import tqdm
-from agent import Agent
-from optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.agent import Agent
+from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 """
 **BBOB (F1-F24)**

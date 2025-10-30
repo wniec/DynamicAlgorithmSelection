@@ -2,7 +2,7 @@ import time
 
 import numpy as np  # engine for numerical computing
 
-from optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 class G3PCX(Optimizer):

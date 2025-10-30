@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 class LMCMAES(Optimizer):

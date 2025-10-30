@@ -4,7 +4,7 @@ from operator import itemgetter
 import numpy as np
 import torch
 
-from agent_utils import (
+from dynamicalgorithmselection.agent_utils import (
     RolloutBuffer,
     DEVICE,
     get_weighted_central_moment,
@@ -14,7 +14,7 @@ from agent_utils import (
     Critic,
     ActorLoss,
 )
-from optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 class Agent(Optimizer):

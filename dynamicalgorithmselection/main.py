@@ -5,10 +5,10 @@ from typing import List, Type
 import cocopp
 import wandb
 
-from agent import Agent
-from experiment import coco_bbob
-import optimizers
-from optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.agent import Agent
+from dynamicalgorithmselection.experiment import coco_bbob
+from dynamicalgorithmselection import optimizers
+from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 def parse_arguments():
@@ -84,7 +84,22 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main(args):
+def print_info(args):
+    print("Running an experiment with the following arguments:")
+
+    print("Experiment name: ", args.name)
+    print("Portfolio: ", args.portfolio)
+    print("Population size: ", args.population_size)
+    print("Function eval multiplier: ", args.fe_multiplier)
+    print("Test mode: ", args.test)
+    print("Compare mode: ", args.compare)
+    print("Weights and Biases entity: ", args.wandb_entity)
+    print("Weights and Biases project: ", args.wandb_project)
+
+
+def main():
+    args = parse_arguments()
+    print_info(args)
     available_optimizers = optimizers.available_optimizers
     action_space: List[Type[Optimizer]] = []
     for optimizer in args.portfolio:
@@ -146,15 +161,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_arguments()
-    print("Running an experiment with the following arguments:")
-
-    print("Experiment name: ", args.name)
-    print("Portfolio: ", args.portfolio)
-    print("Population size: ", args.population_size)
-    print("Function eval multiplier: ", args.fe_multiplier)
-    print("Test mode: ", args.test)
-    print("Compare mode: ", args.compare)
-    print("Weights and Biases entity: ", args.wandb_entity)
-    print("Weights and Biases project: ", args.wandb_project)
-    main(args)
+    main()
