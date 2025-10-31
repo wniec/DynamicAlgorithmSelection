@@ -11,7 +11,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class RolloutBuffer:
-    def __init__(self, capacity, device=DEVICE):
+    def __init__(self, capacity, device="cpu"):
         self.capacity = capacity
         self.device = device
         self.clear()
