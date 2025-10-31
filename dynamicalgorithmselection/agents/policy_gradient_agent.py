@@ -27,6 +27,9 @@ class PolicyGradientAgent(Agent):
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
+
+        self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
+
         decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
         if p := options.get("actor_parameters", None):
             self.actor.load_state_dict(p)
@@ -36,6 +39,15 @@ class PolicyGradientAgent(Agent):
             self.actor_optimizer.load_state_dict(p)
         if p := options.get("critic_optimizer", None):
             self.critic_optimizer.load_state_dict(p)
+
+        if p := options.get("target_critic_parameters", None):
+            self.target_critic.load_state_dict(p)
+        else:
+            self.target_critic.load_state_dict(self.critic.state_dict())
+
+        self.target_critic.eval()
+        self.tau = self.options.get("critic_target_tau", 0.05)
+
         self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.actor_optimizer, gamma=decay_gamma
         )
@@ -56,7 +68,10 @@ class PolicyGradientAgent(Agent):
 
         with torch.no_grad():
             last_value = (
-                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
+                self.target_critic(states[-1].unsqueeze(0).to(DEVICE))
+                .squeeze(0)
+                .cpu()
+                .item()
                 if buffer.size() > 0
                 else 0.0
             )
@@ -112,6 +127,13 @@ class PolicyGradientAgent(Agent):
                 self.actor_optimizer.step()
                 self.critic_optimizer.step()
 
+            with torch.no_grad():
+                for target_param, param in zip(
+                    self.target_critic.parameters(), self.critic.parameters()
+                ):
+                    target_param.data.mul_(1.0 - self.tau)
+                    target_param.data.add_(self.tau * param.data)
+
             if self.run:
                 self.run.log(
                     {
@@ -128,13 +150,14 @@ class PolicyGradientAgent(Agent):
         if self.run:
             choices_count = {
                 self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
-                                          / (len(self.choices_history) or 1)
+                / (len(self.choices_history) or 1)
                 for j in range(len(self.actions))
             }
             self.run.log(choices_count)
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
+            "target_critic_parameters": self.target_critic.state_dict(),
             "actor_optimizer": self.actor_optimizer.state_dict(),
             "critic_optimizer": self.critic_optimizer.state_dict(),
             "buffer": self.buffer,
@@ -205,7 +228,7 @@ class PolicyGradientAgent(Agent):
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
-                        optimizer.n_function_evaluations - self.n_function_evaluations
+                    optimizer.n_function_evaluations - self.n_function_evaluations
                 )
             else:
                 self.stagnation_count = 0
@@ -213,4 +236,3 @@ class PolicyGradientAgent(Agent):
             self.n_function_evaluations = optimizer.n_function_evaluations
         # self.buffer.clear()
         return self._collect(fitness, self.best_so_far_y)
-
