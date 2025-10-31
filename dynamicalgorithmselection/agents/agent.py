@@ -3,9 +3,8 @@ from operator import itemgetter
 import numpy as np
 import torch
 
-from dynamicalgorithmselection.agents.agent_utils import (
-    get_weighted_central_moment,
-)
+from dynamicalgorithmselection.agents.agent_utils import get_weighted_central_moment
+
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
