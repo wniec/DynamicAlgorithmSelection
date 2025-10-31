@@ -39,6 +39,10 @@ class Agent(Optimizer):
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
+
+        self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
+
+
         decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
         self.train_mode = options.get("train_mode", True)
         if p := options.get("actor_parameters", None):
@@ -49,6 +53,15 @@ class Agent(Optimizer):
             self.actor_optimizer.load_state_dict(p)
         if p := options.get("critic_optimizer", None):
             self.critic_optimizer.load_state_dict(p)
+
+        if p := options.get("target_critic_parameters", None):
+            self.target_critic.load_state_dict(p)
+        else:
+            self.target_critic.load_state_dict(self.critic.state_dict())
+
+        self.target_critic.eval()
+        self.tau = self.options.get("critic_target_tau", 0.05)
+
         self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.actor_optimizer, gamma=decay_gamma
         )
@@ -225,7 +238,7 @@ class Agent(Optimizer):
 
         with torch.no_grad():
             last_value = (
-                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
+                self.target_critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
                 if buffer.size() > 0
                 else 0.0
             )
@@ -280,6 +293,11 @@ class Agent(Optimizer):
                 torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
                 self.actor_optimizer.step()
                 self.critic_optimizer.step()
+
+            with torch.no_grad():
+                for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
+                    target_param.data.mul_(1.0 - self.tau)
+                    target_param.data.add_(self.tau * param.data)
 
             if self.run:
                 self.run.log(
@@ -352,6 +370,7 @@ class Agent(Optimizer):
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
+            "target_critic_parameters": self.target_critic.state_dict(),
             "actor_optimizer": self.actor_optimizer.state_dict(),
             "critic_optimizer": self.critic_optimizer.state_dict(),
             "buffer": self.buffer,
