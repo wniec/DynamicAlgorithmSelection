@@ -133,6 +133,7 @@ def _coco_bbob_policy_gradient_train(
         results, agent_state = coco_bbob_single_function(
             optimizer, problem_instance, options
         )
+        options["buffer"] = agent_state["buffer"]
         problem_instance.free()
     torch.save(agent_state, f"{name}.pth")
     return observer.result_folder

@@ -181,7 +181,7 @@ def main():
                 optimizer,
                 {"n_individuals": args.population_size},
                 name=optimizer.__name__,
-                evaluations_multiplier=args.multiplier,
+                evaluations_multiplier=args.fe_multiplier,
                 train=False,
                 neuroevolution=args.neuroevolution,
             )
