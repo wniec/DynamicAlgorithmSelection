@@ -101,7 +101,7 @@ def print_info(args):
 def test(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
         shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
-    agent_state = torch.load(f"DAS_train_{args.name}.pth")
+    agent_state = torch.load(f"DAS_train_{args.name}.pth", weights_only=False)
     options = {
         "sub_optimization_ratio": args.sub_optimization_ratio,
         "n_individuals": args.population_size,
@@ -162,7 +162,7 @@ def main():
                 optimizer,
                 {"n_individuals": args.population_size},
                 name=optimizer.__name__,
-                evaluations_multiplier=args.multiplier,
+                evaluations_multiplier=args.fe_multiplier,
                 train=False,
             )
             cocopp.main(os.path.join("exdata", optimizer.__name__))
