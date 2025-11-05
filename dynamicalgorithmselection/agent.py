@@ -2,17 +2,9 @@ import time
 from operator import itemgetter
 
 import numpy as np
-import torch
 
 from dynamicalgorithmselection.agent_utils import (
-    RolloutBuffer,
-    DEVICE,
     get_weighted_central_moment,
-    compute_gae,
-    DISCOUNT_FACTOR,
-    Actor,
-    Critic,
-    ActorLoss,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -21,9 +13,6 @@ class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
         self.rewards = []
-        self.buffer = RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 1024), device=DEVICE
-        )
         self.choices_history = []
         self.stagnation_count = 0
         self._n_generations = 0
@@ -32,35 +21,17 @@ class Agent(Optimizer):
         self.options = options
         self.history = []
         self.actions = options.get("action_space")
-        self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
-        self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
-        self.actor_loss_fn = ActorLoss().to(DEVICE)
-        self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
-        decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
+
         self.train_mode = options.get("train_mode", True)
-        if p := options.get("actor_parameters", None):
-            self.actor.load_state_dict(p)
-        if p := options.get("critic_parameters", None):
-            self.critic.load_state_dict(p)
-        if p := options.get("actor_optimizer", None):
-            self.actor_optimizer.load_state_dict(p)
-        if p := options.get("critic_optimizer", None):
-            self.critic_optimizer.load_state_dict(p)
-        self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            self.actor_optimizer, gamma=decay_gamma
-        )
-        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            self.critic_optimizer, gamma=decay_gamma
-        )
+
         sub_optimization_ratio = options["sub_optimization_ratio"]
         self.run = options.get("run", None)
         self.sub_optimizer_max_fe = (
             self.max_function_evaluations / sub_optimization_ratio
         )
+        self.net = options["net"]
 
-    def get_state(self, x: np.ndarray, y: np.ndarray) -> torch.Tensor:
+    def get_state(self, x: np.ndarray, y: np.ndarray) -> np.array:
         # Definition of state is inspired by its representation in DE-DDQN article
         last_action_index = (
             self.choices_history[-1] if self.choices_history else len(self.actions)
@@ -209,58 +180,7 @@ class Agent(Optimizer):
                 min(slopes),
                 sum(slopes) / len(slopes),
             ]
-        return torch.tensor(vector, dtype=torch.float)
-
-    def ppo_update(
-        self, buffer, epochs=2, clip_eps=0.2, value_coef=0.05, entropy_coef=0.05
-    ):
-        states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
-
-        with torch.no_grad():
-            last_value = (
-                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
-            )
-        returns, advantages = compute_gae(
-            rewards,
-            dones,
-            values.detach().cpu(),
-            last_value,
-            gamma=DISCOUNT_FACTOR,
-            lam=0.95,
-        )
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        advantages = torch.clamp(advantages, -5, 5)
-
-        for epoch in range(epochs):
-            policy = self.actor(states)
-            dist_log_probs = torch.log(
-                policy.gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-12
-            )
-            entropy = -(policy * torch.log(policy + 1e-12)).sum(dim=1).mean()
-
-            ratio = torch.exp(dist_log_probs - old_log_probs)
-            surr1 = ratio * advantages
-            surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * advantages
-            actor_loss = -torch.min(surr1, surr2).mean() - entropy_coef * entropy
-
-            values_pred = self.critic(states).squeeze(1)
-            value_loss = torch.nn.functional.mse_loss(values_pred, returns)
-            loss = actor_loss + value_coef * value_loss
-            if self.run:
-                self.run.log(
-                    {
-                        "actor_loss": actor_loss.detach().item(),
-                        "critic_loss": value_loss.detach().item(),
-                    }
-                )
-            self.actor_optimizer.zero_grad()
-            self.critic_optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
-            self.actor_optimizer.step()
-            self.critic_optimizer.step()
+        return np.array(vector, dtype=float)
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
@@ -315,6 +235,8 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
+        results["mean_reward"] = sum(self.rewards) / len(self.rewards)
+        results["actions"] = self.choices_history
         if self.run:
             choices_count = {
                 self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
@@ -322,38 +244,23 @@ class Agent(Optimizer):
                 for j in range(len(self.actions))
             }
             self.run.log(choices_count)
-        return results, {
-            "actor_parameters": self.actor.state_dict(),
-            "critic_parameters": self.critic.state_dict(),
-            "actor_optimizer": self.actor_optimizer.state_dict(),
-            "critic_optimizer": self.critic_optimizer.state_dict(),
-        }
+        return results
 
     def optimize(self, fitness_function=None, args=None):
         fitness = Optimizer.optimize(self, fitness_function)
 
-        batch_size = self.options.get("sub_optimization_ratio", 10)
-        ppo_epochs = self.options.get("ppo_epochs", 10)
-        clip_eps = self.options.get("ppo_eps", 0.2)
-        entropy_coef = self.options.get("ppo_entropy", 0.05)
-        value_coef = self.options.get("ppo_value_coef", 0.3)
-
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
         while not self._check_terminations():
-            state = self.get_state(x, y).unsqueeze(0)
-            state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
-            with torch.no_grad():
-                policy = self.actor(state.to(DEVICE))
-                value = self.critic(state.to(DEVICE))
-
-            probs = policy.cpu().numpy().squeeze(0)
+            state = self.get_state(x, y)
+            state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
+            policy = self.net.activate(state)
+            probs = np.array(policy)
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
 
             action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
-            log_prob = torch.log(policy[0, action] + 1e-12).detach()
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
                 self.n_function_evaluations + self.sub_optimizer_max_fe,
@@ -371,26 +278,11 @@ class Agent(Optimizer):
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})
-            self.buffer.add(
-                state.squeeze(0).to(DEVICE),
-                action,
-                float(reward),
-                False,
-                log_prob,
-                value.detach(),
-            )
 
             self.n_function_evaluations = optimizer.n_function_evaluations
             # every batch_size steps or on termination, run ppo update
-            if self.train_mode and self.buffer.size() >= batch_size:
-                self.ppo_update(
-                    self.buffer,
-                    epochs=ppo_epochs,
-                    clip_eps=clip_eps,
-                    value_coef=value_coef,
-                    entropy_coef=entropy_coef,
-                )
-            entropy_coef = max(entropy_coef * 0.999, 0.01)
+            if self.train_mode:
+                pass
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (

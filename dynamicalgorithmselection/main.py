@@ -1,9 +1,9 @@
 import argparse
 import os
+import pickle
 import shutil
 from typing import List, Type
 import cocopp
-import torch
 import wandb
 
 from dynamicalgorithmselection.agent import Agent
@@ -101,13 +101,16 @@ def print_info(args):
 def test(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
         shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
-    agent_state = torch.load(f"DAS_train_{args.name}.pth")
+
+    #agent_state = torch.load(f)
+    with open(f"DAS_train_{args.name}.pkl", "rb") as f:
+        net = pickle.load(f)
     options = {
         "sub_optimization_ratio": args.sub_optimization_ratio,
         "n_individuals": args.population_size,
         "action_space": action_space,
     }
-    options.update(agent_state)
+    options.update({"net": net})
     coco_bbob(
         Agent,
         options,
