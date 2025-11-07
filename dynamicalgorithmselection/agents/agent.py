@@ -1,9 +1,9 @@
-import time
 from operator import itemgetter
 
 import numpy as np
+import torch
 
-from dynamicalgorithmselection.agent_utils import (
+from dynamicalgorithmselection.agents.agent_utils import (
     get_weighted_central_moment,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
@@ -29,7 +29,6 @@ class Agent(Optimizer):
         self.sub_optimizer_max_fe = (
             self.max_function_evaluations / sub_optimization_ratio
         )
-        self.net = options["net"]
 
     def get_state(self, x: np.ndarray, y: np.ndarray) -> np.array:
         # Definition of state is inspired by its representation in DE-DDQN article
@@ -180,7 +179,7 @@ class Agent(Optimizer):
                 min(slopes),
                 sum(slopes) / len(slopes),
             ]
-        return np.array(vector, dtype=float)
+        return torch.tensor(vector, dtype=torch.float)
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
@@ -231,69 +230,10 @@ class Agent(Optimizer):
         return optimizer.get_data()
 
     def _collect(self, fitness, y=None):
-        if y is not None:
-            self._print_verbose_info(fitness, y)
-        results = Optimizer._collect(self, fitness)
-        results["_n_generations"] = self._n_generations
-        results["mean_reward"] = sum(self.rewards) / len(self.rewards)
-        results["actions"] = self.choices_history
-        if self.run:
-            choices_count = {
-                self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
-                / (len(self.choices_history) or 1)
-                for j in range(len(self.actions))
-            }
-            self.run.log(choices_count)
-        return results
+        raise NotImplementedError
 
     def optimize(self, fitness_function=None, args=None):
-        fitness = Optimizer.optimize(self, fitness_function)
-
-        x, y, reward = None, None, None
-        iteration_result = {"x": x, "y": y}
-        while not self._check_terminations():
-            state = self.get_state(x, y)
-            state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
-            policy = self.net.activate(state)
-            probs = np.array(policy)
-            probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
-            probs /= probs.sum()
-
-            action = np.random.choice(len(probs), p=probs)
-            self.choices_history.append(action)
-            action_options = {k: v for k, v in self.options.items()}
-            action_options["max_function_evaluations"] = min(
-                self.n_function_evaluations + self.sub_optimizer_max_fe,
-                self.max_function_evaluations,
-            )
-            action_options["verbose"] = False
-            optimizer = self.actions[action](self.problem, action_options)
-            optimizer.n_function_evaluations = self.n_function_evaluations
-            optimizer._n_generations = 0
-            best_parent = np.min(y) if y is not None else float("inf")
-            iteration_result = self.iterate(iteration_result, optimizer)
-            x, y = iteration_result.get("x"), iteration_result.get("y")
-
-            reward = self.get_reward(y, best_parent)
-            self.rewards.append(reward)
-            if self.run:
-                self.run.log({"reward": reward})
-
-            self.n_function_evaluations = optimizer.n_function_evaluations
-            # every batch_size steps or on termination, run ppo update
-            if self.train_mode:
-                pass
-            self._print_verbose_info(fitness, y)
-            if optimizer.best_so_far_y >= self.best_so_far_y:
-                self.stagnation_count += (
-                    optimizer.n_function_evaluations - self.n_function_evaluations
-                )
-            else:
-                self.stagnation_count = 0
-
-            self.n_function_evaluations = optimizer.n_function_evaluations
-        # self.buffer.clear()
-        return self._collect(fitness, self.best_so_far_y)
+        raise NotImplementedError
 
     def get_reward(self, y, best_parent):
         log_scale = lambda x: np.log(np.clip(x, a_min=0, a_max=None) + 1)
