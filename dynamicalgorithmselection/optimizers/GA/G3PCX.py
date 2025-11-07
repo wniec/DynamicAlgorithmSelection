@@ -1,17 +1,12 @@
-import time
+import numpy as np
 
-import numpy as np  # engine for numerical computing
-
+from dynamicalgorithmselection.optimizers.GA.GA import GA
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
-class G3PCX(Optimizer):
+class G3PCX(GA):
     def __init__(self, problem, options):
-        Optimizer.__init__(self, problem, options)
-        if self.n_individuals is None:  # population size
-            self.n_individuals = 100
-        assert self.n_individuals > 0
-        self._n_generations = 0
+        GA.__init__(self, problem, options)
         self.n_offsprings = options.get("n_offsprings", 2)
         assert self.n_offsprings > 0
         self.n_parents = options.get("n_parents", 3)
@@ -20,26 +15,8 @@ class G3PCX(Optimizer):
         self._std_pcx_2 = options.get("_std_pcx_2", 0.1)
         self._elitist = None  # index of elitist
 
-    def _print_verbose_info(self, fitness, y):
-        if self.saving_fitness:
-            if not np.isscalar(y):
-                fitness.extend(y)
-            else:
-                fitness.append(y)
-        if self.verbose and (
-            (not self._n_generations % self.verbose) or (self.termination_signal > 0)
-        ):
-            info = "  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}"
-            print(
-                info.format(
-                    self._n_generations,
-                    self.best_so_far_y,
-                    np.min(y),
-                    self.n_function_evaluations,
-                )
-            )
-
     def initialize(self, args=None, x=None, y=None):
+        recalculate_y = y is None
         x = (
             x
             if x is not None
@@ -49,11 +26,12 @@ class G3PCX(Optimizer):
                 size=(self.n_individuals, self.ndim_problem),
             )
         )  # population
-        y = y if y is not None else np.empty((self.n_individuals,))  # fitness
-        for i in range(self.n_individuals):
-            if self._check_terminations():
-                break
-            y[i] = self._evaluate_fitness(x[i], args)
+        y = np.empty((self.n_individuals,)) if recalculate_y else y  # fitness
+        if recalculate_y:
+            for i in range(self.n_individuals):
+                if self._check_terminations():
+                    break
+                y[i] = self._evaluate_fitness(x[i], args)
         return x, y
 
     def iterate(self, x=None, y=None, args=None):
@@ -83,10 +61,16 @@ class G3PCX(Optimizer):
             for ii, j in enumerate(parents[1:]):
                 diff[ii] = x[j] - x[p]  # distance from one parent
             for ii in range(self.n_parents - 1):
+                # added 1e-8 for numerical stability, made sqrt from positive only
                 d_mean[ii] = np.linalg.norm(diff[ii]) * np.sqrt(
-                    1.0
-                    - np.power(
-                        np.dot(diff[ii], d) / (np.linalg.norm(diff[ii]) * d_norm), 2
+                    max(
+                        1.0
+                        - np.power(
+                            np.dot(diff[ii], d)
+                            / ((np.linalg.norm(diff[ii])) * d_norm + 1e-8),
+                            2,
+                        ),
+                        0,
                     )
                 )
             d_mean = np.mean(d_mean)  # average of perpendicular distances
@@ -95,7 +79,7 @@ class G3PCX(Optimizer):
                 * d_mean
                 * self.rng_optimization.standard_normal((self.ndim_problem,))
             )
-            orth = orth - (np.dot(orth, d) * d) / np.power(d_norm, 2)
+            orth = orth - (np.dot(orth, d) * d) / (np.power(d_norm, 2) + 1e-8)
             xx[i] = (
                 x[p]
                 + self._std_pcx_1 * self.rng_optimization.standard_normal() * d
@@ -126,10 +110,7 @@ class G3PCX(Optimizer):
         return results
 
     def optimize(self, fitness_function=None, args=None):
-        self.start_time = time.time()
-        if fitness_function is not None:
-            self.fitness_function = fitness_function
-        fitness = []  # to store all fitness generated during evolution/optimization
+        fitness = GA.optimize(self, fitness_function)
         x, y = (
             self.start_conditions.get("x", None),
             self.start_conditions.get("y", None),

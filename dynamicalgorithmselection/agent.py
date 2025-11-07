@@ -330,10 +330,7 @@ class Agent(Optimizer):
         }
 
     def optimize(self, fitness_function=None, args=None):
-        self.start_time = time.time()
-        if fitness_function is not None:
-            self.fitness_function = fitness_function
-        fitness = []  # to store all fitness generated during evolution/optimization
+        fitness = Optimizer.optimize(self, fitness_function)
 
         batch_size = self.options.get("sub_optimization_ratio", 10)
         ppo_epochs = self.options.get("ppo_epochs", 10)

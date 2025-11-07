@@ -5,7 +5,6 @@ import cocoex
 import numpy as np
 import torch
 from tqdm import tqdm
-from dynamicalgorithmselection.agent import Agent
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 """
@@ -59,6 +58,7 @@ def coco_bbob(
             )
         else:
             coco_bbob_single_function(optimizer, problem_instance, options)
+        problem_instance.free()
     if train:
         torch.save(agent_state, f"{name}.pth")
     return observer.result_folder

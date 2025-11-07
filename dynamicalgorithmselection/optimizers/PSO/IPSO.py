@@ -1,38 +1,11 @@
 import numpy as np  # engine for numerical computing
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.optimizers.PSO.PSO import PSO
 
 
-class IPSO(Optimizer):
+class IPSO(PSO):
     def __init__(self, problem, options):
-        Optimizer.__init__(self, problem, options)
-        self.results: dict = {}
-        if (
-            self.n_individuals is None
-        ):  # swarm (population) size, aka number of particles
-            self.n_individuals = 20
-        self.cognition = options.get("cognition", 2.0)  # cognitive learning rate
-        assert self.cognition >= 0.0
-        self.society = options.get("society", 2.0)  # social learning rate
-        assert self.society >= 0.0
-        self.max_ratio_v = options.get("max_ratio_v", 0.2)  # maximal ratio of velocity
-        assert 0.0 < self.max_ratio_v <= 1.0
-        self.is_bound = options.get("is_bound", False)
-        self._max_v = self.max_ratio_v * (
-            self.upper_boundary - self.lower_boundary
-        )  # maximal velocity
-        self._min_v = -self._max_v  # minimal velocity
-        self._topology = None  # neighbors topology of social learning
-        self._n_generations = 0  # initial number of generations
-        # set linearly decreasing inertia weights introduced in [Shi&Eberhart, 1998, IEEE-WCCI/CEC]
-        self._max_generations = np.ceil(
-            self.max_function_evaluations / self.n_individuals
-        )
-        if self._max_generations == np.inf:
-            self._max_generations = 1e2 * self.ndim_problem
-        self._w = (
-            0.9 - 0.5 * (np.arange(self._max_generations) + 1.0) / self._max_generations
-        )  # from 0.9 to 0.4
-        self._swarm_shape = (self.n_individuals, self.ndim_problem)
+        PSO.__init__(self, problem, options)
         self.n_individuals = 1  # minimum of swarm size
         self.max_n_individuals = options.get(
             "max_n_individuals", 1000
@@ -47,7 +20,9 @@ class IPSO(Optimizer):
         self.max_ratio_v = options.get("max_ratio_v", 0.5)  # maximal ratio of velocity
         assert 0.0 <= self.max_ratio_v <= 1.0
 
-    def initialize(self, args=None, v=None, x=None, y=None, p_x=None, p_y=None):
+    def initialize(
+        self, args=None, v=None, x=None, y=None, p_x=None, p_y=None, n_x=None
+    ):
         recalculate_y = y is None
         v = (
             np.zeros((self.n_individuals, self.ndim_problem)) if v is None else v
@@ -74,25 +49,6 @@ class IPSO(Optimizer):
                 y[i] = self._evaluate_fitness(x[i], args)
             p_y = np.copy(y)
         return v, x, y, p_x, p_y
-
-    def _print_verbose_info(self, fitness, y):
-        if self.saving_fitness:
-            if not np.isscalar(y):
-                fitness.extend(y)
-            else:
-                fitness.append(y)
-        if self.verbose and (
-            (not self._n_generations % self.verbose) or (self.termination_signal > 0)
-        ):
-            info = "  * Generation {:d}: best_so_far_y {:7.5e}, min(y) {:7.5e} & Evaluations {:d}"
-            print(
-                info.format(
-                    self._n_generations,
-                    self.best_so_far_y,
-                    np.min(y),
-                    self.n_function_evaluations,
-                )
-            )
 
     def iterate(
         self, v=None, x=None, y=None, p_x=None, p_y=None, args=None, fitness=None
@@ -136,13 +92,6 @@ class IPSO(Optimizer):
         self.results.update({i: locals()[i] for i in ("v", "x", "y", "p_x", "p_y")})
         return v, x, y, p_x, p_y
 
-    def _collect(self, fitness, y=None):
-        if y is not None:
-            self._print_verbose_info(fitness, y)
-        results = Optimizer._collect(self, fitness)
-        results["_n_generations"] = self._n_generations
-        return results
-
     def optimize(self, fitness_function=None, args=None):
         fitness = Optimizer.optimize(self, fitness_function)
 
@@ -160,8 +109,8 @@ class IPSO(Optimizer):
 
     def set_data(
         self,
-        x,
-        y,
+        x=None,
+        y=None,
         v=None,
         p_x=None,
         p_y=None,
@@ -197,7 +146,11 @@ class IPSO(Optimizer):
                 [i for i in range(self.n_individuals)],
                 key=lambda x: self.results["y"][x],
             )[: self.n_individuals]
-        return {
-            k: (v[best_indices] if k in pop_data else v)
-            for k, v in self.results.items()
-        } or self.start_conditions
+        return (
+            self.results
+            | {
+                k: (v[best_indices] if k in pop_data else v)
+                for k, v in self.results.items()
+            }
+            or self.start_conditions
+        )

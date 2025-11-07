@@ -66,8 +66,20 @@ class Optimizer(BaseOptimizer):
         )
         return result
 
-    def set_data(self, x, y, best_x=None, best_y=None, *args, **kwargs):
-        self.start_conditions = {"x": x, "y": y, "best_x": best_x, "best_y": best_y}
+    def set_data(self, x=None, y=None, best_x=None, best_y=None, *args, **kwargs):
+        self.start_conditions = {
+            "x": x,
+            "y": (y if isinstance(y, np.ndarray) else None),
+            "best_x": best_x,
+            "best_y": best_y,
+        }
 
     def get_data(self):
         return self.results or self.start_conditions
+
+    def optimize(self, fitness_function=None):
+        self.start_time = time.time()
+        if fitness_function is not None:
+            self.fitness_function = fitness_function
+        fitness = []  # to store all fitness generated during evolution/optimization
+        return fitness
