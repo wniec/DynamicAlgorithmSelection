@@ -23,6 +23,7 @@ DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
 def eval_genomes(genomes, config, problem_batches, suite, options, observer, evaluations_multiplier):
+    run = options.get("run", None)
     num_actions = len(options.get("action_space"))
     for problem_batch, (genome_id, genome) in zip(cycle(problem_batches), genomes):
         fitness = 0
@@ -45,7 +46,10 @@ def eval_genomes(genomes, config, problem_batches, suite, options, observer, eva
         ])
         norm_entropy = -(choices_count * np.nan_to_num(np.log(choices_count), nan=0, neginf=0, posinf=0)).sum() / np.log(num_actions)
 
-        genome.fitness = fitness / len(problem_batch) + norm_entropy / 5
+        genome.fitness = fitness / len(problem_batch) + norm_entropy / 35
+        if run is not None:
+            run.log({"fitness": genome.fitness})
+            run.log({"entropy": norm_entropy})
 
 
 def coco_bbob(
