@@ -172,7 +172,7 @@ def _coco_bbob_neuroevolution_train(
         ),
         300,
     )
-    with open(f"{name}.pkl", "wb") as f:
+    with open(f"DAS_train_{name}.pkl", "wb") as f:
         pickle.dump(winner, f)
     return observer.result_folder
 
