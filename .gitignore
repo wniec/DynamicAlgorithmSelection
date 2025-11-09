@@ -3,5 +3,7 @@ __pycache__
 exdata/
 optimizers/__pycache__
 ppdata/
-venv/
+.venv/
 *.pth
+wandb/
+.dist/

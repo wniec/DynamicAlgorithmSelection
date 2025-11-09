@@ -267,6 +267,7 @@ source = { editable = "." }
 dependencies = [
     { name = "coco-experiment" },
     { name = "cocopp" },
+    { name = "ioh" },
     { name = "neat-python" },
     { name = "polars" },
     { name = "pypop7" },
@@ -281,6 +282,7 @@ dependencies = [
 requires-dist = [
     { name = "coco-experiment", specifier = ">=2.8.1,<3" },
     { name = "cocopp", specifier = ">=2.8.0,<3" },
+    { name = "ioh", specifier = ">=0.3.22" },
     { name = "neat-python", specifier = ">=0.92" },
     { name = "polars", specifier = ">=1.34.0,<2" },
     { name = "pypop7", specifier = ">=0.0.82,<0.0.83" },
@@ -423,6 +425,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0c/47/57e897fb7094afb2d26e8b2e4af9a45c7cf1a405acdeeca001fdf2c98501/imageio-2.37.0.tar.gz", hash = "sha256:71b57b3669666272c818497aebba2b4c5f20d5b37c81720e5e1a56d59c492996", size = 389963, upload-time = "2025-01-20T02:42:37.089Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/bd/b394387b598ed84d8d0fa90611a90bee0adc2021820ad5729f7ced74a8e2/imageio-2.37.0-py3-none-any.whl", hash = "sha256:11efa15b87bc7871b61590326b2d635439acc321cf7f8ce996f812543ce10eed", size = 315796, upload-time = "2025-01-20T02:42:34.931Z" },
+]
+
+[[package]]
+name = "ioh"
+version = "0.3.22"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/36/fd/001e327e4d1eb36227c7a84bc819f9c760b616592f0da38a81c259fe0937/ioh-0.3.22.tar.gz", hash = "sha256:b482d1c26e358d5ff1127b69dbbf8b53b2284362359f8c66b997a4390fb6b9d3", size = 8057908, upload-time = "2025-09-26T10:18:44.633Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/67/16a124984a141a40edaa1f9776f5fe2021e40e51214751fafa7140e6f465/ioh-0.3.22-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:6810fb39661a9d3ed8f77771de68acbf778305e2e9b92949017472f9ac2aabdc", size = 8350034, upload-time = "2025-09-26T10:18:17.44Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/d0/fc8011418c00b50f7bd85cc63e289387e46d5fa01077d3749e64feee10d1/ioh-0.3.22-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4e03145f319af32c4ab3552524f751fe1ccc71a369cbc1552ae88c64215dee15", size = 8251815, upload-time = "2025-09-26T10:18:20.387Z" },
+    { url = "https://files.pythonhosted.org/packages/58/e1/4ec2e70d456be99a819e7544a5a5ac954b6918d289a7656663d7cc8e4486/ioh-0.3.22-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:88273fab9126a4d1299fd145319f701658dc786a8253fba6ae4c13fb5e8f4fc7", size = 8670467, upload-time = "2025-09-26T10:18:22.196Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/35/949fc370594e9bb9c937888c92ea53e9e04dbcf1fa80c7e6a60a00ad0e78/ioh-0.3.22-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2b56d033d2efe0501cb76851eb4bf6f7031bf01512350006cf25026e3f036add", size = 8605274, upload-time = "2025-09-26T10:18:24.169Z" },
+    { url = "https://files.pythonhosted.org/packages/84/87/3fa26e99673244d811d10b45b0e1d48209ec8c8e2721fc1ca29186226002/ioh-0.3.22-cp312-cp312-win32.whl", hash = "sha256:31e16a60044a7473433ce64439e1388691b3f701ca39d89cfe939ede11ba260f", size = 8095039, upload-time = "2025-09-26T10:18:26.34Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/05/c1983f506511d45e950f5212d37a57ec8587f54b2d11abd8acd7a3a83e4f/ioh-0.3.22-cp312-cp312-win_amd64.whl", hash = "sha256:4a1da06186428cbb3ed0afb9db6dbb3bf771a3e0f4e90c4a5d564dc5158cec14", size = 8206836, upload-time = "2025-09-26T10:18:28.298Z" },
 ]
 
 [[package]]

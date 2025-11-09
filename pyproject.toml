@@ -16,6 +16,7 @@ dependencies = [
     "tenacity>=9.1.2,<10",
     "neat-python>=0.92",
     "torch>=2.9.0",
+    "ioh>=0.3.22",
 ]
 
 [build-system]
