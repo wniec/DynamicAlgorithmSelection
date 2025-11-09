@@ -69,7 +69,7 @@ def eval_genomes(
             options["max_function_evaluations"] = (
                 evaluations_multiplier * problem_instance.dimension
             )
-            options["train"] = True
+            options["train_mode"] = True
             options["verbose"] = False
             options["net"] = neat.nn.FeedForwardNetwork.create(genome, config)
             results = coco_bbob_single_function(optimizer, problem_instance, options)
@@ -128,7 +128,7 @@ def _coco_bbob_policy_gradient_train(
             evaluations_multiplier * problem_instance.dimension
         )
         options.update(agent_state)
-        options["train"] = True
+        options["train_mode"] = True
         options["verbose"] = False
         results, agent_state = coco_bbob_single_function(
             optimizer, problem_instance, options
@@ -192,7 +192,7 @@ def _coco_bbob_test(
         options["max_function_evaluations"] = (
             evaluations_multiplier * problem_instance.dimension
         )
-        options["train"] = False
+        options["train_mode"] = False
         options["verbose"] = False
         coco_bbob_single_function(optimizer, problem_instance, options)
         problem_instance.free()
