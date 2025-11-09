@@ -1,13 +1,15 @@
 import argparse
 import os
+import pickle
 import shutil
 from typing import List, Type
 import cocopp
 import torch
 import wandb
 
-from dynamicalgorithmselection.agent import Agent
-from dynamicalgorithmselection.experiment import coco_bbob
+from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
+from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
+from dynamicalgorithmselection.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -82,6 +84,14 @@ def parse_arguments():
         help="Enable comparison with each algorithm alone (False by default)",
     )
 
+    parser.add_argument(
+        "-n",
+        "--neuroevolution",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable training via NEAT algorithm (False by default)",
+    )
+
     return parser.parse_args()
 
 
@@ -101,15 +111,23 @@ def print_info(args):
 def test(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
         shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
-    agent_state = torch.load(f"DAS_train_{args.name}.pth")
+
     options = {
         "sub_optimization_ratio": args.sub_optimization_ratio,
         "n_individuals": args.population_size,
         "action_space": action_space,
     }
-    options.update(agent_state)
-    coco_bbob(
-        Agent,
+    # agent_state = torch.load(f)
+    if args.neuroevolution:
+        with open(f"DAS_train_{args.name}.pkl", "rb") as f:
+            net = pickle.load(f)
+        options.update({"net": net})
+        agent_class = NeuroevolutionAgent
+    else:
+        options.update(torch.load(f"DAS_train_{args.name}.pth"))
+        agent_class = PolicyGradientAgent
+    coco_bbob_experiment(
+        agent_class,
         options,
         name=f"DAS_test_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -138,8 +156,8 @@ def main():
                 "dataset": "COCO-BBOB",
             },
         )
-    coco_bbob(
-        Agent,
+    coco_bbob_experiment(
+        NeuroevolutionAgent if args.neuroevolution else PolicyGradientAgent,
         {
             "sub_optimization_ratio": args.sub_optimization_ratio,
             "n_individuals": args.population_size,
@@ -149,6 +167,7 @@ def main():
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
+        neuroevolution=args.neuroevolution,
     )
     if run is not None:
         run.finish()
@@ -158,12 +177,13 @@ def main():
         for optimizer in action_space:
             if os.path.exists(os.path.join("exdata", optimizer.__name__)):
                 shutil.rmtree(os.path.join("exdata", optimizer.__name__))
-            coco_bbob(
+            coco_bbob_experiment(
                 optimizer,
                 {"n_individuals": args.population_size},
                 name=optimizer.__name__,
                 evaluations_multiplier=args.multiplier,
                 train=False,
+                neuroevolution=args.neuroevolution,
             )
             cocopp.main(os.path.join("exdata", optimizer.__name__))
 
