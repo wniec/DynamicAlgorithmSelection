@@ -232,7 +232,7 @@ class LMCMAES(ES):
             self.start_conditions = {"x": None, "y": None, "mean": None}
         elif not isinstance(y, np.ndarray):
             self.start_conditions = {
-                i: locals()[i]
+                i: locals().get(i, None)
                 for i in (
                     "cf",
                     "best_so_far_y",
@@ -243,7 +243,7 @@ class LMCMAES(ES):
         else:
             indices = np.argsort(y)[: self.individuals_at_start]
             start_conditions = {
-                i: locals()[i] for i in ("p_c", "s", "vm", "pm", "b", "d")
+                i: locals().get(i, None) for i in ("p_c", "s", "vm", "pm", "b", "d")
             }
             start_conditions.update(
                 {

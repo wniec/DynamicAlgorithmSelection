@@ -7,7 +7,7 @@ DISCOUNT_FACTOR = 0.9
 HIDDEN_SIZE = 192
 BASE_STATE_SIZE = 60
 ALPHA = 0.3
-DEVICE = "cuda" if torch.cuda.is_available() else ""
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class RolloutBuffer:
@@ -38,26 +38,18 @@ class RolloutBuffer:
     def as_tensors(self):
         import torch
 
-        states = torch.stack(self.states)[-self.capacity :].to(
-            self.device
-        )  # shape (T, state_dim)
+        states = torch.stack(self.states)[-self.capacity :].to(self.device)
         actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[
             -self.capacity :
-        ]  # (T,)
-        old_log_probs = torch.stack(self.log_probs).to(self.device)[
-            -self.capacity :
-        ]  # (T,)
-        values = (
-            torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
-        )  # (T,)
+        ]
+        old_log_probs = torch.stack(self.log_probs).to(self.device)[-self.capacity :]
+        values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
         rewards = self.rewards[-self.capacity :]
         dones = self.dones[-self.capacity :]
         return states, actions, old_log_probs, values, rewards, dones
 
 
 def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
-    # rewards_arr = np.array(rewards)
-    # rewards = (rewards_arr - rewards_arr.mean()) / (rewards_arr.std() + 1e-5)
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)

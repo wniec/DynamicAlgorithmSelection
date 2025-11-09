@@ -58,7 +58,9 @@ def eval_genomes(
 ):
     run = options.get("run", None)
     num_actions = len(options.get("action_space"))
-    for problem_batch, (genome_id, genome) in zip(cycle(problem_batches), tqdm(genomes)):
+    for problem_batch, (genome_id, genome) in zip(
+        cycle(problem_batches), tqdm(genomes)
+    ):
         fitness = 0
         actions = []
         for problem_id in problem_batch:
