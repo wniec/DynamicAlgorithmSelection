@@ -7,7 +7,7 @@ This project explores **Reinforcement Learning (RL)-based meta–black-box optim
 ## Overview
 
 - Implements **five metaheuristic algorithms**:  
-  **LM-CMAES**, **PSO**, **IPSO**, **PSOL**, and **G3PCX**
+  **LM-CMAES**, **standard PSO**, **CPSO**, **IPSO**, **PSOL**, **OPOA2015**, **POWELL**, and **G3PCX**
 - All algorithms share the same **population size** (`n_individuals`) for seamless transitions.
 - The core of the system is an **RL-based agent** that learns to **switch** between optimizers during the optimization process.
 - The agent makes switching decisions in **quantized stages**, determined by the fraction of total function evaluations (`sub_optimization_ratio`) already consumed by the current optimizer.
@@ -40,17 +40,18 @@ uv run <name> [options]
 ```
 
 
-| Argument                           | Type               | Default                   | Description                                        |
-|------------------------------------|--------------------|---------------------------|----------------------------------------------------|
-| `name`                             | `str` (positional) | —                         | **Required name tag** for the run or experiment    |
-| `-p`, `--portfolio`                | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include             |
-| `-m`, `--population_size`          | `int`              | `20`                      | Population size for all fixed-pop-size optimizers  |
-| `-f`, `--fe_multiplier`            | `int`              | `10_000`                  | Function evaluation multiplier                     |
-| `-s`, `--sub_optimization_ratio`   | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode |
-| `-t`, `--test` / `--no-test`       | `bool`             | `True`                    | Whether to run in test mode                        |
-| `-c`, `--compare` / `--no-compare` | `bool`             | `False`                   | Whether to compare against standalone optimizers   |
-| `-e`, `--wandb_entity`             | `str` (Optional)   | `None`                    | Weights and Biases entity name                     |
-| `-w`, `--wandb_project`            | `str` (Optional)   | `None`                    | Weights and Biases project name                    |
+| Argument                                         | Type               | Default                   | Description                                                       |
+|--------------------------------------------------|--------------------|---------------------------|-------------------------------------------------------------------|
+| `name`                                           | `str` (positional) | —                         | **Required name tag** for the run or experiment                   |
+| `-p`, `--portfolio`                              | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include                            |
+| `-m`, `--population_size`                        | `int`              | `20`                      | Population size for all fixed-pop-size optimizers                 |
+| `-f`, `--fe_multiplier`                          | `int`              | `10_000`                  | Function evaluation multiplier                                    |
+| `-s`, `--sub_optimization_ratio`                 | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode                |
+| `-t`, `--test` / `--no-test`                     | `bool`             | `True`                    | Whether to run in test mode                                       |
+| `-c`, `--compare` / `--no-compare`               | `bool`             | `False`                   | Whether to compare against standalone optimizers                  |
+| `-e`, `--wandb_entity`                           | `str`              | `None`                    | Weights and Biases entity name                                    |
+| `-w`, `--wandb_project`                          | `str`              | `None`                    | Weights and Biases project name                                   |
+| `-n`, `--neuroevolution` / `--no-neuroevolution` | `bool`             | `False`                   | Whether or not train using NEAT instead of policy-gradient method |
 
 ## Acknowledgment
 
