@@ -60,7 +60,9 @@ class CPSO(PSO):
         p_x = self.start_conditions.get("p_x", None)
         p_y = self.start_conditions.get("p_y", None)
         n_x = self.start_conditions.get("n_x", None)
-
+        if self.best_so_far_x is None and y is not None and x is not None:
+            best_so_far_idx = np.argmin(y)
+            self.best_so_far_x = x[best_so_far_idx]
         v, x, y, p_x, p_y, n_x = self.initialize(args, v, x, y, p_x, p_y, n_x)
         yy = y  # only for printing
         while not self.termination_signal:
