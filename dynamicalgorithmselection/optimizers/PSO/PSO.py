@@ -130,7 +130,7 @@ class PSO(Optimizer):
         **kwargs,
     ):
         start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
-        if x is None or y is None:
+        if not isinstance(x, np.ndarray) or not isinstance(y, np.ndarray):
             self.start_conditions = start_conditions
             return
         start_conditions["x"] = x

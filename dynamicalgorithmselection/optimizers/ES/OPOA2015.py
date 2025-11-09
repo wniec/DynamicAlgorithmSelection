@@ -21,6 +21,8 @@ def cholesky_update(rm, z, downdate):
 
 class OPOA2015(ES):
     def __init__(self, problem, options):
+        self.mean_history = []
+        self.y_history = []
         options["n_individuals"] = 1  # mandatory setting
         options["n_parents"] = 1  # mandatory setting
         ES.__init__(self, problem, options | {"sigma": 0.9})
@@ -58,8 +60,6 @@ class OPOA2015(ES):
             if cf is None
             else cf
         )
-        if is_restart:
-            print(best_so_far_y)
         best_so_far_y = float(np.copy(y)) if best_so_far_y is None else best_so_far_y
         p_s = self.p_ts if p_s is None else p_s
         p_c = np.zeros((self.ndim_problem,)) if p_c is None else p_c
@@ -107,8 +107,6 @@ class OPOA2015(ES):
             {
                 i: locals()[i]
                 for i in (
-                    "mean",
-                    "y",
                     "cf",
                     "best_so_far_y",
                     "p_s",
@@ -116,6 +114,8 @@ class OPOA2015(ES):
                 )
             }
         )
+        self.mean_history.append(mean)
+        self.y_history.append(y)
         return mean, y, cf, best_so_far_y, p_s, p_c
 
     def restart_reinitialize(
@@ -180,14 +180,16 @@ class OPOA2015(ES):
         best_so_far_y=None,
         p_s=None,
         p_c=None,
+        x=None,
         *args,
         **kwargs,
     ):
-        y = (
-            float(np.mean(y))
-            if y is not None and isinstance(y, np.ndarray)
-            else (float(y) if y else y)
+        mean = (
+            mean
+            if mean is not None
+            else (np.mean(x, axis=0) if x is not None else None)
         )
+        y = y if isinstance(y, float) else None
         self.start_conditions = {
             i: locals()[i]
             for i in (
@@ -199,3 +201,15 @@ class OPOA2015(ES):
                 "p_c",
             )
         }
+
+    def get_data(self):
+        pop_data = ["x", "y"]
+        best_indices = sorted(
+            [i for i in range(self.n_individuals)],
+            key=lambda x: self.y_history[x],
+        )[: self.n_individuals]
+        x = np.array(self.mean_history)[best_indices]
+        y = np.array(self.y_history)[best_indices]
+        return (
+            self.results | {i: locals()[i] for i in pop_data} or self.start_conditions
+        )
