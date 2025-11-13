@@ -25,12 +25,12 @@ class PolicyGradientAgent(Agent):
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=5e-6)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-7)
 
         self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
 
-        decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
+        decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
             self.actor.load_state_dict(p)
         if p := options.get("critic_parameters", None):
@@ -54,6 +54,10 @@ class PolicyGradientAgent(Agent):
         self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.critic_optimizer, gamma=decay_gamma
         )
+
+        self.actor.reset_memory()
+        self.critic.reset_memory()
+        self.target_critic.reset_memory()
 
     def ppo_update(
         self,

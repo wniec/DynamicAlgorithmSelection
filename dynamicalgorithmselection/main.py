@@ -124,7 +124,7 @@ def test(args, action_space):
         options.update({"net": net})
         agent_class = NeuroevolutionAgent
     else:
-        options.update(torch.load(f"DAS_train_{args.name}.pth"))
+        options.update(torch.load(f"DAS_train_{args.name}.pth", weights_only=False))
         agent_class = PolicyGradientAgent
     coco_bbob_experiment(
         agent_class,
