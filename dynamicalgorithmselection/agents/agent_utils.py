@@ -2,10 +2,9 @@ import numpy as np
 import torch
 from torch import nn
 
-
 DISCOUNT_FACTOR = 0.9
 HIDDEN_SIZE = 108
-BASE_STATE_SIZE = 60
+BASE_STATE_SIZE = 59
 ALPHA = 0.3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -39,7 +38,9 @@ class RolloutBuffer:
         import torch
 
         states = torch.stack(self.states)[-self.capacity :].to(self.device)
-        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[-self.capacity :]
+        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[
+            -self.capacity :
+        ]
         old_log_probs = torch.stack(self.log_probs).to(self.device)[-self.capacity :]
         values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
         rewards = self.rewards[-self.capacity :]
@@ -102,7 +103,7 @@ class LSTMModule(nn.Module):
 
 class Actor(LSTMModule):
     def __init__(self, n_actions: int, dropout_p: float = 0.15, lstm_layers: int = 1):
-        super().__init__(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE, lstm_layers)
+        super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
         self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
@@ -127,7 +128,7 @@ class Actor(LSTMModule):
 
 class Critic(LSTMModule):
     def __init__(self, n_actions: int, dropout_p: float = 0.1, lstm_layers: int = 1):
-        super().__init__(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE, lstm_layers)
+        super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
         self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
@@ -157,9 +158,18 @@ class ActorLoss(nn.Module):
         return -advantage * log_prob
 
 
-def get_weighted_central_moment(n: int, weights, norms_squared):
-    exponent = n / 2
-    numerator = min((weights * norms_squared**exponent).sum(), 1e8)
-    inertia_denom_w = np.linalg.norm(weights)
-    inertia_denom_n = np.linalg.norm(norms_squared**exponent)
-    return numerator / max(1e-5, inertia_denom_w * max(1e-5, inertia_denom_n))
+def distance(x0: np.ndarray, x1: np.ndarray) -> float:
+    return np.linalg.norm(x0 - x1)
+
+
+def inverse_scaling(x):
+    # Monotonic increacing in [0, inf) function that is bounded in [0, 1)
+    return x / (x + 5)
+
+
+def get_list_stats(data: list):
+    return (
+        max(data),
+        min(data),
+        sum(data) / len(data),
+    )
