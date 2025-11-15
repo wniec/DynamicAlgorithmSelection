@@ -1,4 +1,5 @@
 import time
+from typing import Optional
 
 import numpy as np
 from pypop7.optimizers.core import Optimizer as BaseOptimizer
@@ -74,7 +75,7 @@ class Optimizer(BaseOptimizer):
             "best_y": best_y,
         }
 
-    def get_data(self):
+    def get_data(self, n_individuals: Optional[int] = None):
         return self.results or self.start_conditions
 
     def optimize(self, fitness_function=None):

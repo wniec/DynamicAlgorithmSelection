@@ -4,7 +4,7 @@ from torch import nn
 
 
 DISCOUNT_FACTOR = 0.9
-HIDDEN_SIZE = 192
+HIDDEN_SIZE = 108
 BASE_STATE_SIZE = 60
 ALPHA = 0.3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -39,9 +39,7 @@ class RolloutBuffer:
         import torch
 
         states = torch.stack(self.states)[-self.capacity :].to(self.device)
-        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[
-            -self.capacity :
-        ]
+        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[-self.capacity :]
         old_log_probs = torch.stack(self.log_probs).to(self.device)[-self.capacity :]
         values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
         rewards = self.rewards[-self.capacity :]
@@ -68,14 +66,44 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
     return returns, advantages
 
 
-class Actor(nn.Module):
-    def __init__(self, n_actions: int, dropout_p: float = 0.15):
-        super(Actor, self).__init__()
-        self.actor = nn.Sequential(
-            nn.Linear(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p),
+class LSTMModule(nn.Module):
+    def __init__(self, input_size, hidden_size, lstm_layers=1):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.lstm_layers = lstm_layers
+        self.lstm = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=lstm_layers,
+            batch_first=True,
+        )
+        self.hidden = None
+
+    def reset_memory(self, batch_size=1, device=DEVICE):
+        self.hidden = (
+            torch.zeros(self.lstm_layers, batch_size, self.hidden_size, device=device),
+            torch.zeros(self.lstm_layers, batch_size, self.hidden_size, device=device),
+        )
+
+    def forward_lstm(self, x):
+        batch_size = x.size(0)
+        device = x.device
+
+        # Reinitialize hidden state if needed
+        if self.hidden is None or self.hidden[0].size(1) != batch_size:
+            self.reset_memory(batch_size=batch_size, device=device)
+        else:
+            # Detach hidden state from previous graph
+            self.hidden = (self.hidden[0].detach(), self.hidden[1].detach())
+
+        out, self.hidden = self.lstm(x, self.hidden)
+        return out
+
+
+class Actor(LSTMModule):
+    def __init__(self, n_actions: int, dropout_p: float = 0.15, lstm_layers: int = 1):
+        super().__init__(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE, lstm_layers)
+        self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
@@ -84,27 +112,41 @@ class Actor(nn.Module):
             nn.Softmax(dim=-1),
         )
 
-    def forward(self, x):
-        return self.actor(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 2:
+            x_seq = x.unsqueeze(1)
+        elif x.dim() == 3:
+            x_seq = x
+        else:
+            raise ValueError(f"Unsupported input tensor shape for Actor: {x.shape}")
+        x_seq = x_seq.to(next(self.parameters()).device)
+        lstm_out = self.forward_lstm(x_seq)
+        last = lstm_out[:, -1, :]
+        return self.head(last)
 
 
-class Critic(nn.Module):
-    def __init__(self, n_actions: int):
-        super(Critic, self).__init__()
-
-        self.critic = nn.Sequential(
-            nn.Linear(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Dropout(p=0.1),
+class Critic(LSTMModule):
+    def __init__(self, n_actions: int, dropout_p: float = 0.1, lstm_layers: int = 1):
+        super().__init__(BASE_STATE_SIZE + n_actions, HIDDEN_SIZE, lstm_layers)
+        self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
+            nn.Dropout(p=dropout_p),
             nn.Linear(HIDDEN_SIZE, 1),
         )
 
-    def forward(self, x):
-        return self.critic(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 2:
+            x_seq = x.unsqueeze(1)
+        elif x.dim() == 3:
+            x_seq = x
+        else:
+            raise ValueError(f"Unsupported input tensor shape for Critic: {x.shape}")
+        x_seq = x_seq.to(next(self.parameters()).device)
+        lstm_out = self.forward_lstm(x_seq)
+        last = lstm_out[:, -1, :]
+        return self.head(last)
 
 
 class ActorLoss(nn.Module):

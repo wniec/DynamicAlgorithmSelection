@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from dynamicalgorithmselection.optimizers.DS.DS import DS
 
@@ -220,12 +222,12 @@ class POWELL(DS):
             )
         }
 
-    def get_data(self):
+    def get_data(self, n_individuals: Optional[int] = None):
         pop_data = ["x", "y"]
         best_indices = sorted(
-            [i for i in range(self.n_individuals)],
+            [i for i in range(len(self.y_history))],
             key=lambda x: self.y_history[x],
-        )[: self.n_individuals]
+        )[:n_individuals]
         x = np.array(self.x_history)[best_indices]
         y = np.array(self.y_history)[best_indices]
         return (

@@ -4,4 +4,5 @@ exdata/
 optimizers/__pycache__
 ppdata/
 venv/
+/wandb
 *.pth

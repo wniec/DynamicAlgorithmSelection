@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import numba as nb
 
@@ -73,7 +75,9 @@ class OPOA2015(ES):
             downdate, beta = True, -beta
         else:
             downdate = False
-        return cholesky_update(np.sqrt(alpha) * cf, np.sqrt(beta + 1e-8) * v, downdate)
+        return cholesky_update(
+            np.sqrt(max(alpha, 1e-8)) * cf, np.sqrt(beta + 1e-8) * v, downdate
+        )
 
     def iterate(
         self, mean=None, cf=None, best_so_far_y=None, p_s=None, p_c=None, args=None
@@ -202,12 +206,12 @@ class OPOA2015(ES):
             )
         }
 
-    def get_data(self):
+    def get_data(self, n_individuals: Optional[int] = None):
         pop_data = ["x", "y"]
         best_indices = sorted(
-            [i for i in range(self.n_individuals)],
+            [i for i in range(len(self.y_history))],
             key=lambda x: self.y_history[x],
-        )[: self.n_individuals]
+        )[:n_individuals]
         x = np.array(self.mean_history)[best_indices]
         y = np.array(self.y_history)[best_indices]
         return (

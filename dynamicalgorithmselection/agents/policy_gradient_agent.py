@@ -17,16 +17,20 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
-        self.buffer = RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 1024), device=DEVICE
+        self.buffer = options.get(
+            "buffer",
+            RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=DEVICE),
         )
         self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-5)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-6)
-        decay_gamma = self.options.get("lr_decay_gamma", 0.9998)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=5e-6)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-7)
+
+        self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
+
+        decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
             self.actor.load_state_dict(p)
         if p := options.get("critic_parameters", None):
@@ -35,6 +39,15 @@ class PolicyGradientAgent(Agent):
             self.actor_optimizer.load_state_dict(p)
         if p := options.get("critic_optimizer", None):
             self.critic_optimizer.load_state_dict(p)
+
+        if p := options.get("target_critic_parameters", None):
+            self.target_critic.load_state_dict(p)
+        else:
+            self.target_critic.load_state_dict(self.critic.state_dict())
+
+        self.target_critic.eval()
+        self.tau = self.options.get("critic_target_tau", 0.05)
+
         self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.actor_optimizer, gamma=decay_gamma
         )
@@ -42,14 +55,29 @@ class PolicyGradientAgent(Agent):
             self.critic_optimizer, gamma=decay_gamma
         )
 
+        self.actor.reset_memory()
+        self.critic.reset_memory()
+        self.target_critic.reset_memory()
+
     def ppo_update(
-        self, buffer, epochs=2, clip_eps=0.2, value_coef=0.05, entropy_coef=0.05
+        self,
+        buffer,
+        epochs=4,
+        minibatch_size=64,
+        clip_eps=0.2,
+        value_coef=0.3,
+        entropy_coef=0.02,
     ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
 
         with torch.no_grad():
             last_value = (
-                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
+                self.target_critic(states[-1].unsqueeze(0).to(DEVICE))
+                .squeeze(0)
+                .cpu()
+                .item()
+                if buffer.size() > 0
+                else 0.0
             )
         returns, advantages = compute_gae(
             rewards,
@@ -60,24 +88,56 @@ class PolicyGradientAgent(Agent):
             lam=0.95,
         )
         returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        advantages = advantages.to(DEVICE)
+        returns = returns.to(DEVICE)
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        advantages = torch.clamp(advantages, -5, 5)
+        dataset_size = states.shape[0]
 
         for epoch in range(epochs):
-            policy = self.actor(states)
-            dist_log_probs = torch.log(
-                policy.gather(1, actions.unsqueeze(1)).squeeze(1) + 1e-12
-            )
-            entropy = -(policy * torch.log(policy + 1e-12)).sum(dim=1).mean()
+            indices = np.arange(dataset_size)
+            np.random.shuffle(indices)
 
-            ratio = torch.exp(dist_log_probs - old_log_probs)
-            surr1 = ratio * advantages
-            surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * advantages
-            actor_loss = -torch.min(surr1, surr2).mean() - entropy_coef * entropy
+            for start in range(0, dataset_size, minibatch_size):
+                mb_idx = indices[start : start + minibatch_size]
+                mb_states = states[mb_idx]
+                mb_actions = actions[mb_idx]
+                mb_old_log_probs = old_log_probs[mb_idx]
+                mb_returns = returns[mb_idx]
+                mb_advantages = advantages[mb_idx]
+                # forward
+                policy = self.actor(mb_states)
+                dist_log_probs = torch.log(
+                    policy.gather(1, mb_actions.unsqueeze(1)).squeeze(1) + 1e-12
+                )
+                entropy = -(policy * torch.log(policy + 1e-12)).sum(dim=1).mean()
+                # ratio and clipped surrogate
+                ratio = torch.exp(dist_log_probs - mb_old_log_probs)
+                surr1 = ratio * mb_advantages
+                surr2 = (
+                    torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * mb_advantages
+                )
+                actor_loss = -torch.min(surr1, surr2).mean()
+                # value loss
+                values_pred = self.critic(mb_states).squeeze(1)
+                value_loss = torch.nn.functional.mse_loss(values_pred, mb_returns)
+                loss = actor_loss + value_coef * value_loss - entropy_coef * entropy
+                # optimize
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
 
-            values_pred = self.critic(states).squeeze(1)
-            value_loss = torch.nn.functional.mse_loss(values_pred, returns)
-            loss = actor_loss + value_coef * value_loss
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
+
+            with torch.no_grad():
+                for target_param, param in zip(
+                    self.target_critic.parameters(), self.critic.parameters()
+                ):
+                    target_param.data.mul_(1.0 - self.tau)
+                    target_param.data.add_(self.tau * param.data)
+
             if self.run:
                 self.run.log(
                     {
@@ -85,13 +145,6 @@ class PolicyGradientAgent(Agent):
                         "critic_loss": value_loss.detach().item(),
                     }
                 )
-            self.actor_optimizer.zero_grad()
-            self.critic_optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
-            self.actor_optimizer.step()
-            self.critic_optimizer.step()
 
     def _collect(self, fitness, y=None):
         if y is not None:
@@ -108,15 +161,17 @@ class PolicyGradientAgent(Agent):
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
+            "target_critic_parameters": self.target_critic.state_dict(),
             "actor_optimizer": self.actor_optimizer.state_dict(),
             "critic_optimizer": self.critic_optimizer.state_dict(),
+            "buffer": self.buffer,
         }
 
     def optimize(self, fitness_function=None, args=None):
         fitness = Optimizer.optimize(self, fitness_function)
 
-        batch_size = self.options.get("sub_optimization_ratio", 10)
-        ppo_epochs = self.options.get("ppo_epochs", 10)
+        batch_size = 1024
+        ppo_epochs = self.options.get("ppo_epochs", 4)
         clip_eps = self.options.get("ppo_eps", 0.2)
         entropy_coef = self.options.get("ppo_entropy", 0.05)
         value_coef = self.options.get("ppo_value_coef", 0.3)

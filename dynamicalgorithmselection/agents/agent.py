@@ -3,9 +3,8 @@ from operator import itemgetter
 import numpy as np
 import torch
 
-from dynamicalgorithmselection.agents.agent_utils import (
-    get_weighted_central_moment,
-)
+from dynamicalgorithmselection.agents.agent_utils import get_weighted_central_moment
+
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
@@ -227,7 +226,7 @@ class Agent(Optimizer):
             results["worst_so_far_x"],
             results["worst_so_far_y"],
         )  # fitness evaluation
-        return optimizer.get_data()
+        return optimizer.get_data(self.n_individuals)
 
     def _collect(self, fitness, y=None):
         raise NotImplementedError
