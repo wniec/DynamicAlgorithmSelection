@@ -147,17 +147,7 @@ class PolicyGradientAgent(Agent):
                 )
 
     def _collect(self, fitness, y=None):
-        if y is not None:
-            self._print_verbose_info(fitness, y)
-        results = Optimizer._collect(self, fitness)
-        results["_n_generations"] = self._n_generations
-        if self.run:
-            choices_count = {
-                self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
-                / (len(self.choices_history) or 1)
-                for j in range(len(self.actions))
-            }
-            self.run.log(choices_count)
+        results, _ = super()._collect(fitness, y)
         return results, {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),

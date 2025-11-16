@@ -14,7 +14,13 @@ from dynamicalgorithmselection.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
-AGENTS_DICT = {"random": RandomAgent, "neuroevolution": NeuroevolutionAgent, "policy-gradient": PolicyGradientAgent}
+AGENTS_DICT = {
+    "random": RandomAgent,
+    "neuroevolution": NeuroevolutionAgent,
+    "policy-gradient": PolicyGradientAgent,
+}
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Dynamic algorithm selection")
 
@@ -85,11 +91,13 @@ def parse_arguments():
         help="Enable comparison with each algorithm alone (False by default)",
     )
 
-    parser.add_argument("-a",
-                        "--agent",
-                        default="policy-gradient",
-                        choices=['random', 'neuroevolution', 'policy-gradient'],
-                        help='specify which agent to use')
+    parser.add_argument(
+        "-a",
+        "--agent",
+        default="policy-gradient",
+        choices=["random", "neuroevolution", "policy-gradient"],
+        help="specify which agent to use",
+    )
 
     return parser.parse_args()
 
@@ -105,6 +113,7 @@ def print_info(args):
     print("Compare mode: ", args.compare)
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
+
 
 def test(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):

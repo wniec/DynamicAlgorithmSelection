@@ -146,8 +146,14 @@ def adjust_config(n_inputs, n_outputs):
     with open("neuroevolution_config", "r") as f:
         config_content = f.read()
 
-    config_content = re.sub(pattern="num_inputs.*", repl=f"num_inputs = {n_inputs}", string=config_content)
-    config_content = re.sub(pattern="num_outputs.*", repl=f"num_outputs = {n_outputs}", string=config_content)
+    config_content = re.sub(
+        pattern="num_inputs.*", repl=f"num_inputs = {n_inputs}", string=config_content
+    )
+    config_content = re.sub(
+        pattern="num_outputs.*",
+        repl=f"num_outputs = {n_outputs}",
+        string=config_content,
+    )
 
     with open("neuroevolution_config", "w") as f:
         f.write(config_content)
@@ -163,7 +169,10 @@ def _coco_bbob_neuroevolution_train(
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids, observer = get_suite(name, easy_mode, True)
     batch_size = 30
-    adjust_config(2 * len(options.get("action_space")) + BASE_STATE_SIZE, len(options.get("action_space")))
+    adjust_config(
+        2 * len(options.get("action_space")) + BASE_STATE_SIZE,
+        len(options.get("action_space")),
+    )
 
     config = neat.Config(
         neat.DefaultGenome,
