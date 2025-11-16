@@ -40,18 +40,18 @@ uv run <name> [options]
 ```
 
 
-| Argument                                         | Type               | Default                   | Description                                                       |
-|--------------------------------------------------|--------------------|---------------------------|-------------------------------------------------------------------|
-| `name`                                           | `str` (positional) | —                         | **Required name tag** for the run or experiment                   |
-| `-p`, `--portfolio`                              | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include                            |
-| `-m`, `--population_size`                        | `int`              | `20`                      | Population size for all fixed-pop-size optimizers                 |
-| `-f`, `--fe_multiplier`                          | `int`              | `10_000`                  | Function evaluation multiplier                                    |
-| `-s`, `--sub_optimization_ratio`                 | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode                |
-| `-t`, `--test` / `--no-test`                     | `bool`             | `True`                    | Whether to run in test mode                                       |
-| `-c`, `--compare` / `--no-compare`               | `bool`             | `False`                   | Whether to compare against standalone optimizers                  |
-| `-e`, `--wandb_entity`                           | `str`              | `None`                    | Weights and Biases entity name                                    |
-| `-w`, `--wandb_project`                          | `str`              | `None`                    | Weights and Biases project name                                   |
-| `-n`, `--neuroevolution` / `--no-neuroevolution` | `bool`             | `False`                   | Whether or not train using NEAT instead of policy-gradient method |
+| Argument                           | Type               | Default                   | Description                                                             |
+|------------------------------------|--------------------|---------------------------|-------------------------------------------------------------------------|
+| `name`                             | `str` (positional) | —                         | **Required name tag** for the run or experiment                         |
+| `-p`, `--portfolio`                | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include                                  |
+| `-m`, `--population_size`          | `int`              | `20`                      | Population size for all fixed-pop-size optimizers                       |
+| `-f`, `--fe_multiplier`            | `int`              | `10_000`                  | Function evaluation multiplier                                          |
+| `-s`, `--sub_optimization_ratio`   | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode                      |
+| `-t`, `--test` / `--no-test`       | `bool`             | `True`                    | Whether to run in test mode                                             |
+| `-c`, `--compare` / `--no-compare` | `bool`             | `False`                   | Whether to compare against standalone optimizers                        |
+| `-e`, `--wandb_entity`             | `str`              | `None`                    | Weights and Biases entity name                                          |
+| `-w`, `--wandb_project`            | `str`              | `None`                    | Weights and Biases project name                                         |
+| `-a`, `--agent`                    | `str`              | `policy-gradient`         | What agent to use. Possible: neuroevolution, policy-gradient and random |
 
 ## Acknowledgment
 

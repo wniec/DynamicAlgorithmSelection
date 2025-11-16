@@ -1,4 +1,5 @@
 import pickle
+import re
 from itertools import product, batched, cycle
 from typing import Type
 
@@ -7,6 +8,8 @@ import numpy as np
 import neat
 import torch
 from tqdm import tqdm
+
+from dynamicalgorithmselection.agents.agent_utils import BASE_STATE_SIZE
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 """
@@ -139,6 +142,17 @@ def _coco_bbob_policy_gradient_train(
     return observer.result_folder
 
 
+def adjust_config(n_inputs, n_outputs):
+    with open("neuroevolution_config", "r") as f:
+        config_content = f.read()
+
+    config_content = re.sub(pattern="num_inputs.*", repl=f"num_inputs = {n_inputs}", string=config_content)
+    config_content = re.sub(pattern="num_outputs.*", repl=f"num_outputs = {n_outputs}", string=config_content)
+
+    with open("neuroevolution_config", "w") as f:
+        f.write(config_content)
+
+
 def _coco_bbob_neuroevolution_train(
     optimizer: Type[Optimizer],
     options: dict,
@@ -149,14 +163,15 @@ def _coco_bbob_neuroevolution_train(
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids, observer = get_suite(name, easy_mode, True)
     batch_size = 30
+    adjust_config(2 * len(options.get("action_space")) + BASE_STATE_SIZE, len(options.get("action_space")))
+
     config = neat.Config(
         neat.DefaultGenome,
         neat.DefaultReproduction,
         neat.DefaultSpeciesSet,
         neat.DefaultStagnation,
-        "config",
+        "neuroevolution_config",
     )
-
     # Create the population, which is the top-level object for a NEAT run.
     population = neat.Population(config)
     problems_batches = list(batched((np.random.permutation(problem_ids)), batch_size))

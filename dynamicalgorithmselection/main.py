@@ -9,11 +9,12 @@ import wandb
 
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
+from dynamicalgorithmselection.agents.random_agent import RandomAgent
 from dynamicalgorithmselection.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
-
+AGENTS_DICT = {"random": RandomAgent, "neuroevolution": NeuroevolutionAgent, "policy-gradient": PolicyGradientAgent}
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Dynamic algorithm selection")
 
@@ -84,13 +85,11 @@ def parse_arguments():
         help="Enable comparison with each algorithm alone (False by default)",
     )
 
-    parser.add_argument(
-        "-n",
-        "--neuroevolution",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable training via NEAT algorithm (False by default)",
-    )
+    parser.add_argument("-a",
+                        "--agent",
+                        default="policy-gradient",
+                        choices=['random', 'neuroevolution', 'policy-gradient'],
+                        help='specify which agent to use')
 
     return parser.parse_args()
 
@@ -107,7 +106,6 @@ def print_info(args):
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
 
-
 def test(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
         shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
@@ -118,16 +116,14 @@ def test(args, action_space):
         "action_space": action_space,
     }
     # agent_state = torch.load(f)
-    if args.neuroevolution:
+    if args.agent == "neuroevolution":
         with open(f"DAS_train_{args.name}.pkl", "rb") as f:
             net = pickle.load(f)
         options.update({"net": net})
-        agent_class = NeuroevolutionAgent
-    else:
+    elif args.agent == "policy-gradient":
         options.update(torch.load(f"DAS_train_{args.name}.pth", weights_only=False))
-        agent_class = PolicyGradientAgent
     coco_bbob_experiment(
-        agent_class,
+        AGENTS_DICT[args.agent],
         options,
         name=f"DAS_test_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -157,7 +153,7 @@ def main():
             },
         )
     coco_bbob_experiment(
-        NeuroevolutionAgent if args.neuroevolution else PolicyGradientAgent,
+        AGENTS_DICT[args.agent],
         {
             "sub_optimization_ratio": args.sub_optimization_ratio,
             "n_individuals": args.population_size,
@@ -167,7 +163,7 @@ def main():
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
-        neuroevolution=args.neuroevolution,
+        neuroevolution=(args.agent == "neuroevolution"),
     )
     if run is not None:
         run.finish()
