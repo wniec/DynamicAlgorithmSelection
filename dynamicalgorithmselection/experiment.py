@@ -1,7 +1,7 @@
 import pickle
 import re
 from itertools import product, batched, cycle
-from typing import Type
+from typing import Type, Optional
 
 import cocoex
 import numpy as np
@@ -26,26 +26,19 @@ INSTANCE_IDS = [1, 2, 3, 4, 5, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]
 DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
-def coco_bbob_experiment(
-    optimizer: Type[Optimizer],
-    options: dict,
-    name: str,
-    evaluations_multiplier: int = 1_000,
-    train: bool = True,
-    easy_mode: bool = True,
-    neuroevolution: bool = False,
-):
+def coco_bbob_experiment(optimizer: Type[Optimizer], options: dict, name: str, evaluations_multiplier: int = 1_000,
+                         train: bool = True, mode: str = "easy", agent: Optional[str] = "policy-gradient"):
     if not train:
         return _coco_bbob_test(
-            optimizer, options, name, evaluations_multiplier, easy_mode
+            optimizer, options, name, evaluations_multiplier, mode
         )
-    elif neuroevolution:
+    elif agent == "neuroevolution":
         return _coco_bbob_neuroevolution_train(
-            optimizer, options, name, evaluations_multiplier, easy_mode
+            optimizer, options, name, evaluations_multiplier, mode
         )
     else:
         return _coco_bbob_policy_gradient_train(
-            optimizer, options, name, evaluations_multiplier, easy_mode
+            optimizer, options, name, evaluations_multiplier, mode
         )
 
 
@@ -98,13 +91,13 @@ def get_suite(name, mode, train):
     """
     :param name: name of the output
     :param mode:  mode of the training (LOPO: easy and hard) or LOIO
-    :param train if suite should be for testing or training:
+    :param train: if suite should be for testing or training:
     :return suite, list of problem ids and observer:
     """
     suite, output = "bbob", name
     cocoex.utilities.MiniPrint()
     problems_suite = cocoex.Suite(suite, "", "")
-    observer = cocoex.Observer(suite, "result_folder: " + output)
+
     if mode != "LOIO":
         easy = mode == "easy"
         function_ids = (
@@ -128,7 +121,7 @@ def get_suite(name, mode, train):
             problem_ids = np.random.choice(all_problem_ids, len(all_problem_ids) // 3 * 2)
         else:
             problem_ids = np.random.choice(all_problem_ids, len(all_problem_ids) // 3)
-    return problems_suite, problem_ids, observer
+    return problems_suite, problem_ids
 
 
 def _coco_bbob_policy_gradient_train(
@@ -136,10 +129,10 @@ def _coco_bbob_policy_gradient_train(
     options: dict,
     name: str,
     evaluations_multiplier: int = 1_000,
-    easy_mode: bool = True,
+    mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids, _ = get_suite(name, easy_mode, True)
+    problems_suite, problem_ids = get_suite(name, mode, True)
     agent_state = {}
     for problem_id in tqdm(np.random.permutation(problem_ids)):
         problem_instance = problems_suite.get_problem(problem_id)
@@ -179,10 +172,10 @@ def _coco_bbob_neuroevolution_train(
     options: dict,
     name: str,
     evaluations_multiplier: int = 1_000,
-    easy_mode: bool = True,
+    mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids, _ = get_suite(name, easy_mode, True)
+    problems_suite, problem_ids = get_suite(name, mode, True)
     batch_size = 30
     adjust_config(
         2 * len(options.get("action_space")) + BASE_STATE_SIZE,
@@ -220,10 +213,11 @@ def _coco_bbob_test(
     options: dict,
     name: str,
     evaluations_multiplier: int = 1_000,
-    easy_mode: bool = True,
+    mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids, observer = get_suite(name, easy_mode, False)
+    problems_suite, problem_ids = get_suite(name, mode, False)
+    observer = cocoex.Observer(problems_suite, "result_folder: " + name)
     for problem_id in tqdm(problem_ids):
         problem_instance = problems_suite.get_problem(problem_id)
         problem_instance.observe_with(observer)
