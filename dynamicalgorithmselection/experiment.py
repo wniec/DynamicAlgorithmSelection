@@ -56,7 +56,6 @@ def eval_genomes(
     problem_batches,
     suite,
     options,
-    observer,
     evaluations_multiplier,
 ):
     run = options.get("run", None)
@@ -68,7 +67,6 @@ def eval_genomes(
         actions = []
         for problem_id in problem_batch:
             problem_instance = suite.get_problem(problem_id)
-            problem_instance.observe_with(observer)
             options["max_function_evaluations"] = (
                 evaluations_multiplier * problem_instance.dimension
             )
@@ -96,21 +94,40 @@ def eval_genomes(
             run.log({"entropy": norm_entropy})
 
 
-def get_suite(name, easy_mode, train):
+def get_suite(name, mode, train):
+    """
+    :param name: name of the output
+    :param mode:  mode of the training (LOPO: easy and hard) or LOIO
+    :param train if suite should be for testing or training:
+    :return suite, list of problem ids and observer:
+    """
     suite, output = "bbob", name
     cocoex.utilities.MiniPrint()
     problems_suite = cocoex.Suite(suite, "", "")
     observer = cocoex.Observer(suite, "result_folder: " + output)
-    function_ids = (
-        EASY_TRAIN_BBOB
-        if ((easy_mode and train) or (not easy_mode and not train))
-        else ALL_FUNCTIONS.difference(EASY_TRAIN_BBOB)
-    )
+    if mode != "LOIO":
+        easy = mode == "easy"
+        function_ids = (
+            EASY_TRAIN_BBOB
+            if ((easy and train) or (not easy and not train))
+            else ALL_FUNCTIONS.difference(EASY_TRAIN_BBOB)
+        )
 
-    problem_ids = [
-        f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-        for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)
-    ]
+        problem_ids = [
+            f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
+            for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)
+        ]
+
+    else:
+        all_problem_ids = [
+            f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
+            for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
+        ]
+        np.random.seed(1234)
+        if train:
+            problem_ids = np.random.choice(all_problem_ids, len(all_problem_ids) // 3 * 2)
+        else:
+            problem_ids = np.random.choice(all_problem_ids, len(all_problem_ids) // 3)
     return problems_suite, problem_ids, observer
 
 
@@ -122,11 +139,10 @@ def _coco_bbob_policy_gradient_train(
     easy_mode: bool = True,
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids, observer = get_suite(name, easy_mode, True)
+    problems_suite, problem_ids, _ = get_suite(name, easy_mode, True)
     agent_state = {}
     for problem_id in tqdm(np.random.permutation(problem_ids)):
         problem_instance = problems_suite.get_problem(problem_id)
-        problem_instance.observe_with(observer)
         options["max_function_evaluations"] = (
             evaluations_multiplier * problem_instance.dimension
         )
@@ -139,7 +155,6 @@ def _coco_bbob_policy_gradient_train(
         options["buffer"] = agent_state["buffer"]
         problem_instance.free()
     torch.save(agent_state, f"{name}.pth")
-    return observer.result_folder
 
 
 def adjust_config(n_inputs, n_outputs):
@@ -167,7 +182,7 @@ def _coco_bbob_neuroevolution_train(
     easy_mode: bool = True,
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids, observer = get_suite(name, easy_mode, True)
+    problems_suite, problem_ids, _ = get_suite(name, easy_mode, True)
     batch_size = 30
     adjust_config(
         2 * len(options.get("action_space")) + BASE_STATE_SIZE,
@@ -192,14 +207,12 @@ def _coco_bbob_neuroevolution_train(
             problems_batches,
             problems_suite,
             options,
-            observer,
             evaluations_multiplier,
         ),
         300,
     )
     with open(f"DAS_train_{name}.pkl", "wb") as f:
         pickle.dump(winner, f)
-    return observer.result_folder
 
 
 def _coco_bbob_test(
@@ -225,7 +238,7 @@ def _coco_bbob_test(
 
 
 def coco_bbob_single_function(
-    optimizer: Type[Optimizer], function: cocoex.interface.Problem, options
+    optimizer: Type[Optimizer], function: cocoex.Problem, options
 ):
     problem = {
         "fitness_function": function,
