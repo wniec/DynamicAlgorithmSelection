@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 DISCOUNT_FACTOR = 0.9
-HIDDEN_SIZE = 108
+HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
 ALPHA = 0.3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -102,7 +102,7 @@ class LSTMModule(nn.Module):
 
 
 class Actor(LSTMModule):
-    def __init__(self, n_actions: int, dropout_p: float = 0.15, lstm_layers: int = 1):
+    def __init__(self, n_actions: int, dropout_p: float = 0.35, lstm_layers: int = 1):
         super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
         self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
@@ -127,7 +127,7 @@ class Actor(LSTMModule):
 
 
 class Critic(LSTMModule):
-    def __init__(self, n_actions: int, dropout_p: float = 0.1, lstm_layers: int = 1):
+    def __init__(self, n_actions: int, dropout_p: float = 0.35, lstm_layers: int = 1):
         super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
         self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),

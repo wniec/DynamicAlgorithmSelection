@@ -94,6 +94,7 @@ def parse_arguments():
     parser.add_argument(
         "-a",
         "--agent",
+        type=str,
         default="policy-gradient",
         choices=["random", "neuroevolution", "policy-gradient"],
         help="specify which agent to use",
@@ -111,6 +112,9 @@ def parse_arguments():
 
 
 def print_info(args):
+    if args.agent == "random" and not args.test:
+        raise ValueError("Random agent is available for testing only.")
+
     print("Running an experiment with the following arguments:")
 
     print("Experiment name: ", args.name)
@@ -121,6 +125,7 @@ def print_info(args):
     print("Compare mode: ", args.compare)
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
+    print("Agent type: ", args.agent)
 
 
 def test(args, action_space):
@@ -144,16 +149,7 @@ def test(args, action_space):
     cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
 
 
-def main():
-    args = parse_arguments()
-    print_info(args)
-    available_optimizers = optimizers.available_optimizers
-    action_space: List[Type[Optimizer]] = []
-    for optimizer in args.portfolio:
-        if optimizer not in available_optimizers:
-            raise ValueError(f'Unknown optimizer "{optimizer}"')
-        else:
-            action_space.append(available_optimizers[optimizer])
+def run_training(args, action_space):
     run = None
     if args.wandb_entity is not None and args.wandb_project is not None:
         run = wandb.init(
@@ -173,6 +169,21 @@ def main():
                          agent=args.agent, mode=args.mode)
     if run is not None:
         run.finish()
+
+
+def main():
+    args = parse_arguments()
+    print_info(args)
+    available_optimizers = optimizers.available_optimizers
+    action_space: List[Type[Optimizer]] = []
+    for optimizer in args.portfolio:
+        if optimizer not in available_optimizers:
+            raise ValueError(f'Unknown optimizer "{optimizer}"')
+        else:
+            action_space.append(available_optimizers[optimizer])
+
+    if args.agent != "random":
+        run_training(args, action_space)
     if args.test:
         test(args, action_space)
     if args.compare:

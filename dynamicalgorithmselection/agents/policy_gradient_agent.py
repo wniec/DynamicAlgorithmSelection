@@ -69,7 +69,9 @@ class PolicyGradientAgent(Agent):
         entropy_coef=0.02,
     ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
-
+        sub_optimization_ratio = (
+                self.max_function_evaluations // self.sub_optimizer_max_fe
+        )
         with torch.no_grad():
             last_value = (
                 self.target_critic(states[-1].unsqueeze(0).to(DEVICE))
@@ -98,7 +100,9 @@ class PolicyGradientAgent(Agent):
             np.random.shuffle(indices)
 
             for start in range(0, dataset_size, minibatch_size):
-                mb_idx = indices[start : start + minibatch_size]
+                end: int = min(start + minibatch_size, (start + sub_optimization_ratio) // sub_optimization_ratio * sub_optimization_ratio)
+                mb_idx = indices[start: int(end)]
+                # clipping mb_idx so it doesn't cover next episode
                 mb_states = states[mb_idx]
                 mb_actions = actions[mb_idx]
                 mb_old_log_probs = old_log_probs[mb_idx]
