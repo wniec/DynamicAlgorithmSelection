@@ -173,3 +173,30 @@ def get_list_stats(data: list):
         min(data),
         sum(data) / len(data),
     )
+
+
+def get_runtime_stats(
+    fitness_history: list[tuple[int, float]],
+    function_evaluations: int,
+    checkpoints: list[int],
+):
+    area_under_optimization_curve = 0.0
+    last_i = 0
+    checkpoint_idx = 0
+    last_fitness = None
+    checkpoints_fitness = []
+    for i, fitness in fitness_history:
+        area_under_optimization_curve += fitness * (i - last_i) / function_evaluations
+        if last_i < checkpoints[checkpoint_idx] < i:
+            checkpoints_fitness.append(last_fitness)
+        last_i = i
+        last_fitness = fitness
+    final_fitness = fitness_history[-1][1]
+    if function_evaluations == checkpoints[-1]:
+        checkpoints_fitness.append(final_fitness)
+
+    return {
+        "area_under_optimization_curve": area_under_optimization_curve,
+        "final_fitness": final_fitness,
+        "checkpoints fitness": checkpoints_fitness,
+    }

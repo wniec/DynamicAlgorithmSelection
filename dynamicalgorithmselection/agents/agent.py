@@ -1,7 +1,11 @@
+import json
+import os
+
 import numpy as np
 import torch
 
 from dynamicalgorithmselection.agents.agent_state import AgentState
+from dynamicalgorithmselection.agents.agent_utils import get_runtime_stats
 
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -18,6 +22,7 @@ class Agent(Optimizer):
         self.options = options
         self.history = []
         self.actions = options.get("action_space")
+        self.name = options.get("name")
 
         self.train_mode = options.get("train_mode", True)
 
@@ -129,6 +134,7 @@ class Agent(Optimizer):
             return optimizer.get_data()
         self._n_generations += 1
         results = optimizer.optimize()
+        self.fitness_history.extend(results["fitness_history"])
         self._save_fitness(
             results["best_so_far_x"],
             results["best_so_far_y"],
@@ -142,6 +148,7 @@ class Agent(Optimizer):
             self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
+        results["fitness_history"] = self.fitness_history
         if self.run:
             choices_count = {
                 self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
@@ -169,11 +176,11 @@ class Agent(Optimizer):
             (best_parent - best_individual) if best_individual is not None else 0
         )
         # used_fe = self.n_function_evaluations / self.max_function_evaluations
-        reward = log_scale(improvement) / log_scale(reference)
+
         if len(self.choices_history) > 1:
-            pass
+            reward = log_scale(improvement) / log_scale(reference)
             # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
             return 0
         # reward = np.sign(improvement)#  * used_fe
-        return np.clip(np.cbrt(reward), a_min=-0.0, a_max=0.5)  # to the 1/dim power ?
+        return reward  # to the 1/dim power ?

@@ -10,6 +10,7 @@ ALL_START_CONDITONS_PARAMETERS = ["v", "x", "y", "p_x", "p_y", "n_x", ""]
 class Optimizer(BaseOptimizer):
     def __init__(self, problem, options):
         BaseOptimizer.__init__(self, problem, options)
+        self.fitness_history = []
         self.start_conditions = dict()
         self.results = dict()
         self.worst_so_far_y, self.worst_so_far_x = (
@@ -28,6 +29,7 @@ class Optimizer(BaseOptimizer):
         # update best-so-far solution (x) and fitness (y)
         if y < self.best_so_far_y:
             self.best_so_far_x, self.best_so_far_y = np.copy(x), y
+            self.fitness_history.append((self.n_function_evaluations, float(y)))
         if y > self.worst_so_far_y:
             self.worst_so_far_x, self.worst_so_far_y = np.copy(x), y
         # update all settings related to early stopping
@@ -35,6 +37,7 @@ class Optimizer(BaseOptimizer):
             self._counter_early_stopping += 1
         else:
             self._counter_early_stopping, self._base_early_stopping = 0, y
+
         return float(y)
 
     def _check_success(self):
@@ -63,6 +66,7 @@ class Optimizer(BaseOptimizer):
             {
                 "worst_so_far_x": self.worst_so_far_x,
                 "worst_so_far_y": self.worst_so_far_y,
+                "fitness_history": self.fitness_history,
             }
         )
         return result

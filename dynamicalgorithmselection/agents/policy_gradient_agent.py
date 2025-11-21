@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torch
 
@@ -45,6 +47,9 @@ class PolicyGradientAgent(Agent):
         else:
             self.target_critic.load_state_dict(self.critic.state_dict())
 
+        self.mean_rewards = options.get("mean_rewards", [])
+        self.best_50_mean = float("inf")
+
         self.target_critic.eval()
         self.tau = self.options.get("critic_target_tau", 0.05)
 
@@ -64,13 +69,13 @@ class PolicyGradientAgent(Agent):
         buffer,
         epochs=4,
         minibatch_size=64,
-        clip_eps=0.2,
+        clip_eps=0.3,
         value_coef=0.3,
         entropy_coef=0.02,
     ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
         sub_optimization_ratio = (
-                self.max_function_evaluations // self.sub_optimizer_max_fe
+            self.max_function_evaluations // self.sub_optimizer_max_fe
         )
         with torch.no_grad():
             last_value = (
@@ -100,8 +105,13 @@ class PolicyGradientAgent(Agent):
             np.random.shuffle(indices)
 
             for start in range(0, dataset_size, minibatch_size):
-                end: int = min(start + minibatch_size, (start + sub_optimization_ratio) // sub_optimization_ratio * sub_optimization_ratio)
-                mb_idx = indices[start: int(end)]
+                end: int = min(
+                    start + minibatch_size,
+                    (start + sub_optimization_ratio)
+                    // sub_optimization_ratio
+                    * sub_optimization_ratio,
+                )
+                mb_idx = indices[start : int(end)]
                 # clipping mb_idx so it doesn't cover next episode
                 mb_states = states[mb_idx]
                 mb_actions = actions[mb_idx]
@@ -152,14 +162,21 @@ class PolicyGradientAgent(Agent):
 
     def _collect(self, fitness, y=None):
         results, _ = super()._collect(fitness, y)
-        return results, {
+        self.mean_rewards.append(sum(self.rewards) / len(self.rewards))
+        agent_state = {
             "actor_parameters": self.actor.state_dict(),
             "critic_parameters": self.critic.state_dict(),
             "target_critic_parameters": self.target_critic.state_dict(),
             "actor_optimizer": self.actor_optimizer.state_dict(),
             "critic_optimizer": self.critic_optimizer.state_dict(),
             "buffer": self.buffer,
+            "mean_rewards": self.mean_rewards,
         }
+        last_50_mean = sum(self.mean_rewards[-50:]) / len(self.mean_rewards[-50:])
+        if self.best_50_mean > last_50_mean:
+            self.best_50_mean = last_50_mean
+            torch.save(agent_state, os.path.join("models", f"{self.name}_best.pth"))
+        return results, agent_state
 
     def optimize(self, fitness_function=None, args=None):
         fitness = Optimizer.optimize(self, fitness_function)

@@ -1,3 +1,5 @@
+import json
+import os
 import pickle
 import re
 from itertools import product, batched, cycle
@@ -6,10 +8,12 @@ from typing import Type, Optional
 import cocoex
 import numpy as np
 import neat
-import torch
 from tqdm import tqdm
 
-from dynamicalgorithmselection.agents.agent_utils import BASE_STATE_SIZE
+from dynamicalgorithmselection.agents.agent_utils import (
+    BASE_STATE_SIZE,
+    get_runtime_stats,
+)
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 """
@@ -26,19 +30,55 @@ INSTANCE_IDS = [1, 2, 3, 4, 5, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]
 DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
-def coco_bbob_experiment(optimizer: Type[Optimizer], options: dict, name: str, evaluations_multiplier: int = 1_000,
-                         train: bool = True, mode: str = "easy", agent: Optional[str] = "policy-gradient"):
-    if not train:
-        return _coco_bbob_test(
-            optimizer, options, name, evaluations_multiplier, mode
+def dump_stats(
+    results,
+    name,
+    problem_instance,
+    train,
+    max_function_evaluations,
+    sub_optimizer_max_fe,
+):
+    n_checkpoints = max_function_evaluations // sub_optimizer_max_fe
+    checkpoints = [sub_optimizer_max_fe * i for i in range(1, int(n_checkpoints) + 1)]
+    with open(
+        os.path.join(
+            "results",
+            f"{name}_{'train' if train else 'test'}",
+            f"{problem_instance}.json",
+        ),
+        "w",
+    ) as f:
+        json.dump(
+            {
+                problem_instance: get_runtime_stats(
+                    results["fitness_history"],
+                    max_function_evaluations,
+                    checkpoints,
+                )
+            },
+            f,
         )
+
+
+def coco_bbob_experiment(
+    optimizer: Type[Optimizer],
+    options: dict,
+    name: str,
+    evaluations_multiplier: int = 1_000,
+    train: bool = True,
+    mode: str = "easy",
+    agent: Optional[str] = "policy-gradient",
+):
+    options["name"] = name
+    if not train:
+        return _coco_bbob_test(optimizer, options, evaluations_multiplier, mode)
     elif agent == "neuroevolution":
         return _coco_bbob_neuroevolution_train(
-            optimizer, options, name, evaluations_multiplier, mode
+            optimizer, options, evaluations_multiplier, mode
         )
     else:
         return _coco_bbob_policy_gradient_train(
-            optimizer, options, name, evaluations_multiplier, mode
+            optimizer, options, evaluations_multiplier, mode
         )
 
 
@@ -66,7 +106,7 @@ def eval_genomes(
             options["train_mode"] = True
             options["verbose"] = False
             options["net"] = neat.nn.FeedForwardNetwork.create(genome, config)
-            results = coco_bbob_single_function(optimizer, problem_instance, options)
+            results, _ = coco_bbob_single_function(optimizer, problem_instance, options)
             fitness += results["mean_reward"]
             actions.extend(results["actions"])
 
@@ -116,29 +156,32 @@ def get_suite(name, mode, train):
             f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
             for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
         ]
+        with open("LOIO_train_set.json") as f:
+            problem_ids = json.load(f)["data"]
         np.random.seed(1234)
         if train:
-            problem_ids = np.random.choice(all_problem_ids, len(all_problem_ids) // 3 * 2)
+            pass
         else:
-            problem_ids = np.random.choice(all_problem_ids, len(all_problem_ids) // 3)
+            problem_ids = list(set(all_problem_ids).difference(problem_ids))
     return problems_suite, problem_ids
 
 
 def _coco_bbob_policy_gradient_train(
     optimizer: Type[Optimizer],
     options: dict,
-    name: str,
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
+    results_dir = os.path.join("results", f"{options.get('name')}_train")
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(name, mode, True)
+    problems_suite, problem_ids = get_suite(options.get("name"), mode, True)
     agent_state = {}
     for problem_id in tqdm(np.random.permutation(problem_ids)):
         problem_instance = problems_suite.get_problem(problem_id)
-        options["max_function_evaluations"] = (
-            evaluations_multiplier * problem_instance.dimension
-        )
+        max_fe = evaluations_multiplier * problem_instance.dimension
+        options["max_function_evaluations"] = max_fe
         options.update(agent_state)
         options["train_mode"] = True
         options["verbose"] = False
@@ -147,7 +190,14 @@ def _coco_bbob_policy_gradient_train(
         )
         options["buffer"] = agent_state["buffer"]
         problem_instance.free()
-    torch.save(agent_state, f"{name}.pth")
+        dump_stats(
+            results,
+            options.get("name"),
+            problem_id,
+            True,
+            max_fe,
+            options.get("sub_optimization_ratio"),
+        )
 
 
 def adjust_config(n_inputs, n_outputs):
@@ -170,12 +220,11 @@ def adjust_config(n_inputs, n_outputs):
 def _coco_bbob_neuroevolution_train(
     optimizer: Type[Optimizer],
     options: dict,
-    name: str,
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(name, mode, True)
+    problems_suite, problem_ids = get_suite(options.get("name"), mode, True)
     batch_size = 30
     adjust_config(
         2 * len(options.get("action_space")) + BASE_STATE_SIZE,
@@ -204,30 +253,41 @@ def _coco_bbob_neuroevolution_train(
         ),
         300,
     )
-    with open(f"DAS_train_{name}.pkl", "wb") as f:
+    with open(
+        os.path.join("models", f"DAS_train_{options.get('name')}.pkl", "wb")
+    ) as f:
         pickle.dump(winner, f)
 
 
 def _coco_bbob_test(
     optimizer: Type[Optimizer],
     options: dict,
-    name: str,
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
+    results_dir = os.path.join("results", f"{options.get('name')}_test")
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(name, mode, False)
-    observer = cocoex.Observer(problems_suite, "result_folder: " + name)
+    problems_suite, problem_ids = get_suite(options.get("name"), mode, False)
+    observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
     for problem_id in tqdm(problem_ids):
         problem_instance = problems_suite.get_problem(problem_id)
         problem_instance.observe_with(observer)
-        options["max_function_evaluations"] = (
-            evaluations_multiplier * problem_instance.dimension
-        )
+        max_fe = evaluations_multiplier * problem_instance.dimension
+        options["max_function_evaluations"] = max_fe
         options["train_mode"] = False
         options["verbose"] = False
-        coco_bbob_single_function(optimizer, problem_instance, options)
+        results, _ = coco_bbob_single_function(optimizer, problem_instance, options)
         problem_instance.free()
+        dump_stats(
+            results,
+            options.get("name"),
+            problem_id,
+            False,
+            max_fe,
+            options.get("sub_optimization_ratio"),
+        )
     return observer.result_folder
 
 

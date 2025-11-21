@@ -139,13 +139,23 @@ def test(args, action_space):
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
-        with open(f"DAS_train_{args.name}.pkl", "rb") as f:
+        with open(os.path.join("models", f"DAS_train_{args.name}.pkl"), "rb") as f:
             net = pickle.load(f)
         options.update({"net": net})
     elif args.agent == "policy-gradient":
-        options.update(torch.load(f"DAS_train_{args.name}.pth", weights_only=False))
-    coco_bbob_experiment(AGENTS_DICT[args.agent], options, name=f"DAS_test_{args.name}",
-                         evaluations_multiplier=args.fe_multiplier, train=False)
+        options.update(
+            torch.load(
+                os.path.join("models", f"DAS_train_{args.name}_best.pth"),
+                weights_only=False,
+            )
+        )
+    coco_bbob_experiment(
+        AGENTS_DICT[args.agent],
+        options,
+        name=f"DAS_test_{args.name}",
+        evaluations_multiplier=args.fe_multiplier,
+        train=False,
+    )
     cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
 
 
@@ -160,13 +170,20 @@ def run_training(args, action_space):
                 "dataset": "COCO-BBOB",
             },
         )
-    coco_bbob_experiment(AGENTS_DICT[args.agent], {
-        "sub_optimization_ratio": args.sub_optimization_ratio,
-        "n_individuals": args.population_size,
-        "run": run,
-        "action_space": action_space,
-    }, name=f"DAS_train_{args.name}", evaluations_multiplier=args.fe_multiplier, train=True,
-                         agent=args.agent, mode=args.mode)
+    coco_bbob_experiment(
+        AGENTS_DICT[args.agent],
+        {
+            "sub_optimization_ratio": args.sub_optimization_ratio,
+            "n_individuals": args.population_size,
+            "run": run,
+            "action_space": action_space,
+        },
+        name=f"DAS_train_{args.name}",
+        evaluations_multiplier=args.fe_multiplier,
+        train=True,
+        agent=args.agent,
+        mode=args.mode,
+    )
     if run is not None:
         run.finish()
 
@@ -181,7 +198,10 @@ def main():
             raise ValueError(f'Unknown optimizer "{optimizer}"')
         else:
             action_space.append(available_optimizers[optimizer])
-
+    if not os.path.exists("models"):
+        os.mkdir("models")
+    if not os.path.exists("results"):
+        os.mkdir("results")
     if args.agent != "random":
         run_training(args, action_space)
     if args.test:
@@ -190,9 +210,14 @@ def main():
         for optimizer in action_space:
             if os.path.exists(os.path.join("exdata", optimizer.__name__)):
                 shutil.rmtree(os.path.join("exdata", optimizer.__name__))
-            coco_bbob_experiment(optimizer, {"n_individuals": args.population_size}, name=optimizer.__name__,
-                                 evaluations_multiplier=args.fe_multiplier, train=False,
-                                 agent=None)
+            coco_bbob_experiment(
+                optimizer,
+                {"n_individuals": args.population_size},
+                name=optimizer.__name__,
+                evaluations_multiplier=args.fe_multiplier,
+                train=False,
+                agent=None,
+            )
             cocopp.main(os.path.join("exdata", optimizer.__name__))
 
 
