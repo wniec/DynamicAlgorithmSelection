@@ -9,9 +9,16 @@ import wandb
 
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
+from dynamicalgorithmselection.agents.random_agent import RandomAgent
 from dynamicalgorithmselection.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
+
+AGENTS_DICT = {
+    "random": RandomAgent,
+    "neuroevolution": NeuroevolutionAgent,
+    "policy-gradient": PolicyGradientAgent,
+}
 
 
 def parse_arguments():
@@ -85,17 +92,30 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "-n",
-        "--neuroevolution",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable training via NEAT algorithm (False by default)",
+        "-a",
+        "--agent",
+        type=str,
+        default="policy-gradient",
+        choices=["random", "neuroevolution", "policy-gradient"],
+        help="specify which agent to use",
+    )
+
+    parser.add_argument(
+        "-l",
+        "--mode",
+        type=str,
+        default="easy",
+        choices=["LOIO", "hard", "easy"],
+        help="specify which agent to use",
     )
 
     return parser.parse_args()
 
 
 def print_info(args):
+    if args.agent == "random" and not args.test:
+        raise ValueError("Random agent is available for testing only.")
+
     print("Running an experiment with the following arguments:")
 
     print("Experiment name: ", args.name)
@@ -106,6 +126,7 @@ def print_info(args):
     print("Compare mode: ", args.compare)
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
+    print("Agent type: ", args.agent)
 
 
 def test(args, action_space):
@@ -118,22 +139,54 @@ def test(args, action_space):
         "action_space": action_space,
     }
     # agent_state = torch.load(f)
-    if args.neuroevolution:
-        with open(f"DAS_train_{args.name}.pkl", "rb") as f:
+    if args.agent == "neuroevolution":
+        with open(os.path.join("models", f"DAS_train_{args.name}.pkl"), "rb") as f:
             net = pickle.load(f)
         options.update({"net": net})
-        agent_class = NeuroevolutionAgent
-    else:
-        options.update(torch.load(f"DAS_train_{args.name}.pth", weights_only=False))
-        agent_class = PolicyGradientAgent
+    elif args.agent == "policy-gradient":
+        options.update(
+            torch.load(
+                os.path.join("models", f"DAS_train_{args.name}_best.pth"),
+                weights_only=False,
+            )
+        )
     coco_bbob_experiment(
-        agent_class,
+        AGENTS_DICT[args.agent],
         options,
         name=f"DAS_test_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=False,
     )
     cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
+
+
+def run_training(args, action_space):
+    run = None
+    if args.wandb_entity is not None and args.wandb_project is not None:
+        run = wandb.init(
+            name=args.name,
+            entity=args.wandb_entity,
+            project=args.wandb_project,
+            config={
+                "dataset": "COCO-BBOB",
+            },
+        )
+    coco_bbob_experiment(
+        AGENTS_DICT[args.agent],
+        {
+            "sub_optimization_ratio": args.sub_optimization_ratio,
+            "n_individuals": args.population_size,
+            "run": run,
+            "action_space": action_space,
+        },
+        name=f"DAS_train_{args.name}",
+        evaluations_multiplier=args.fe_multiplier,
+        train=True,
+        agent=args.agent,
+        mode=args.mode,
+    )
+    if run is not None:
+        run.finish()
 
 
 def main():
@@ -146,31 +199,12 @@ def main():
             raise ValueError(f'Unknown optimizer "{optimizer}"')
         else:
             action_space.append(available_optimizers[optimizer])
-    run = None
-    if args.wandb_entity is not None and args.wandb_project is not None:
-        run = wandb.init(
-            name=args.name,
-            entity=args.wandb_entity,
-            project=args.wandb_project,
-            config={
-                "dataset": "COCO-BBOB",
-            },
-        )
-    coco_bbob_experiment(
-        NeuroevolutionAgent if args.neuroevolution else PolicyGradientAgent,
-        {
-            "sub_optimization_ratio": args.sub_optimization_ratio,
-            "n_individuals": args.population_size,
-            "run": run,
-            "action_space": action_space,
-        },
-        name=f"DAS_train_{args.name}",
-        evaluations_multiplier=args.fe_multiplier,
-        train=True,
-        neuroevolution=args.neuroevolution,
-    )
-    if run is not None:
-        run.finish()
+    if not os.path.exists("models"):
+        os.mkdir("models")
+    if not os.path.exists("results"):
+        os.mkdir("results")
+    if args.agent != "random":
+        run_training(args, action_space)
     if args.test:
         test(args, action_space)
     if args.compare:
@@ -183,7 +217,7 @@ def main():
                 name=optimizer.__name__,
                 evaluations_multiplier=args.fe_multiplier,
                 train=False,
-                neuroevolution=args.neuroevolution,
+                agent=None,
             )
             cocopp.main(os.path.join("exdata", optimizer.__name__))
 

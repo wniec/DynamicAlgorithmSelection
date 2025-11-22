@@ -40,18 +40,25 @@ uv run <name> [options]
 ```
 
 
-| Argument                                         | Type               | Default                   | Description                                                       |
-|--------------------------------------------------|--------------------|---------------------------|-------------------------------------------------------------------|
-| `name`                                           | `str` (positional) | —                         | **Required name tag** for the run or experiment                   |
-| `-p`, `--portfolio`                              | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include                            |
-| `-m`, `--population_size`                        | `int`              | `20`                      | Population size for all fixed-pop-size optimizers                 |
-| `-f`, `--fe_multiplier`                          | `int`              | `10_000`                  | Function evaluation multiplier                                    |
-| `-s`, `--sub_optimization_ratio`                 | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode                |
-| `-t`, `--test` / `--no-test`                     | `bool`             | `True`                    | Whether to run in test mode                                       |
-| `-c`, `--compare` / `--no-compare`               | `bool`             | `False`                   | Whether to compare against standalone optimizers                  |
-| `-e`, `--wandb_entity`                           | `str`              | `None`                    | Weights and Biases entity name                                    |
-| `-w`, `--wandb_project`                          | `str`              | `None`                    | Weights and Biases project name                                   |
-| `-n`, `--neuroevolution` / `--no-neuroevolution` | `bool`             | `False`                   | Whether or not train using NEAT instead of policy-gradient method |
+| Argument                           | Type               | Default                   | Description                                                               |
+|------------------------------------|--------------------|---------------------------|---------------------------------------------------------------------------|
+| `name`                             | `str` (positional) | —                         | **Required name tag** for the run or experiment                           |
+| `-p`, `--portfolio`                | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include                                    |
+| `-m`, `--population_size`          | `int`              | `20`                      | Population size for all fixed-pop-size optimizers                         |
+| `-f`, `--fe_multiplier`            | `int`              | `10_000`                  | Function evaluation multiplier                                            |
+| `-s`, `--sub_optimization_ratio`   | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode                        |
+| `-t`, `--test` / `--no-test`       | `bool`             | `True`                    | Whether to run in test mode                                               |
+| `-c`, `--compare` / `--no-compare` | `bool`             | `False`                   | Whether to compare against standalone optimizers                          |
+| `-e`, `--wandb_entity`             | `str`              | `None`                    | Weights and Biases entity name                                            |
+| `-w`, `--wandb_project`            | `str`              | `None`                    | Weights and Biases project name                                           |
+| `-a`, `--agent`                    | `str`              | `policy-gradient`         | What agent to use. Possible: neuroevolution, policy-gradient and random   |
+| `-l`, `--mode`                     | `str`              | `'LOIO', 'easy', 'hard'`  | Determines how to split train and test examples [more](#Train-test-split) |
+
+
+## Train-test split
+* `LOIO` - (*Leave One Instance Out*) uses LOLO_train_set.json, randomly generated subset with mixed problems.
+* `hard` - (*Leave One Problem Out*) splits dataset, grouping same problem instances in same resulting dataset, has twice more train functions than test ones.
+* `easy` - (*Leave One Problem Out*) similar to hard, but has invertet train-test proportions.
 
 ## Acknowledgment
 

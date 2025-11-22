@@ -13,18 +13,18 @@ class ES(Optimizer):
             self.n_individuals = 4 + int(
                 3 * np.log(self.ndim_problem)
             )  # only for small populations setting
-        assert (
-            self.n_individuals > 0
-        ), f"`self.n_individuals` = {self.n_individuals}, but should > 0."
+        assert self.n_individuals > 0, (
+            f"`self.n_individuals` = {self.n_individuals}, but should > 0."
+        )
         # parent number, number of (positively) selected search points in the population,
         #   number of strictly positive recombination weights (Nikolaus Hansen, 2023)
         if (
             self.n_parents is None
         ):  # number of parents (μ: mu), parental population size
             self.n_parents = int(self.n_individuals / 2)
-        assert (
-            self.n_parents <= self.n_individuals
-        ), f"self.n_parents (== {self.n_parents}) should <= self.n_individuals (== {self.n_individuals})"
+        assert self.n_parents <= self.n_individuals, (
+            f"self.n_parents (== {self.n_parents}) should <= self.n_individuals (== {self.n_individuals})"
+        )
         if self.n_parents > 1:
             self._w, self._mu_eff = self._compute_weights()
             self._e_chi = np.sqrt(
@@ -34,9 +34,9 @@ class ES(Optimizer):
                 - 1.0 / (4.0 * self.ndim_problem)
                 + 1.0 / (21.0 * np.square(self.ndim_problem))
             )
-        assert (
-            self.n_parents > 0
-        ), f"`self.n_parents` = {self.n_parents}, but should > 0."
+        assert self.n_parents > 0, (
+            f"`self.n_parents` = {self.n_parents}, but should > 0."
+        )
         self.mean = options.get(
             "mean"
         )  # mean of Gaussian search/sampling/mutation distribution
@@ -46,13 +46,13 @@ class ES(Optimizer):
         self.sigma = options.get("sigma")  # global step-size (σ)
         assert self.sigma > 0, f"`self.sigma` = {self.sigma}, but should > 0."
         self.lr_mean = options.get("lr_mean")  # learning rate of mean update
-        assert (
-            self.lr_mean is None or self.lr_mean > 0
-        ), f"`self.lr_mean` = {self.lr_mean}, but should > 0."
+        assert self.lr_mean is None or self.lr_mean > 0, (
+            f"`self.lr_mean` = {self.lr_mean}, but should > 0."
+        )
         self.lr_sigma = options.get("lr_sigma")  # learning rate of sigma update
-        assert (
-            self.lr_sigma is None or self.lr_sigma > 0
-        ), f"`self.lr_sigma` = {self.lr_sigma}, but should > 0."
+        assert self.lr_sigma is None or self.lr_sigma > 0, (
+            f"`self.lr_sigma` = {self.lr_sigma}, but should > 0."
+        )
         self._printed_evaluations = self.n_function_evaluations
         # set options for *restart*
         self._n_restart = 0  # only for restart

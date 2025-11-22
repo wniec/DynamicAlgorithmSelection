@@ -1,10 +1,6 @@
-from operator import itemgetter
-
 import numpy as np
 import torch
-
-from dynamicalgorithmselection.agents.agent_utils import get_weighted_central_moment
-
+from dynamicalgorithmselection.agents.agent_state import AgentState
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
@@ -20,6 +16,7 @@ class Agent(Optimizer):
         self.options = options
         self.history = []
         self.actions = options.get("action_space")
+        self.name = options.get("name")
 
         self.train_mode = options.get("train_mode", True)
 
@@ -29,154 +26,66 @@ class Agent(Optimizer):
             self.max_function_evaluations / sub_optimization_ratio
         )
 
+    def get_initial_state(self):
+        vector = [
+            0.0,  # third weighted central moment
+            0.0,  # second weighted central moment
+            0.0,  # normalized domination of best solution
+            0.0,  # normalized radius of the smallest sphere containing entire population
+            0.5,  # normalized relative fitness difference
+            0.5,  # average_y relative to best
+            1.0,  # normalized y deviation measure
+            1.0,  # full remaining budget (max evaluations)
+            self.ndim_problem / 40,  # normalized problem dimension
+            0.0,  # stagnation count
+            *([0.0] * (49 + 2 * len(self.actions))),
+        ]
+        return torch.tensor(vector, dtype=torch.float)
+
     def get_state(self, x: np.ndarray, y: np.ndarray) -> np.array:
-        # Definition of state is inspired by its representation in DE-DDQN article
-        last_action_index = (
-            self.choices_history[-1] if self.choices_history else len(self.actions)
-        )
-        last_action_encoded = [
-            float(i) for i in np.binary_repr(last_action_index, width=4)[-2:]
-        ]
-        same_action_counter = 0
-        choices_count = [
-            sum(1 for i in self.choices_history if i == j)
-            / (len(self.choices_history) or 1)
-            for j in range(len(self.actions))
-        ]
-        for i in reversed(self.choices_history):
-            if i == last_action_index:
-                same_action_counter += 1
-            else:
-                break
         if x is None or y is None:
-            vector = [
-                0.0,  # third weighted central moment
-                0.0,  # second weighted central moment
-                0.0,  # normalized domination of best solution
-                0.0,  # normalized radius of the smallest sphere containing entire population
-                0.5,  # normalized relative fitness difference
-                0.5,  # average_y relative to best
-                1.0,  # variance measure
-                1.0,  # full remaining budget (max evaluations)
-                self.ndim_problem / 40,  # normalized problem dimension
-                0.0,  # stagnation count
-                *([0.0] * 29),
-                *last_action_encoded,
-                *(0.0 for _ in self.actions),
-                *([0.0] * 19),
-            ]
+            return self.get_initial_state()
         else:
-            dist = lambda x1, x2: np.linalg.norm(x1 - x2)
-            log_scaling = lambda x: x / (x + 5)
-            dist_max = dist(self.lower_boundary, self.upper_boundary)
-            x_std = 2 * x.std(axis=0) / (self.upper_boundary - self.lower_boundary)
-            norm_x = (x - x.mean(axis=0)) / (x.std() + 1e-8)
-            norm_dist = lambda x1, x2: min((dist(x1, x2) / dist_max), 1)
-            average_y = sum(self.history) / (len(self.history) or 1)
-            average_x = x.mean(axis=0)
-            population_relative = x - average_x
-            population_radius = np.linalg.norm(
-                population_relative.max(axis=0) - population_relative.min(axis=0)
+            state = AgentState(
+                x,
+                y,
+                self.best_so_far_x,
+                self.best_so_far_y,
+                self.lower_boundary,
+                self.upper_boundary,
+                self.worst_so_far_x,
+                self.worst_so_far_y,
+                self.history,
+                self.choices_history,
+                len(self.actions),
             )
-            lower_x = x.min(axis=0)
-            upper_x = x.max(axis=0)
-            mid_so_far = (self.worst_so_far_y - self.best_so_far_y) / 2
-            weights = (
-                (1.0 - (y - y.min()) / (y.max() - y.min()))
-                if (y.max() - y.min() > 1e-6)
-                else np.ones_like(y)
-            )
-            weights_normalized = weights / weights.sum()
-            norms = np.linalg.norm(population_relative, ord=2, axis=1)  # shape (pop,)
-            second_weighted_central_moment = get_weighted_central_moment(
-                2, weights_normalized, norms
-            )
-            third_weighted_central_moment = get_weighted_central_moment(
-                3, weights_normalized, norms
-            )
-            i_sorted = sorted([i for i, _ in enumerate(y)], key=lambda i: y[i])
-            y_normalized = (y - y.mean()) / (y.std() + 1e-6)
-            y_diffs = [
-                min(y_normalized[j] - y_normalized[i], 1)
-                for i, j in zip(i_sorted, i_sorted[1:])
-            ]
-            slopes = [
-                log_scaling(
-                    max(y_normalized[j] - y_normalized[i], 1)
-                    / (norm_dist(x[i], x[j]) + 1e-6)
-                )
-                for i, j in zip(i_sorted, i_sorted[1:])
-            ]
-            measured_individuals = list(
-                itemgetter(1, 2, 3, 4, 5, 6, 9, 12, 15)(i_sorted)
-            )
-            choices_entropy = -(
-                np.array(choices_count)
-                * np.nan_to_num(np.log(choices_count), neginf=0, posinf=0, nan=0)
-            ).sum() / np.log(len(choices_count))
+            used_fe_ratio = self.max_function_evaluations / self.sub_optimizer_max_fe
+
             vector = [
-                third_weighted_central_moment,
-                second_weighted_central_moment,
-                (y - self.best_so_far_y).mean()
-                / (
-                    max((y.max() - self.best_so_far_y), (y - self.best_so_far_y).sum())
-                    or 1
-                ),
-                population_radius / dist_max,
-                max(0.0, (np.min(y) - self.best_so_far_y))
-                / ((self.worst_so_far_y - self.best_so_far_y) or 1),
-                (average_y - self.best_so_far_y)
-                / ((self.worst_so_far_y - self.best_so_far_y) or 1),
-                sum(
-                    (i - average_y) ** 2 for i in self.history
-                )  # wcześniejsze najlepsze y
-                / (self.best_so_far_y - mid_so_far)
-                / (self.best_so_far_y - mid_so_far)
-                / len(self.history),
-                (self.max_function_evaluations - self.n_function_evaluations)
-                / self.max_function_evaluations,
+                state.get_weighted_central_moment(3),
+                state.get_weighted_central_moment(2),
+                state.mean_falling_behind(),
+                state.population_relative_radius(),
+                state.relative_improvement(),
+                state.y_historic_improvement(),
+                state.y_deviation(),
+                1 - used_fe_ratio,
                 self.ndim_problem
                 / 40,  # maximum dimensionality in this COCO benchmark is 40
                 self.stagnation_count / self.max_function_evaluations,
-                *(norm_dist(x[i], self.best_so_far_x) for i in measured_individuals),
-                (norm_dist(x[np.argmin(y)], self.best_so_far_x)),
-                *(
-                    norm_dist(x[i], average_x)
-                    for i in measured_individuals + [np.argmin(y)]
-                ),
-                *(
-                    (y[i] - np.min(y))
-                    / max((self.worst_so_far_y - self.best_so_far_y), 1e-6)
-                    for i in measured_individuals
-                ),
-                *last_action_encoded,
-                same_action_counter
-                / (self.max_function_evaluations / self.sub_optimizer_max_fe),
-                *choices_count,
-                (
-                    np.prod(
-                        (upper_x - lower_x)
-                        / (self.upper_boundary - self.lower_boundary)
-                    )
-                )
-                ** (1 / self.ndim_problem),  # searched volume
-                x_std.max(),
-                x_std.min(),
-                x_std.mean(),
-                2 * x_std.std(),
-                np.clip((norm_x**2).mean(), -1, 1),
-                np.clip((norm_x**2).min(), -1, 1),
-                np.clip((norm_x**2).max(), -1, 1),
-                np.clip((norm_x**2).std(), -1, 1),
-                choices_entropy,
-                norm_dist(self.best_so_far_x, self.worst_so_far_x),
-                norm_dist(x[np.argmin(y)], x[np.argmax(y)]),
-                max(y_diffs),
-                min(y_diffs),
-                sum(y_diffs) / len(y_diffs),
-                max(slopes),
-                min(slopes),
-                sum(slopes) / len(slopes),
+                *state.distances_from_best(),
+                *state.distances_from_mean(),
+                *state.relative_y_differences(),
+                *state.last_action_encoded,
+                state.same_action_counter() / used_fe_ratio,
+                *state.choices_frequency,
+                state.explored_volume() ** (1 / self.ndim_problem),  # searched volume
+                *state.x_standard_deviation_stats(),
+                *state.normalized_x_stats(),
+                state.choice_entropy(),
+                state.normalized_distance(self.best_so_far_x, self.worst_so_far_x),
+                *state.y_difference_stats(),
+                *state.slopes_stats(),
             ]
         return torch.tensor(vector, dtype=torch.float)
 
@@ -200,7 +109,6 @@ class Agent(Optimizer):
             )
 
     def _save_fitness(self, best_x, best_y, worst_x, worst_y):
-        # update best-so-far solution (x) and fitness (y)
         self.history.append(best_y)
         if best_y < self.best_so_far_y:
             self.best_so_far_x, self.best_so_far_y = np.copy(best_x), best_y
@@ -220,6 +128,7 @@ class Agent(Optimizer):
             return optimizer.get_data()
         self._n_generations += 1
         results = optimizer.optimize()
+        self.fitness_history.extend(results["fitness_history"])
         self._save_fitness(
             results["best_so_far_x"],
             results["best_so_far_y"],
@@ -229,7 +138,22 @@ class Agent(Optimizer):
         return optimizer.get_data(self.n_individuals)
 
     def _collect(self, fitness, y=None):
-        raise NotImplementedError
+        if y is not None:
+            self._print_verbose_info(fitness, y)
+        results = Optimizer._collect(self, fitness)
+        results["_n_generations"] = self._n_generations
+        results["fitness_history"] = self.fitness_history
+        if self.run:
+            choices_count = {
+                self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
+                / (len(self.choices_history) or 1)
+                for j in range(len(self.actions))
+            }
+            self.run.log(choices_count)
+            self.run.log(
+                {f"{k}_dim_{self.ndim_problem}": v for k, v in choices_count.items()},
+            )
+        return results, None
 
     def optimize(self, fitness_function=None, args=None):
         raise NotImplementedError
@@ -246,11 +170,11 @@ class Agent(Optimizer):
             (best_parent - best_individual) if best_individual is not None else 0
         )
         # used_fe = self.n_function_evaluations / self.max_function_evaluations
-        reward = log_scale(improvement) / log_scale(reference)
+
         if len(self.choices_history) > 1:
-            pass
+            reward = log_scale(improvement) / log_scale(reference)
             # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
             return 0
         # reward = np.sign(improvement)#  * used_fe
-        return np.clip(np.cbrt(reward), a_min=-0.0, a_max=0.5)  # to the 1/dim power ?
+        return reward  # to the 1/dim power ?
