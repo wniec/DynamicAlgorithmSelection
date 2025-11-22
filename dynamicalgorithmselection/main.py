@@ -103,6 +103,7 @@ def parse_arguments():
     parser.add_argument(
         "-l",
         "--mode",
+        type=str,
         default="easy",
         choices=["LOIO", "hard", "easy"],
         help="specify which agent to use",

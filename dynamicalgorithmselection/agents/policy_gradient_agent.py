@@ -111,7 +111,7 @@ class PolicyGradientAgent(Agent):
                     // sub_optimization_ratio
                     * sub_optimization_ratio,
                 )
-                mb_idx = indices[start : int(end)]
+                mb_idx = indices[start: int(end)]
                 # clipping mb_idx so it doesn't cover next episode
                 mb_states = states[mb_idx]
                 mb_actions = actions[mb_idx]

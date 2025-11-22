@@ -179,7 +179,13 @@ def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
     checkpoints: list[int],
-):
+) -> dict[str, float | list[float]]:
+    """
+    :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
+    :param function_evaluations: max number of function evaluations during run.
+    :param checkpoints: list of checkpoints by their n_function_evaluations
+    :return: dictionary of selected run statistics, ready to dump
+    """
     area_under_optimization_curve = 0.0
     last_i = 0
     checkpoint_idx = 0
@@ -187,8 +193,9 @@ def get_runtime_stats(
     checkpoints_fitness = []
     for i, fitness in fitness_history:
         area_under_optimization_curve += fitness * (i - last_i) / function_evaluations
-        if last_i < checkpoints[checkpoint_idx] < i:
+        while last_i < checkpoints[checkpoint_idx] < i:
             checkpoints_fitness.append(last_fitness)
+            checkpoint_idx += 1
         last_i = i
         last_fitness = fitness
     final_fitness = fitness_history[-1][1]
@@ -198,5 +205,5 @@ def get_runtime_stats(
     return {
         "area_under_optimization_curve": area_under_optimization_curve,
         "final_fitness": final_fitness,
-        "checkpoints fitness": checkpoints_fitness,
+        "checkpoints_fitness": checkpoints_fitness,
     }

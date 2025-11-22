@@ -172,7 +172,7 @@ def _coco_bbob_policy_gradient_train(
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}_train")
+    results_dir = os.path.join("results", f"{options.get('name')}")
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
@@ -254,7 +254,7 @@ def _coco_bbob_neuroevolution_train(
         300,
     )
     with open(
-        os.path.join("models", f"DAS_train_{options.get('name')}.pkl", "wb")
+        os.path.join("models", f"DAS_train_{options.get('name')}.pkl"), "wb"
     ) as f:
         pickle.dump(winner, f)
 
@@ -265,7 +265,7 @@ def _coco_bbob_test(
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}_test")
+    results_dir = os.path.join("results", f"{options.get('name')}")
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
