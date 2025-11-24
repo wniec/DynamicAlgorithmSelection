@@ -181,4 +181,4 @@ class Agent(Optimizer):
         else:
             return 0
         # reward = np.sign(improvement)#  * used_fe
-        return reward * np.exp(used_fe)
+        return reward * np.exp(2 *used_fe - 2)
