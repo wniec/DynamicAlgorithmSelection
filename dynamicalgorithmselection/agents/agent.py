@@ -176,7 +176,7 @@ class Agent(Optimizer):
         used_fe = self.n_function_evaluations / self.max_function_evaluations
 
         if len(self.choices_history) > 1:
-            reward = log_scale(10**4 * (improvement / value_range))
+            reward = (improvement / value_range)
             # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
             return 0
