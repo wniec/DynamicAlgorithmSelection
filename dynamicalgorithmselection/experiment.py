@@ -34,7 +34,6 @@ def dump_stats(
     results,
     name,
     problem_instance,
-    train,
     max_function_evaluations,
     sub_optimizer_max_fe,
 ):
@@ -43,7 +42,7 @@ def dump_stats(
     with open(
         os.path.join(
             "results",
-            f"{name}_{'train' if train else 'test'}",
+            f"{name}",
             f"{problem_instance}.json",
         ),
         "w",
@@ -194,7 +193,6 @@ def _coco_bbob_policy_gradient_train(
             results,
             options.get("name"),
             problem_id,
-            True,
             max_fe,
             options.get("sub_optimization_ratio"),
         )
@@ -284,7 +282,6 @@ def _coco_bbob_test(
             results,
             options.get("name"),
             problem_id,
-            False,
             max_fe,
             options.get("sub_optimization_ratio"),
         )

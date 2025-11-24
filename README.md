@@ -36,7 +36,7 @@ uv sync
 ```
 ### **Usage**
 ```bash
-uv run <name> [options]
+uv run das <name> [options]
 ```
 
 
@@ -68,6 +68,6 @@ Much of the implementation is adapted from:
 ---
 ## TO BE DONE
 
-* Add more sub-optimizers (OPOA methods etc.)
+* Add more sub-optimizers
 
 * Enable additional parameters specifying agent's model architecture and behaviour.

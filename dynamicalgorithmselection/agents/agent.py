@@ -109,6 +109,7 @@ class Agent(Optimizer):
             )
 
     def _save_fitness(self, best_x, best_y, worst_x, worst_y):
+        self.best_parent = best_y
         self.history.append(best_y)
         if best_y < self.best_so_far_y:
             self.best_so_far_x, self.best_so_far_y = np.copy(best_x), best_y
@@ -158,23 +159,27 @@ class Agent(Optimizer):
     def optimize(self, fitness_function=None, args=None):
         raise NotImplementedError
 
-    def get_reward(self, y, best_parent):
+    def get_reward(self, new_best_y, old_best_y):
         log_scale = lambda x: np.log(np.clip(x, a_min=0, a_max=None) + 1)
-        reference = max(
-            self.worst_so_far_y
-            - (self.best_so_far_y if best_parent == float("inf") else best_parent),
+
+        reference = self.worst_so_far_y
+        value_range = max(
+            reference
+            - (self.best_so_far_y if old_best_y == float("inf") else old_best_y),
             1e-5,
         )
-        best_individual = np.min(y)
-        improvement = (
+        """improvement = (
             (best_parent - best_individual) if best_individual is not None else 0
-        )
-        # used_fe = self.n_function_evaluations / self.max_function_evaluations
+        )"""
+        improvement = old_best_y - new_best_y
+
+        used_fe = self.n_function_evaluations / self.max_function_evaluations
 
         if len(self.choices_history) > 1:
-            reward = log_scale(improvement) / log_scale(reference)
+            reward = log_scale(10**4 * (improvement / value_range))
             # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
             return 0
         # reward = np.sign(improvement)#  * used_fe
-        return reward  # to the 1/dim power ?
+        print(reward)
+        return reward * used_fe
