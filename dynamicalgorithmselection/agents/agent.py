@@ -160,8 +160,6 @@ class Agent(Optimizer):
         raise NotImplementedError
 
     def get_reward(self, new_best_y, old_best_y):
-        #log_scale = lambda x: np.log(np.clip(x, a_min=0, a_max=None) + 1)
-
         reference = self.worst_so_far_y
         value_range = max(
             reference
@@ -172,8 +170,8 @@ class Agent(Optimizer):
             (best_parent - best_individual) if best_individual is not None else 0
         )"""
         improvement = old_best_y - new_best_y
-
-        used_fe = self.n_function_evaluations / self.max_function_evaluations
+        sub_optimization_ratio = self.max_function_evaluations // self.sub_optimizer_max_fe
+        checkpoint = sub_optimization_ratio * self.n_function_evaluations / self.max_function_evaluations
 
         if len(self.choices_history) > 1:
             reward = (improvement / value_range)
@@ -181,4 +179,4 @@ class Agent(Optimizer):
         else:
             return 0
         # reward = np.sign(improvement)#  * used_fe
-        return reward * np.exp(2 *used_fe - 2)
+        return min(reward ** (1 / checkpoint), 1.0)

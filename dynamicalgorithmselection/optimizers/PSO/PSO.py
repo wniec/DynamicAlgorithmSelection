@@ -150,3 +150,5 @@ class PSO(Optimizer):
         start_conditions["p_y"] = p_y
 
         self.start_conditions = start_conditions
+        self.best_so_far_x = best_x
+        self.best_so_far_y = best_y or float("inf")

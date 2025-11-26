@@ -192,18 +192,21 @@ def get_runtime_stats(
     last_fitness = None
     checkpoints_fitness = []
     for i, fitness in fitness_history:
-        area_under_optimization_curve += fitness * (i - last_i) / function_evaluations
-        while last_i < checkpoints[checkpoint_idx] < i:
+        area_under_optimization_curve += fitness * (i - last_i)
+        while last_i <= checkpoints[checkpoint_idx] < i:
             checkpoints_fitness.append(last_fitness)
             checkpoint_idx += 1
         last_i = i
         last_fitness = fitness
     final_fitness = fitness_history[-1][1]
     if function_evaluations == checkpoints[-1]:
-        checkpoints_fitness.append(final_fitness)
-
+        while len(checkpoints_fitness) < 10:
+            checkpoints_fitness.append(final_fitness)
+    for i in checkpoints_fitness:
+        if i < final_fitness:
+            raise Exception
     return {
-        "area_under_optimization_curve": area_under_optimization_curve,
+        "area_under_optimization_curve": area_under_optimization_curve / function_evaluations,
         "final_fitness": final_fitness,
         "checkpoints_fitness": checkpoints_fitness,
     }

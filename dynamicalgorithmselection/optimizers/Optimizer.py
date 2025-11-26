@@ -66,6 +66,8 @@ class Optimizer(BaseOptimizer):
             {
                 "worst_so_far_x": self.worst_so_far_x,
                 "worst_so_far_y": self.worst_so_far_y,
+                "best_x": self.best_so_far_x,
+                "best_y": self.best_so_far_y,
                 "fitness_history": self.fitness_history,
             }
         )
@@ -78,6 +80,8 @@ class Optimizer(BaseOptimizer):
             "best_x": best_x,
             "best_y": best_y,
         }
+        self.best_so_far_x = best_x
+        self.best_so_far_y = best_y
 
     def get_data(self, n_individuals: Optional[int] = None):
         return self.results or self.start_conditions
