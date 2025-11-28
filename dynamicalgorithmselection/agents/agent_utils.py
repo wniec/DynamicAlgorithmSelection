@@ -48,7 +48,7 @@ class RolloutBuffer:
         return states, actions, old_log_probs, values, rewards, dones
 
 
-def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
+def compute_gae(rewards, dones, values, last_value, gamma=0.97, lam=0.5):
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)

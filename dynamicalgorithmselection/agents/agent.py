@@ -171,12 +171,12 @@ class Agent(Optimizer):
         )"""
         improvement = old_best_y - new_best_y
         sub_optimization_ratio = self.max_function_evaluations // self.sub_optimizer_max_fe
-        checkpoint = sub_optimization_ratio * self.n_function_evaluations / self.max_function_evaluations
+        checkpoint = sub_optimization_ratio * (self.n_function_evaluations / self.max_function_evaluations) + 1
 
         if len(self.choices_history) > 1:
-            reward = (improvement / value_range)
+            reward = improvement / value_range
             # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
-            return 0
+            return 0.0
         # reward = np.sign(improvement)#  * used_fe
-        return min(reward ** (1 / checkpoint), 1.0)
+        return min(reward * checkpoint, 1.0)

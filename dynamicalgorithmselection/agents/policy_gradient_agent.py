@@ -74,9 +74,6 @@ class PolicyGradientAgent(Agent):
         entropy_coef=0.02,
     ):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
-        sub_optimization_ratio = (
-            self.max_function_evaluations // self.sub_optimizer_max_fe
-        )
         with torch.no_grad():
             last_value = (
                 self.target_critic(states[-1].unsqueeze(0).to(DEVICE))
@@ -105,13 +102,7 @@ class PolicyGradientAgent(Agent):
             np.random.shuffle(indices)
 
             for start in range(0, dataset_size, minibatch_size):
-                end: int = min(
-                    start + minibatch_size,
-                    (start + sub_optimization_ratio)
-                    // sub_optimization_ratio
-                    * sub_optimization_ratio,
-                )
-                mb_idx = indices[start: int(end)]
+                mb_idx = indices[start: start + minibatch_size]
                 # clipping mb_idx so it doesn't cover next episode
                 mb_states = states[mb_idx]
                 mb_actions = actions[mb_idx]
@@ -181,7 +172,7 @@ class PolicyGradientAgent(Agent):
     def optimize(self, fitness_function=None, args=None):
         fitness = Optimizer.optimize(self, fitness_function)
 
-        batch_size = 1024
+        batch_size = self.buffer.capacity
         ppo_epochs = self.options.get("ppo_epochs", 4)
         clip_eps = self.options.get("ppo_eps", 0.2)
         entropy_coef = self.options.get("ppo_entropy", 0.05)
@@ -221,16 +212,17 @@ class PolicyGradientAgent(Agent):
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})
+            self.n_function_evaluations = optimizer.n_function_evaluations
             self.buffer.add(
                 state.squeeze(0).to(DEVICE),
                 action,
                 float(reward),
-                False,
+                self.n_function_evaluations == self.max_function_evaluations,
                 log_prob,
                 value.detach(),
             )
 
-            self.n_function_evaluations = optimizer.n_function_evaluations
+
             # every batch_size steps or on termination, run ppo update
             if self.train_mode and self.buffer.size() >= batch_size:
                 self.ppo_update(
