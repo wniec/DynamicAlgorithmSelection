@@ -206,7 +206,8 @@ def get_runtime_stats(
         if i < final_fitness:
             raise Exception
     return {
-        "area_under_optimization_curve": area_under_optimization_curve / function_evaluations,
+        "area_under_optimization_curve": area_under_optimization_curve
+        / function_evaluations,
         "final_fitness": final_fitness,
         "checkpoints_fitness": checkpoints_fitness,
     }

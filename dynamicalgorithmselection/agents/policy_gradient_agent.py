@@ -102,7 +102,7 @@ class PolicyGradientAgent(Agent):
             np.random.shuffle(indices)
 
             for start in range(0, dataset_size, minibatch_size):
-                mb_idx = indices[start: start + minibatch_size]
+                mb_idx = indices[start : start + minibatch_size]
                 # clipping mb_idx so it doesn't cover next episode
                 mb_states = states[mb_idx]
                 mb_actions = actions[mb_idx]
@@ -221,7 +221,6 @@ class PolicyGradientAgent(Agent):
                 log_prob,
                 value.detach(),
             )
-
 
             # every batch_size steps or on termination, run ppo update
             if self.train_mode and self.buffer.size() >= batch_size:

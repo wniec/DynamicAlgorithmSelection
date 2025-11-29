@@ -16,4 +16,4 @@ source "$ENV_PATH"
 
 # Run Experiment
 echo "Running experiment $SLURM_ARRAY_TASK_ID"
-uv run das loio_simple_fe_multiplication -p 'LMCMAES' 'SPSO' 'G3PCX' --mode LOIO --agent random
+python3 dynamicalgorithmselection/main.py loio_simple_fe_multiplication -p 'LMCMAES' 'SPSO' 'G3PCX' --wandb_project RL-DAS --wandb_entity niecwladek-agh --mode LOIO -s 100

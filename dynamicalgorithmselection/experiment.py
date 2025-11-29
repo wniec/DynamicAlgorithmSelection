@@ -38,7 +38,9 @@ def dump_stats(
     sub_optimization_ratio,
 ):
     sub_optimizer_max_fe = max_function_evaluations // sub_optimization_ratio
-    checkpoints = [sub_optimizer_max_fe * i for i in range(1, int(sub_optimization_ratio) + 1)]
+    checkpoints = [
+        sub_optimizer_max_fe * i for i in range(1, int(sub_optimization_ratio) + 1)
+    ]
     with open(
         os.path.join(
             "results",

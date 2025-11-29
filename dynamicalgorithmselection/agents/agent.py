@@ -1,3 +1,5 @@
+from itertools import product
+
 import numpy as np
 import torch
 from dynamicalgorithmselection.agents.agent_state import AgentState
@@ -20,10 +22,10 @@ class Agent(Optimizer):
 
         self.train_mode = options.get("train_mode", True)
 
-        sub_optimization_ratio = options["sub_optimization_ratio"]
+        self.sub_optimization_ratio = options["sub_optimization_ratio"]
         self.run = options.get("run", None)
         self.sub_optimizer_max_fe = (
-            self.max_function_evaluations / sub_optimization_ratio
+            self.max_function_evaluations / self.sub_optimization_ratio
         )
 
     def get_initial_state(self):
@@ -154,6 +156,15 @@ class Agent(Optimizer):
             self.run.log(
                 {f"{k}_dim_{self.ndim_problem}": v for k, v in choices_count.items()},
             )
+            checkpoint_choices = {
+                f"{action.__name__}_checkpoint{i}": (
+                    1 if self.choices_history[i] == action_id else 0
+                )
+                for i, (action_id, action) in product(
+                    range(self.sub_optimization_ratio), enumerate(self.actions)
+                )
+            }
+            self.run.log(checkpoint_choices)
         return results, None
 
     def optimize(self, fitness_function=None, args=None):
@@ -170,8 +181,11 @@ class Agent(Optimizer):
             (best_parent - best_individual) if best_individual is not None else 0
         )"""
         improvement = old_best_y - new_best_y
-        sub_optimization_ratio = self.max_function_evaluations // self.sub_optimizer_max_fe
-        checkpoint = sub_optimization_ratio * (self.n_function_evaluations / self.max_function_evaluations) + 1
+        checkpoint = (
+            self.sub_optimization_ratio
+            * (self.n_function_evaluations / self.max_function_evaluations)
+            + 1
+        )
 
         if len(self.choices_history) > 1:
             reward = improvement / value_range
@@ -179,4 +193,4 @@ class Agent(Optimizer):
         else:
             return 0.0
         # reward = np.sign(improvement)#  * used_fe
-        return min(reward * checkpoint, 1.0)
+        return min(reward ** (1 / checkpoint), 1.0)
