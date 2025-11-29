@@ -89,7 +89,7 @@ class PolicyGradientAgent(Agent):
             values.detach().cpu(),
             last_value,
             gamma=DISCOUNT_FACTOR,
-            lam=0.95,
+            lam=0.5,
         )
         returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         advantages = advantages.to(DEVICE)

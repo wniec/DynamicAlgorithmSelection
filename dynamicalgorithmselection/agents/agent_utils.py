@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 
-DISCOUNT_FACTOR = 0.9
+DISCOUNT_FACTOR = 0.75
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
 ALPHA = 0.3
@@ -48,7 +48,7 @@ class RolloutBuffer:
         return states, actions, old_log_probs, values, rewards, dones
 
 
-def compute_gae(rewards, dones, values, last_value, gamma=0.97, lam=0.5):
+def compute_gae(rewards, dones, values, last_value, gamma=0.75, lam=0.5):
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)
