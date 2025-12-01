@@ -7,7 +7,6 @@ from dynamicalgorithmselection.agents.agent_utils import (
     RolloutBuffer,
     DEVICE,
     compute_gae,
-    DISCOUNT_FACTOR,
     Actor,
     Critic,
     ActorLoss,
@@ -88,8 +87,6 @@ class PolicyGradientAgent(Agent):
             dones,
             values.detach().cpu(),
             last_value,
-            gamma=DISCOUNT_FACTOR,
-            lam=0.5,
         )
         returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         advantages = advantages.to(DEVICE)
@@ -167,6 +164,8 @@ class PolicyGradientAgent(Agent):
         if self.best_50_mean > last_50_mean:
             self.best_50_mean = last_50_mean
             torch.save(agent_state, os.path.join("models", f"{self.name}_best.pth"))
+        if self.n_function_evaluations == self.max_function_evaluations:
+            torch.save(agent_state, os.path.join("models", f"{self.name}_final.pth"))
         return results, agent_state
 
     def optimize(self, fitness_function=None, args=None):
@@ -196,7 +195,7 @@ class PolicyGradientAgent(Agent):
             log_prob = torch.log(policy[0, action] + 1e-12).detach()
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
-                self.n_function_evaluations + self.sub_optimizer_max_fe,
+                self.checkpoints[self._n_generations],
                 self.max_function_evaluations,
             )
             action_options["verbose"] = False

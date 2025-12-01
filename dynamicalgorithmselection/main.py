@@ -146,7 +146,7 @@ def test(args, action_space):
     elif args.agent == "policy-gradient":
         options.update(
             torch.load(
-                os.path.join("models", f"DAS_train_{args.name}_best.pth"),
+                os.path.join("models", f"DAS_train_{args.name}_final.pth"),
                 weights_only=False,
             )
         )

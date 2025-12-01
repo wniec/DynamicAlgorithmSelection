@@ -2,10 +2,11 @@ import numpy as np
 import torch
 from torch import nn
 
-DISCOUNT_FACTOR = 0.75
+CHECKPOINT_DIVISION_EXPONENT = 1.8
+GAMMA = 0.3
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
-ALPHA = 0.3
+LAMBDA = 0.9
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -48,7 +49,7 @@ class RolloutBuffer:
         return states, actions, old_log_probs, values, rewards, dones
 
 
-def compute_gae(rewards, dones, values, last_value, gamma=0.75, lam=0.5):
+def compute_gae(rewards, dones, values, last_value):
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)
@@ -57,12 +58,12 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.75, lam=0.5):
     prev_adv = 0.0
     for t in reversed(range(T)):
         mask = 1.0 - float(dones[t])
-        delta = rewards[t] + gamma * prev_value * mask - values[t]
-        adv = delta + gamma * lam * prev_adv * mask
+        delta = rewards[t] + GAMMA * prev_value * mask - values[t]
+        adv = delta + GAMMA * LAMBDA * prev_adv * mask
         advantages[t] = adv
         prev_adv = adv
         prev_value = values[t]
-        prev_return = rewards[t] + gamma * prev_return * mask
+        prev_return = rewards[t] + GAMMA * prev_return * mask
         returns[t] = prev_return
     return returns, advantages
 

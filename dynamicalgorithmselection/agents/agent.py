@@ -3,6 +3,7 @@ from itertools import product
 import numpy as np
 import torch
 from dynamicalgorithmselection.agents.agent_state import AgentState
+from dynamicalgorithmselection.agents.agent_utils import CHECKPOINT_DIVISION_EXPONENT
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
@@ -22,11 +23,20 @@ class Agent(Optimizer):
 
         self.train_mode = options.get("train_mode", True)
 
-        self.sub_optimization_ratio = options["sub_optimization_ratio"]
+        self.n_checkpoints = options["sub_optimization_ratio"]
         self.run = options.get("run", None)
-        self.sub_optimizer_max_fe = (
-            self.max_function_evaluations / self.sub_optimization_ratio
+        checkpoint_ratios = np.cumprod(
+            np.full(
+                shape=(self.n_checkpoints,), fill_value=CHECKPOINT_DIVISION_EXPONENT
+            )
         )
+        checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
+        self.checkpoints = (checkpoint_ratios * self.max_function_evaluations).astype(
+            int
+        )
+        self.checkpoints[-1] = (
+            self.max_function_evaluations
+        )  # eliminate possibility of "error by one"
 
     def get_initial_state(self):
         vector = [
@@ -61,7 +71,7 @@ class Agent(Optimizer):
                 self.choices_history,
                 len(self.actions),
             )
-            used_fe_ratio = self.max_function_evaluations / self.sub_optimizer_max_fe
+            used_fe_ratio = self.n_function_evaluations / self.max_function_evaluations
 
             vector = [
                 state.get_weighted_central_moment(3),
@@ -79,7 +89,7 @@ class Agent(Optimizer):
                 *state.distances_from_mean(),
                 *state.relative_y_differences(),
                 *state.last_action_encoded,
-                state.same_action_counter() / used_fe_ratio,
+                state.same_action_counter() / self.n_checkpoints,
                 *state.choices_frequency,
                 state.explored_volume() ** (1 / self.ndim_problem),  # searched volume
                 *state.x_standard_deviation_stats(),
@@ -161,7 +171,7 @@ class Agent(Optimizer):
                     1 if self.choices_history[i] == action_id else 0
                 )
                 for i, (action_id, action) in product(
-                    range(self.sub_optimization_ratio), enumerate(self.actions)
+                    range(self.n_checkpoints), enumerate(self.actions)
                 )
             }
             self.run.log(checkpoint_choices)
@@ -181,16 +191,12 @@ class Agent(Optimizer):
             (best_parent - best_individual) if best_individual is not None else 0
         )"""
         improvement = old_best_y - new_best_y
-        checkpoint = (
-            self.sub_optimization_ratio
-            * (self.n_function_evaluations / self.max_function_evaluations)
-            + 1
-        )
 
         if len(self.choices_history) > 1:
             reward = improvement / value_range
-            # reward += 0.05 if self.choices_history[-1] == self.choices_history[-2] else 0.0
         else:
             return 0.0
-        # reward = np.sign(improvement)#  * used_fe
-        return min(reward ** (1 / checkpoint), 1.0)
+
+        reward = min(10 * reward, 1.0)
+        # reward += 0.001 if len(self.choices_history) > 1 and self.choices_history[-1] == self.choices_history[-2] else 0.0
+        return reward

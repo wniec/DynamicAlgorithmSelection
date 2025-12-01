@@ -33,7 +33,7 @@ class NeuroevolutionAgent(Agent):
             self.choices_history.append(action)
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
-                self.n_function_evaluations + self.sub_optimizer_max_fe,
+                self.checkpoints[self._n_generations],
                 self.max_function_evaluations,
             )
             action_options["verbose"] = False
