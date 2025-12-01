@@ -230,7 +230,7 @@ class PolicyGradientAgent(Agent):
                     value_coef=value_coef,
                     entropy_coef=entropy_coef,
                 )
-            entropy_coef = max(entropy_coef * 0.999, 0.01)
+            entropy_coef = max(entropy_coef * 0.99992, 0.01)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (

@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 CHECKPOINT_DIVISION_EXPONENT = 1.8
-GAMMA = 0.3
+GAMMA = 0.5
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
 LAMBDA = 0.9
