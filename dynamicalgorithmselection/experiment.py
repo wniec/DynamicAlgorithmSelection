@@ -13,6 +13,7 @@ from tqdm import tqdm
 from dynamicalgorithmselection.agents.agent_utils import (
     BASE_STATE_SIZE,
     get_runtime_stats,
+    get_checkpoints,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -35,12 +36,9 @@ def dump_stats(
     name,
     problem_instance,
     max_function_evaluations,
-    sub_optimization_ratio,
+    n_checkpoints,
 ):
-    sub_optimizer_max_fe = max_function_evaluations // sub_optimization_ratio
-    checkpoints = [
-        sub_optimizer_max_fe * i for i in range(1, int(sub_optimization_ratio) + 1)
-    ]
+    checkpoints = get_checkpoints(n_checkpoints, max_function_evaluations)
     with open(
         os.path.join(
             "results",
@@ -107,7 +105,7 @@ def eval_genomes(
             options["train_mode"] = True
             options["verbose"] = False
             options["net"] = neat.nn.FeedForwardNetwork.create(genome, config)
-            results, _ = coco_bbob_single_function(optimizer, problem_instance, options)
+            results = coco_bbob_single_function(optimizer, problem_instance, options)
             fitness += results["mean_reward"]
             actions.extend(results["actions"])
 
@@ -135,9 +133,8 @@ def get_suite(name, mode, train):
     :param train: if suite should be for testing or training:
     :return suite, list of problem ids and observer:
     """
-    suite, output = "bbob", name
     cocoex.utilities.MiniPrint()
-    problems_suite = cocoex.Suite(suite, "", "")
+    problems_suite = cocoex.Suite("bbob", "", "")
 
     if mode != "LOIO":
         easy = mode == "easy"
@@ -196,7 +193,7 @@ def _coco_bbob_policy_gradient_train(
             options.get("name"),
             problem_id,
             max_fe,
-            options.get("sub_optimization_ratio"),
+            options.get("n_checkpoints"),
         )
 
 
@@ -278,14 +275,14 @@ def _coco_bbob_test(
         options["max_function_evaluations"] = max_fe
         options["train_mode"] = False
         options["verbose"] = False
-        results, _ = coco_bbob_single_function(optimizer, problem_instance, options)
+        results = coco_bbob_single_function(optimizer, problem_instance, options)
         problem_instance.free()
         dump_stats(
-            results,
+            results[0] if isinstance(results, tuple) else results,
             options.get("name"),
             problem_id,
             max_fe,
-            options.get("sub_optimization_ratio"),
+            options.get("n_checkpoints"),
         )
     return observer.result_folder
 

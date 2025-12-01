@@ -3,7 +3,7 @@ from itertools import product
 import numpy as np
 import torch
 from dynamicalgorithmselection.agents.agent_state import AgentState
-from dynamicalgorithmselection.agents.agent_utils import CHECKPOINT_DIVISION_EXPONENT
+from dynamicalgorithmselection.agents.agent_utils import get_checkpoints
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
@@ -23,20 +23,11 @@ class Agent(Optimizer):
 
         self.train_mode = options.get("train_mode", True)
 
-        self.n_checkpoints = options["sub_optimization_ratio"]
+        self.n_checkpoints = options["n_checkpoints"]
         self.run = options.get("run", None)
-        checkpoint_ratios = np.cumprod(
-            np.full(
-                shape=(self.n_checkpoints,), fill_value=CHECKPOINT_DIVISION_EXPONENT
-            )
+        self.checkpoints = get_checkpoints(
+            self.n_checkpoints, self.max_function_evaluations
         )
-        checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
-        self.checkpoints = (checkpoint_ratios * self.max_function_evaluations).astype(
-            int
-        )
-        self.checkpoints[-1] = (
-            self.max_function_evaluations
-        )  # eliminate possibility of "error by one"
 
     def get_initial_state(self):
         vector = [
@@ -187,16 +178,11 @@ class Agent(Optimizer):
             - (self.best_so_far_y if old_best_y == float("inf") else old_best_y),
             1e-5,
         )
-        """improvement = (
-            (best_parent - best_individual) if best_individual is not None else 0
-        )"""
         improvement = old_best_y - new_best_y
 
         if len(self.choices_history) > 1:
             reward = improvement / value_range
         else:
             return 0.0
-
-        reward = min(10 * reward, 1.0)
-        # reward += 0.001 if len(self.choices_history) > 1 and self.choices_history[-1] == self.choices_history[-2] else 0.0
+        reward = min(reward, 1.0)
         return reward

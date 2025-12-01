@@ -10,7 +10,7 @@ This project explores **Reinforcement Learning (RL)-based meta–black-box optim
   **LM-CMAES**, **standard PSO**, **CPSO**, **IPSO**, **PSOL**, **OPOA2015**, **POWELL**, and **G3PCX**
 - All algorithms share the same **population size** (`n_individuals`) for seamless transitions.
 - The core of the system is an **RL-based agent** that learns to **switch** between optimizers during the optimization process.
-- The agent makes switching decisions in **quantized stages**, determined by the fraction of total function evaluations (`sub_optimization_ratio`) already consumed by the current optimizer.
+- The agent makes switching decisions in **quantized stages**, determined by the parameter (`n_checkpoints`). The length of optimization episodes increases exponentially.
 - The entry script, **`main.py`**, launches training of the RL agent, followed by evaluation and comparison with individual sub-optimizers.
 
 ---
@@ -46,7 +46,7 @@ uv run das <name> [options]
 | `-p`, `--portfolio`                | `list[str]`        | `'SPSO', 'IPSO', 'SPSOL'` | Portfolio of sub-optimizers to include                                    |
 | `-m`, `--population_size`          | `int`              | `20`                      | Population size for all fixed-pop-size optimizers                         |
 | `-f`, `--fe_multiplier`            | `int`              | `10_000`                  | Function evaluation multiplier                                            |
-| `-s`, `--sub_optimization_ratio`   | `int`              | `10`                      | ratio of max_fe, for each sub-optimization episode                        |
+| `-s`, `--n_checkpoints`            | `int`              | `10`                      | number of checkpoints for sub-optimizer choice                            |
 | `-t`, `--test` / `--no-test`       | `bool`             | `True`                    | Whether to run in test mode                                               |
 | `-c`, `--compare` / `--no-compare` | `bool`             | `False`                   | Whether to compare against standalone optimizers                          |
 | `-e`, `--wandb_entity`             | `str`              | `None`                    | Weights and Biases entity name                                            |

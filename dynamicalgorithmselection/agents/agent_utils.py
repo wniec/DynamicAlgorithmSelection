@@ -212,3 +212,15 @@ def get_runtime_stats(
         "final_fitness": final_fitness,
         "checkpoints_fitness": checkpoints_fitness,
     }
+
+
+def get_checkpoints(n_checkpoints: int, max_function_evaluations: int) -> np.ndarray:
+    checkpoint_ratios = np.cumprod(
+        np.full(shape=(n_checkpoints,), fill_value=CHECKPOINT_DIVISION_EXPONENT)
+    )
+    checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
+    checkpoints = (checkpoint_ratios * max_function_evaluations).astype(int)
+    checkpoints[-1] = (
+        max_function_evaluations  # eliminate possibility of "error by one"
+    )
+    return checkpoints
