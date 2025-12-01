@@ -240,5 +240,4 @@ class PolicyGradientAgent(Agent):
                 self.stagnation_count = 0
 
             self.n_function_evaluations = optimizer.n_function_evaluations
-        # self.buffer.clear()
         return self._collect(fitness, self.best_so_far_y)

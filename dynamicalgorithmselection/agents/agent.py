@@ -172,9 +172,8 @@ class Agent(Optimizer):
         raise NotImplementedError
 
     def get_reward(self, new_best_y, old_best_y):
-        reference = self.worst_so_far_y
         value_range = max(
-            reference
+            self.worst_so_far_y
             - (self.best_so_far_y if old_best_y == float("inf") else old_best_y),
             1e-5,
         )

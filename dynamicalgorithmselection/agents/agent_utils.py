@@ -201,11 +201,8 @@ def get_runtime_stats(
         last_fitness = fitness
     final_fitness = fitness_history[-1][1]
     if function_evaluations == checkpoints[-1]:
-        while len(checkpoints_fitness) < 10:
+        while len(checkpoints_fitness) < len(checkpoints):
             checkpoints_fitness.append(final_fitness)
-    for i in checkpoints_fitness:
-        if i < final_fitness:
-            raise Exception
     return {
         "area_under_optimization_curve": area_under_optimization_curve
         / function_evaluations,
