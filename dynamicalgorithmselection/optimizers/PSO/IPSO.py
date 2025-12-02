@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np  # engine for numerical computing
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.PSO.PSO import PSO
@@ -141,18 +143,19 @@ class IPSO(PSO):
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
 
-    def get_data(self):
+    def get_data(self, n_individuals: Optional[int] = None):
         pop_data = ["x", "v", "y", "p_x", "p_y"]
         if "y" in self.results:
             best_indices = sorted(
                 [i for i in range(self.n_individuals)],
                 key=lambda x: self.results["y"][x],
-            )[: self.n_individuals]
-        return (
-            self.results
-            | {
-                k: (v[best_indices] if k in pop_data else v)
-                for k, v in self.results.items()
-            }
-            or self.start_conditions
-        )
+            )[: (self.n_individuals if n_individuals is None else n_individuals)]
+            return (
+                self.results
+                | {
+                    k: (v[best_indices] if k in pop_data else v)
+                    for k, v in self.results.items()
+                }
+                or self.start_conditions
+            )
+        return {}
