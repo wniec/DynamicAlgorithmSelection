@@ -173,7 +173,7 @@ class PolicyGradientAgent(Agent):
 
         batch_size = self.buffer.capacity
         ppo_epochs = self.options.get("ppo_epochs", 4)
-        clip_eps = self.options.get("ppo_eps", 0.2)
+        clip_eps = self.options.get("ppo_eps", 0.3)
         entropy_coef = self.options.get("ppo_entropy", 0.05)
         value_coef = self.options.get("ppo_value_coef", 0.3)
 
@@ -230,7 +230,7 @@ class PolicyGradientAgent(Agent):
                     value_coef=value_coef,
                     entropy_coef=entropy_coef,
                 )
-            entropy_coef = max(entropy_coef * 0.999, 0.01)
+            entropy_coef = max(entropy_coef * 0.9999, 1e-4)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
