@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from torch import nn
+import torch.nn as nn
+import torch.nn.init as init
 
 CHECKPOINT_DIVISION_EXPONENT = 1.98
 GAMMA = 0.3
@@ -113,6 +115,8 @@ class Actor(LSTMModule):
             nn.Linear(HIDDEN_SIZE, n_actions),
             nn.Softmax(dim=-1),
         )
+        orthogonal_init(self)
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 2:
@@ -137,6 +141,7 @@ class Critic(LSTMModule):
             nn.Dropout(p=dropout_p),
             nn.Linear(HIDDEN_SIZE, 1),
         )
+        orthogonal_init(self)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 2:
@@ -221,3 +226,15 @@ def get_checkpoints(n_checkpoints: int, max_function_evaluations: int) -> np.nda
         max_function_evaluations  # eliminate possibility of "error by one"
     )
     return checkpoints
+
+
+def orthogonal_init(module):
+    for name, param in module.named_parameters():
+        if 'weight_ih' in name:      # LSTM input -> hidden
+            init.orthogonal_(param.data)
+        elif 'weight_hh' in name:    # LSTM hidden -> hidden
+            init.orthogonal_(param.data)
+        elif 'weight' in name and param.dim() >= 2:
+            init.orthogonal_(param.data)   # Linear layers
+        elif 'bias' in name:
+            param.data.zero_()
