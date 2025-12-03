@@ -26,8 +26,8 @@ class PolicyGradientAgent(Agent):
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=5e-6)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-7)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-4)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-5)
 
         self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
 
@@ -174,7 +174,7 @@ class PolicyGradientAgent(Agent):
         batch_size = self.buffer.capacity
         ppo_epochs = self.options.get("ppo_epochs", 4)
         clip_eps = self.options.get("ppo_eps", 0.3)
-        entropy_coef = self.options.get("ppo_entropy", 0.05)
+        entropy_coef = 0.1
         value_coef = self.options.get("ppo_value_coef", 0.3)
 
         x, y, reward = None, None, None
@@ -186,9 +186,10 @@ class PolicyGradientAgent(Agent):
                 policy = self.actor(state.to(DEVICE))
                 value = self.critic(state.to(DEVICE))
 
-            probs = policy.cpu().numpy().squeeze(0)
+            probs = policy.cpu().numpy().squeeze(0) if self.buffer.size() >= self.buffer.capacity else np.ones_like(self.actions, dtype=float) / len(self.actions)
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
+            print(probs)
 
             action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
