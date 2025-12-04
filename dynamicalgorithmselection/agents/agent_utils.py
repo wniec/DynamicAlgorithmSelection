@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from torch import nn
-import torch.nn as nn
 import torch.nn.init as init
 
 CHECKPOINT_DIVISION_EXPONENT = 1.98

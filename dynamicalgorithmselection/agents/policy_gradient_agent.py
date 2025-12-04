@@ -20,14 +20,14 @@ class PolicyGradientAgent(Agent):
         Agent.__init__(self, problem, options)
         self.buffer = options.get(
             "buffer",
-            RolloutBuffer(capacity=options.get("ppo_batch_size", 1024), device=DEVICE),
+            RolloutBuffer(capacity=options.get("ppo_batch_size", 10_000), device=DEVICE),
         )
         self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=1e-4)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=1e-5)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=5e-5)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=5e-6)
 
         self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
 
@@ -189,7 +189,6 @@ class PolicyGradientAgent(Agent):
             probs = policy.cpu().numpy().squeeze(0) if self.buffer.size() >= self.buffer.capacity else np.ones_like(self.actions, dtype=float) / len(self.actions)
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
-            print(probs)
 
             action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
