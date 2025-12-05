@@ -26,8 +26,8 @@ class PolicyGradientAgent(Agent):
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=5e-5)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=5e-6)
+        self.actor_optimizer = torch.optim.SGD(self.actor.parameters(), lr=5e-5)
+        self.critic_optimizer = torch.optim.SGD(self.critic.parameters(), lr=5e-6)
 
         self.target_critic = Critic(n_actions=len(self.actions)).to(DEVICE)
 
@@ -67,7 +67,7 @@ class PolicyGradientAgent(Agent):
         self,
         buffer,
         epochs=4,
-        minibatch_size=64,
+        minibatch_size=512,
         clip_eps=0.3,
         value_coef=0.3,
         entropy_coef=0.02,
