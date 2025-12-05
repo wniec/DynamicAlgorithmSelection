@@ -129,24 +129,26 @@ class PSO(Optimizer):
         *args,
         **kwargs,
     ):
-        start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
-        if not isinstance(x, np.ndarray) or not isinstance(y, np.ndarray):
+        if x is not None and len(x) >= self.n_individuals:
+            start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
+            if not isinstance(x, np.ndarray) or not isinstance(y, np.ndarray):
+                self.start_conditions = start_conditions
+                return
+            start_conditions["x"] = x
+            start_conditions["y"] = y
+            if v is None:
+                v = self.rng_initialization.uniform(
+                    self._min_v, self._max_v, size=self._swarm_shape
+                )
+                random_idx = np.random.randint(self.n_individuals)
+                p_x, p_y, n_x = np.copy(x), np.copy(y), np.copy(x)
+                p_x[random_idx] = best_x
+                p_y[random_idx] = best_y
+                n_x[random_idx] = best_x
+            start_conditions["v"] = v
+            start_conditions["p_x"] = p_x
+            start_conditions["n_x"] = n_x
+            start_conditions["p_y"] = p_y
             self.start_conditions = start_conditions
-            return
-        start_conditions["x"] = x
-        start_conditions["y"] = y
-        if v is None:
-            v = self.rng_initialization.uniform(
-                self._min_v, self._max_v, size=self._swarm_shape
-            )
-            random_idx = np.random.randint(self.n_individuals)
-            p_x, p_y, n_x = np.copy(x), np.copy(y), np.copy(x)
-            p_x[random_idx] = best_x
-            p_y[random_idx] = best_y
-            n_x[random_idx] = best_x
-        start_conditions["v"] = v
-        start_conditions["p_x"] = p_x
-        start_conditions["n_x"] = n_x
-        start_conditions["p_y"] = p_y
-
-        self.start_conditions = start_conditions
+        self.best_so_far_x = best_x
+        self.best_so_far_y = best_y or float("inf")

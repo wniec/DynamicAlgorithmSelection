@@ -33,18 +33,19 @@ class NeuroevolutionAgent(Agent):
             self.choices_history.append(action)
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
-                self.n_function_evaluations + self.sub_optimizer_max_fe,
+                self.checkpoints[self._n_generations],
                 self.max_function_evaluations,
             )
             action_options["verbose"] = False
             optimizer = self.actions[action](self.problem, action_options)
             optimizer.n_function_evaluations = self.n_function_evaluations
             optimizer._n_generations = 0
-            best_parent = np.min(y) if y is not None else float("inf")
+            best_parent = self.best_so_far_y
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")
 
-            reward = self.get_reward(y, best_parent)
+            new_best_y = self.best_so_far_y
+            reward = self.get_reward(new_best_y, best_parent)
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})

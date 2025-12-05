@@ -221,6 +221,8 @@ class POWELL(DS):
                 "u",
             )
         }
+        self.best_so_far_x = kwargs.get("best_x", None)
+        self.best_so_far_y = kwargs.get("best_y", float("inf"))
 
     def get_data(self, n_individuals: Optional[int] = None):
         pop_data = ["x", "y"]

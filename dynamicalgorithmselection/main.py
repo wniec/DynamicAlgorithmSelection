@@ -45,10 +45,10 @@ def parse_arguments():
     )
     parser.add_argument(
         "-s",
-        "--sub_optimization_ratio",
+        "--n_checkpoints",
         type=int,
         default=10,
-        help="ratio of max FE that each sub optimization episode recieves",
+        help="number of checkpoints, where sub-optimizer is chosen",
     )
 
     parser.add_argument(
@@ -134,7 +134,7 @@ def test(args, action_space):
         shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
 
     options = {
-        "sub_optimization_ratio": args.sub_optimization_ratio,
+        "n_checkpoints": args.n_checkpoints,
         "n_individuals": args.population_size,
         "action_space": action_space,
     }
@@ -146,7 +146,7 @@ def test(args, action_space):
     elif args.agent == "policy-gradient":
         options.update(
             torch.load(
-                os.path.join("models", f"DAS_train_{args.name}_best.pth"),
+                os.path.join("models", f"DAS_train_{args.name}_final.pth"),
                 weights_only=False,
             )
         )
@@ -174,7 +174,7 @@ def run_training(args, action_space):
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
-            "sub_optimization_ratio": args.sub_optimization_ratio,
+            "n_checkpoints": args.n_checkpoints,
             "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,

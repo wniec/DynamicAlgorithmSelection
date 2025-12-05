@@ -2,10 +2,11 @@ import numpy as np
 import torch
 from torch import nn
 
-DISCOUNT_FACTOR = 0.9
+CHECKPOINT_DIVISION_EXPONENT = 1.98
+GAMMA = 0.3
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
-ALPHA = 0.3
+LAMBDA = 0.9
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -48,7 +49,7 @@ class RolloutBuffer:
         return states, actions, old_log_probs, values, rewards, dones
 
 
-def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
+def compute_gae(rewards, dones, values, last_value):
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)
@@ -57,12 +58,12 @@ def compute_gae(rewards, dones, values, last_value, gamma=0.85, lam=0.85):
     prev_adv = 0.0
     for t in reversed(range(T)):
         mask = 1.0 - float(dones[t])
-        delta = rewards[t] + gamma * prev_value * mask - values[t]
-        adv = delta + gamma * lam * prev_adv * mask
+        delta = rewards[t] + GAMMA * prev_value * mask - values[t]
+        adv = delta + GAMMA * LAMBDA * prev_adv * mask
         advantages[t] = adv
         prev_adv = adv
         prev_value = values[t]
-        prev_return = rewards[t] + gamma * prev_return * mask
+        prev_return = rewards[t] + GAMMA * prev_return * mask
         returns[t] = prev_return
     return returns, advantages
 
@@ -192,18 +193,31 @@ def get_runtime_stats(
     last_fitness = None
     checkpoints_fitness = []
     for i, fitness in fitness_history:
-        area_under_optimization_curve += fitness * (i - last_i) / function_evaluations
-        while last_i < checkpoints[checkpoint_idx] < i:
+        area_under_optimization_curve += fitness * (i - last_i)
+        while last_i <= checkpoints[checkpoint_idx] < i:
             checkpoints_fitness.append(last_fitness)
             checkpoint_idx += 1
         last_i = i
         last_fitness = fitness
     final_fitness = fitness_history[-1][1]
     if function_evaluations == checkpoints[-1]:
-        checkpoints_fitness.append(final_fitness)
-
+        while len(checkpoints_fitness) < len(checkpoints):
+            checkpoints_fitness.append(final_fitness)
     return {
-        "area_under_optimization_curve": area_under_optimization_curve,
+        "area_under_optimization_curve": area_under_optimization_curve
+        / function_evaluations,
         "final_fitness": final_fitness,
         "checkpoints_fitness": checkpoints_fitness,
     }
+
+
+def get_checkpoints(n_checkpoints: int, max_function_evaluations: int) -> np.ndarray:
+    checkpoint_ratios = np.cumprod(
+        np.full(shape=(n_checkpoints,), fill_value=CHECKPOINT_DIVISION_EXPONENT)
+    )
+    checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
+    checkpoints = (checkpoint_ratios * max_function_evaluations).astype(int)
+    checkpoints[-1] = (
+        max_function_evaluations  # eliminate possibility of "error by one"
+    )
+    return checkpoints

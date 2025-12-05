@@ -253,3 +253,5 @@ class LMCMAES(ES):
                 }
             )
             self.start_conditions = start_conditions
+        self.best_so_far_x = kwargs.get("best_x", None)
+        self.best_so_far_y = kwargs.get("best_y", float("inf"))
