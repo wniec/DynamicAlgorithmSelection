@@ -116,7 +116,6 @@ class Actor(LSTMModule):
         )
         orthogonal_init(self)
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 2:
             x_seq = x.unsqueeze(1)
@@ -229,11 +228,11 @@ def get_checkpoints(n_checkpoints: int, max_function_evaluations: int) -> np.nda
 
 def orthogonal_init(module):
     for name, param in module.named_parameters():
-        if 'weight_ih' in name:      # LSTM input -> hidden
+        if "weight_ih" in name:  # LSTM input -> hidden
             init.orthogonal_(param.data)
-        elif 'weight_hh' in name:    # LSTM hidden -> hidden
+        elif "weight_hh" in name:  # LSTM hidden -> hidden
             init.orthogonal_(param.data)
-        elif 'weight' in name and param.dim() >= 2:
-            init.orthogonal_(param.data)   # Linear layers
-        elif 'bias' in name:
+        elif "weight" in name and param.dim() >= 2:
+            init.orthogonal_(param.data)  # Linear layers
+        elif "bias" in name:
             param.data.zero_()

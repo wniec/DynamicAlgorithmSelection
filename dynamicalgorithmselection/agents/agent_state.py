@@ -41,7 +41,9 @@ class AgentState:
             [i for i, _ in enumerate(y)], key=lambda i: y[i]
         )  # population indices sorted by fitness
         self.measured_individuals = list(
-            itemgetter(*(min(i, len(y) - 1) for i in (1, 2, 3, 4, 5, 6, 9, 12, 15)))(self.sorted_indices)
+            itemgetter(*(min(i, len(y) - 1) for i in (1, 2, 3, 4, 5, 6, 9, 12, 15)))(
+                self.sorted_indices
+            )
         )
         self.x_mean = x.mean(axis=0)
         self.population_relative = x - self.x_mean

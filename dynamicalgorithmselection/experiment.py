@@ -69,7 +69,12 @@ def coco_bbob_experiment(
     agent: Optional[str] = "policy-gradient",
 ):
     options["name"] = name
-    if not train:
+    if mode == "CV":
+        return run_cross_validation(optimizer, options, evaluations_multiplier)
+    elif options["baselines"]:
+        # running only baselines
+        return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)
+    elif not train:
         return _coco_bbob_test(optimizer, options, evaluations_multiplier, mode)
     elif agent == "neuroevolution":
         return _coco_bbob_neuroevolution_train(
@@ -126,17 +131,19 @@ def eval_genomes(
             run.log({"entropy": norm_entropy})
 
 
-def get_suite(name, mode, train):
+def get_suite(mode, train):
     """
-    :param name: name of the output
     :param mode:  mode of the training (LOPO: easy and hard) or LOIO
     :param train: if suite should be for testing or training:
-    :return suite, list of problem ids and observer:
+    :return suite and list of problem ids:
     """
     cocoex.utilities.MiniPrint()
     problems_suite = cocoex.Suite("bbob", "", "")
-
-    if mode != "LOIO":
+    all_problem_ids = [
+        f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
+        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
+    ]
+    if mode in ["easy", "hard"]:
         easy = mode == "easy"
         function_ids = (
             EASY_TRAIN_BBOB
@@ -149,11 +156,7 @@ def get_suite(name, mode, train):
             for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)
         ]
 
-    else:
-        all_problem_ids = [
-            f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-            for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
-        ]
+    elif mode == "LOIO":
         with open("LOIO_train_set.json") as f:
             problem_ids = json.load(f)["data"]
         np.random.seed(1234)
@@ -161,20 +164,64 @@ def get_suite(name, mode, train):
             pass
         else:
             problem_ids = list(set(all_problem_ids).difference(problem_ids))
+    elif mode == "CV":
+        raise ValueError("CV mode is not suitable for get_suite function")
+    else:
+        return problems_suite, all_problem_ids
     return problems_suite, problem_ids
 
 
-def _coco_bbob_policy_gradient_train(
+def run_cross_validation(
     optimizer: Type[Optimizer],
     options: dict,
     evaluations_multiplier: int = 1_000,
-    mode: str = "easy",
 ):
     results_dir = os.path.join("results", f"{options.get('name')}")
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(options.get("name"), mode, True)
+    problems_suite, cv_folds = get_cv_folds(5)
+    observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
+    name = options["name"]
+    for i, (train_set, test_set) in enumerate(cv_folds):
+        options["name"] = f"{name}_cv{i}"
+        print(f"Running cross validation training, fold {i + 1}")
+        run_training(optimizer, options, evaluations_multiplier, problems_suite, problem_ids=train_set)
+        print(f"Running cross validation testing, fold {i + 1}")
+        run_testing(optimizer, options, evaluations_multiplier, problems_suite, problem_ids=test_set, observer=observer)
+    return observer.result_folder
+
+def get_cv_folds(n: int):
+    """
+    :param n:  number of cross validation folds
+    :return suite, list of (train set, test set) pairs:
+    """
+    np.random.seed(1234)
+    cocoex.utilities.MiniPrint()
+    problems_suite = cocoex.Suite("bbob", "", "")
+    all_problem_ids = [
+        f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
+        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
+    ]
+    remaining_problem_ids = set(all_problem_ids)
+    test_sets = []
+    for i in range(n):
+        selected = np.random.choice(list(remaining_problem_ids), size=len(all_problem_ids) // n, replace=False).tolist()
+        test_sets.append(selected)
+        remaining_problem_ids = remaining_problem_ids.difference(selected)
+    return problems_suite, [
+        (list(set(all_problem_ids).difference(test_set)), test_set)
+        for test_set in test_sets
+    ]
+
+
+def run_training(
+    optimizer: Type[Optimizer],
+    options: dict,
+    evaluations_multiplier: int,
+    problems_suite: cocoex.Suite,
+    problem_ids: list[str],
+):
     agent_state = {}
     for problem_id in tqdm(np.random.permutation(problem_ids)):
         problem_instance = problems_suite.get_problem(problem_id)
@@ -188,13 +235,20 @@ def _coco_bbob_policy_gradient_train(
         )
         options["buffer"] = agent_state["buffer"]
         problem_instance.free()
-        dump_stats(
-            results,
-            options.get("name"),
-            problem_id,
-            max_fe,
-            options.get("n_checkpoints"),
-        )
+
+
+def _coco_bbob_policy_gradient_train(
+    optimizer: Type[Optimizer],
+    options: dict,
+    evaluations_multiplier: int = 1_000,
+    mode: str = "easy",
+):
+    results_dir = os.path.join("results", f"{options.get('name')}")
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
+    cocoex.utilities.MiniPrint()
+    problems_suite, problem_ids = get_suite(mode, True)
+    run_training(optimizer, options, evaluations_multiplier, problems_suite, problem_ids)
 
 
 def adjust_config(n_inputs, n_outputs):
@@ -221,7 +275,7 @@ def _coco_bbob_neuroevolution_train(
     mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(options.get("name"), mode, True)
+    problems_suite, problem_ids = get_suite(mode, True)
     batch_size = 30
     adjust_config(
         2 * len(options.get("action_space")) + BASE_STATE_SIZE,
@@ -266,8 +320,31 @@ def _coco_bbob_test(
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(options.get("name"), mode, False)
+    problems_suite, problem_ids = get_suite(mode, False)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
+    run_testing(optimizer, options, evaluations_multiplier, problems_suite, problem_ids, observer)
+    return observer.result_folder
+
+
+def _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode):
+    results_dir = os.path.join("results", f"{options.get('name')}")
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
+    cocoex.utilities.MiniPrint()
+    problems_suite, problem_ids = get_suite("baselines", False)
+    observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
+    run_testing(optimizer, options, evaluations_multiplier, problems_suite, problem_ids, observer)
+    return observer.result_folder
+
+
+def run_testing(
+    optimizer: Type[Optimizer],
+    options: dict,
+    evaluations_multiplier: int,
+    problems_suite: cocoex.Suite,
+    problem_ids: list[str],
+    observer: cocoex.Observer
+):
     for problem_id in tqdm(problem_ids):
         problem_instance = problems_suite.get_problem(problem_id)
         problem_instance.observe_with(observer)
@@ -284,7 +361,6 @@ def _coco_bbob_test(
             max_fe,
             options.get("n_checkpoints"),
         )
-    return observer.result_folder
 
 
 def coco_bbob_single_function(

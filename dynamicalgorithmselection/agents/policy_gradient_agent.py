@@ -20,7 +20,9 @@ class PolicyGradientAgent(Agent):
         Agent.__init__(self, problem, options)
         self.buffer = options.get(
             "buffer",
-            RolloutBuffer(capacity=options.get("ppo_batch_size", 10_000), device=DEVICE),
+            RolloutBuffer(
+                capacity=options.get("ppo_batch_size", 10_000), device=DEVICE
+            ),
         )
         self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
@@ -66,10 +68,7 @@ class PolicyGradientAgent(Agent):
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
         with torch.no_grad():
             last_value = (
-                self.critic(states[-1].unsqueeze(0).to(DEVICE))
-                .squeeze(0)
-                .cpu()
-                .item()
+                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
                 if buffer.size() > 0
                 else 0.0
             )
@@ -169,7 +168,11 @@ class PolicyGradientAgent(Agent):
                 policy = self.actor(state.to(DEVICE))
                 value = self.critic(state.to(DEVICE))
 
-            probs = policy.cpu().numpy().squeeze(0) if self.buffer.size() >= self.buffer.capacity else np.ones_like(self.actions, dtype=float) / len(self.actions)
+            probs = (
+                policy.cpu().numpy().squeeze(0)
+                if self.buffer.size() >= self.buffer.capacity
+                else np.ones_like(self.actions, dtype=float) / len(self.actions)
+            )
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
 
