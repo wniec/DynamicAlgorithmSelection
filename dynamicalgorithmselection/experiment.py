@@ -71,7 +71,7 @@ def coco_bbob_experiment(
     options["name"] = name
     if mode == "CV":
         return run_cross_validation(optimizer, options, evaluations_multiplier)
-    elif options["baselines"]:
+    elif options.get("baselines"):
         # running only baselines
         return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)
     elif not train:
@@ -182,14 +182,35 @@ def run_cross_validation(
     cocoex.utilities.MiniPrint()
     problems_suite, cv_folds = get_cv_folds(5)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
-    name = options["name"]
     for i, (train_set, test_set) in enumerate(cv_folds):
-        options["name"] = f"{name}_cv{i}"
         print(f"Running cross validation training, fold {i + 1}")
-        run_training(optimizer, options, evaluations_multiplier, problems_suite, problem_ids=train_set)
+        run_training(
+            optimizer,
+            options,
+            evaluations_multiplier,
+            problems_suite,
+            problem_ids=train_set,
+        )
         print(f"Running cross validation testing, fold {i + 1}")
-        run_testing(optimizer, options, evaluations_multiplier, problems_suite, problem_ids=test_set, observer=observer)
+        run_testing(
+            optimizer,
+            options,
+            evaluations_multiplier,
+            problems_suite,
+            problem_ids=test_set,
+            observer=observer,
+        )
+        options.update(
+            {
+                "buffer": None,
+                "actor_parameters": None,
+                "critic_parameters": None,
+                "actor_optimizer": None,
+                "critic_optimizer": None,
+            }
+        )
     return observer.result_folder
+
 
 def get_cv_folds(n: int):
     """
@@ -206,7 +227,9 @@ def get_cv_folds(n: int):
     remaining_problem_ids = set(all_problem_ids)
     test_sets = []
     for i in range(n):
-        selected = np.random.choice(list(remaining_problem_ids), size=len(all_problem_ids) // n, replace=False).tolist()
+        selected = np.random.choice(
+            list(remaining_problem_ids), size=len(all_problem_ids) // n, replace=False
+        ).tolist()
         test_sets.append(selected)
         remaining_problem_ids = remaining_problem_ids.difference(selected)
     return problems_suite, [
@@ -248,7 +271,9 @@ def _coco_bbob_policy_gradient_train(
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(mode, True)
-    run_training(optimizer, options, evaluations_multiplier, problems_suite, problem_ids)
+    run_training(
+        optimizer, options, evaluations_multiplier, problems_suite, problem_ids
+    )
 
 
 def adjust_config(n_inputs, n_outputs):
@@ -322,7 +347,14 @@ def _coco_bbob_test(
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(mode, False)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
-    run_testing(optimizer, options, evaluations_multiplier, problems_suite, problem_ids, observer)
+    run_testing(
+        optimizer,
+        options,
+        evaluations_multiplier,
+        problems_suite,
+        problem_ids,
+        observer,
+    )
     return observer.result_folder
 
 
@@ -333,7 +365,14 @@ def _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode):
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite("baselines", False)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
-    run_testing(optimizer, options, evaluations_multiplier, problems_suite, problem_ids, observer)
+    run_testing(
+        optimizer,
+        options,
+        evaluations_multiplier,
+        problems_suite,
+        problem_ids,
+        observer,
+    )
     return observer.result_folder
 
 
@@ -343,7 +382,7 @@ def run_testing(
     evaluations_multiplier: int,
     problems_suite: cocoex.Suite,
     problem_ids: list[str],
-    observer: cocoex.Observer
+    observer: cocoex.Observer,
 ):
     for problem_id in tqdm(problem_ids):
         problem_instance = problems_suite.get_problem(problem_id)

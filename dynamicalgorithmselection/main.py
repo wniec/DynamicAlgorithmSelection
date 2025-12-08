@@ -190,6 +190,8 @@ def run_training(args, action_space):
 
 
 def run_CV(args, action_space):
+    if os.path.exists(os.path.join("exdata", f"DAS_CV_{args.name}")):
+        shutil.rmtree(os.path.join("exdata", f"DAS_CV_{args.name}"))
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
@@ -198,12 +200,13 @@ def run_CV(args, action_space):
             "run": None,
             "action_space": action_space,
         },
-        name=f"DAS_train_{args.name}",
+        name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
         agent=args.agent,
         mode=args.mode,
     )
+    cocopp.main(os.path.join("exdata", f"DAS_CV_{args.name}"))
 
 
 def run_baselines(args, action_space):
@@ -212,13 +215,18 @@ def run_baselines(args, action_space):
             shutil.rmtree(os.path.join("exdata", optimizer.__name__))
         coco_bbob_experiment(
             optimizer,
-            {"n_individuals": args.population_size, "baselines": True, "n_checkpoints": args.n_checkpoints},
+            {
+                "n_individuals": args.population_size,
+                "baselines": True,
+                "n_checkpoints": args.n_checkpoints,
+            },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,
             train=False,
             agent=None,
         )
         cocopp.main(os.path.join("exdata", optimizer.__name__))
+
 
 def main():
     args = parse_arguments()

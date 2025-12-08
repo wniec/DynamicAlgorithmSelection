@@ -18,11 +18,8 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
-        self.buffer = options.get(
-            "buffer",
-            RolloutBuffer(
-                capacity=options.get("ppo_batch_size", 10_000), device=DEVICE
-            ),
+        self.buffer = options.get("buffer") or RolloutBuffer(
+            capacity=options.get("ppo_batch_size", 10_000), device=DEVICE
         )
         self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
