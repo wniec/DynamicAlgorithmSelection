@@ -39,7 +39,7 @@ def dump_stats(
     max_function_evaluations,
     n_checkpoints,
     n_individuals,
-    cde
+    cde,
 ):
     checkpoints = get_checkpoints(
         n_checkpoints, max_function_evaluations, n_individuals, cde
@@ -71,6 +71,7 @@ def dump_extreme_stats(
     max_function_evaluations,
     n_checkpoints,
     n_individuals,
+    cde,
 ):
     checkpoints = get_checkpoints(
         n_checkpoints, max_function_evaluations, n_individuals, cde

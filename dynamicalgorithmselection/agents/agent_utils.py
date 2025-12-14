@@ -203,6 +203,9 @@ def get_runtime_stats(
             checkpoint_idx += 1
         last_i = i
         last_fitness = fitness
+    area_under_optimization_curve += fitness_history[-1][1] * (
+        function_evaluations - fitness_history[-1][0]
+    )
     final_fitness = fitness_history[-1][1]
     if function_evaluations == checkpoints[-1]:
         while len(checkpoints_fitness) < len(checkpoints):
@@ -231,7 +234,7 @@ def get_extreme_stats(
         for fe, fitness in run:
             all_improvements.append((fe, algorithm, fitness))
 
-    all_improvements.sort(key=itemgetter(0))
+    all_improvements.sort(key=itemgetter(0))  # sort by fe - increasing
     current_fitness = float("inf")
 
     best_history = []
@@ -240,13 +243,25 @@ def get_extreme_stats(
             current_fitness = fitness
             best_history.append((fe, fitness))
 
-    all_improvements.sort(key=itemgetter(-1), reverse=True)
-    current_fe = all_improvements[0][0]
+    all_improvements.sort(
+        key=lambda x: (x[0], -x[2])
+    )  # sort fe - increasing and by fitness - decreasing
+
+    current_fitness = {
+        alg: float("inf") for alg in fitness_histories
+    }  # current best fitness for each algorithm
+    current_worst_fitness = float("inf")  # worst performance so far for each algorithm
 
     worst_history = []
-    for fe, _, fitness in all_improvements:
-        if fe > current_fe:
-            worst_history.append((fe, fitness))
+    for fe, algorithm, fitness in all_improvements:
+        if fitness < current_fitness[algorithm]:
+            current_fitness[algorithm] = fitness
+            new_worst_fitness = max(
+                i for i in current_fitness.values() if i != float("inf")
+            )
+            if new_worst_fitness < current_worst_fitness:
+                worst_history.append((fe, fitness))
+                current_worst_fitness = new_worst_fitness
 
     return (
         get_runtime_stats(best_history, function_evaluations, checkpoints),
