@@ -1,9 +1,10 @@
+from operator import itemgetter
+
 import numpy as np
 import torch
 from torch import nn
 import torch.nn.init as init
 
-CHECKPOINT_DIVISION_EXPONENT = 1.98
 GAMMA = 0.3
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
@@ -182,7 +183,7 @@ def get_list_stats(data: list):
 def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
-    checkpoints: list[int],
+    checkpoints: np.ndarray,
 ) -> dict[str, float | list[float]]:
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
@@ -214,15 +215,57 @@ def get_runtime_stats(
     }
 
 
-def get_checkpoints(n_checkpoints: int, max_function_evaluations: int) -> np.ndarray:
-    checkpoint_ratios = np.cumprod(
-        np.full(shape=(n_checkpoints,), fill_value=CHECKPOINT_DIVISION_EXPONENT)
+def get_extreme_stats(
+    fitness_histories: dict[str, list[tuple[int, float]]],
+    function_evaluations: int,
+    checkpoints: np.ndarray,
+) -> tuple[dict[str, float | list[float]], dict[str, float | list[float]]]:
+    """
+    :param fitness_histories: list of lists of tuples [fe, fitness] with only points where best so far fitness improved for each algorithm
+    :param function_evaluations: max number of function evaluations during run.
+    :param checkpoints: list of checkpoints by their n_function_evaluations
+    :return: dictionary of selected run statistics, ready to dump
+    """
+    all_improvements = []
+    for algorithm, run in fitness_histories.items():
+        for fe, fitness in run:
+            all_improvements.append((fe, algorithm, fitness))
+
+    all_improvements.sort(key=itemgetter(0))
+    current_fitness = float("inf")
+
+    best_history = []
+    for fe, _, fitness in all_improvements:
+        if fitness < current_fitness:
+            current_fitness = fitness
+            best_history.append((fe, fitness))
+
+    all_improvements.sort(key=itemgetter(-1), reverse=True)
+    current_fe = all_improvements[0][0]
+
+    worst_history = []
+    for fe, _, fitness in all_improvements:
+        if fe > current_fe:
+            worst_history.append((fe, fitness))
+
+    return (
+        get_runtime_stats(best_history, function_evaluations, checkpoints),
+        get_runtime_stats(worst_history, function_evaluations, checkpoints),
     )
+
+
+def get_checkpoints(
+    n_checkpoints: int, max_function_evaluations: int, n_individuals: int, cde: float
+) -> np.ndarray:
+    checkpoint_ratios = np.cumprod(np.full(shape=(n_checkpoints,), fill_value=cde))
     checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
     checkpoints = (checkpoint_ratios * max_function_evaluations).astype(int)
     checkpoints[-1] = (
         max_function_evaluations  # eliminate possibility of "error by one"
     )
+    checkpoints[0] = max(checkpoints[0], n_individuals)
+    for i in range(1, len(checkpoints)):
+        checkpoints[i] = max(checkpoints[i - 1] + n_individuals, checkpoints[i])
     return checkpoints
 
 

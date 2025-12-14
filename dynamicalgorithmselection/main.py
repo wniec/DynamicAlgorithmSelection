@@ -109,6 +109,14 @@ def parse_arguments():
         help="specify which agent to use",
     )
 
+    parser.add_argument(
+        "-x",
+        "--cde",
+        type=float,
+        default=2.0,
+        help="checkpoint division exponent",
+    )
+
     return parser.parse_args()
 
 
@@ -127,6 +135,7 @@ def print_info(args):
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
+    print("Checkpoint division exponent: ", args.cde)
 
 
 def test(args, action_space):
@@ -137,6 +146,7 @@ def test(args, action_space):
         "n_checkpoints": args.n_checkpoints,
         "n_individuals": args.population_size,
         "action_space": action_space,
+        "cde": args.cde,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
@@ -156,6 +166,7 @@ def test(args, action_space):
         name=f"DAS_test_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=False,
+        agent=args.agent,
     )
     cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
 
@@ -178,6 +189,7 @@ def run_training(args, action_space):
             "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,
+            "cde": args.cde,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -199,6 +211,7 @@ def run_CV(args, action_space):
             "n_individuals": args.population_size,
             "run": None,
             "action_space": action_space,
+            "cde": args.cde,
         },
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -214,11 +227,13 @@ def run_baselines(args, action_space):
         if os.path.exists(os.path.join("exdata", optimizer.__name__)):
             shutil.rmtree(os.path.join("exdata", optimizer.__name__))
         coco_bbob_experiment(
-            optimizer,
+            None,
             {
+                "optimizer_portfolio": action_space,
                 "n_individuals": args.population_size,
                 "baselines": True,
                 "n_checkpoints": args.n_checkpoints,
+                "cde": args.cde,
             },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,
