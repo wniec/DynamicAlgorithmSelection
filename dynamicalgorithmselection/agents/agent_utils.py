@@ -270,9 +270,9 @@ def get_extreme_stats(
 
 
 def get_checkpoints(
-    n_checkpoints: int, max_function_evaluations: int, n_individuals: int, cde: float
+    n_checkpoints: int, max_function_evaluations: int, n_individuals: int, cdb: float
 ) -> np.ndarray:
-    checkpoint_ratios = np.cumprod(np.full(shape=(n_checkpoints,), fill_value=cde))
+    checkpoint_ratios = np.cumprod(np.full(shape=(n_checkpoints,), fill_value=cdb))
     checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
     checkpoints = (checkpoint_ratios * max_function_evaluations).astype(int)
     checkpoints[-1] = (

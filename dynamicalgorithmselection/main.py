@@ -111,7 +111,7 @@ def parse_arguments():
 
     parser.add_argument(
         "-x",
-        "--cde",
+        "--cdb",
         type=float,
         default=2.0,
         help="checkpoint division exponent",
@@ -135,7 +135,7 @@ def print_info(args):
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
-    print("Checkpoint division exponent: ", args.cde)
+    print("Exponential checkpoint division base: ", args.cdb)
 
 
 def test(args, action_space):
@@ -146,7 +146,7 @@ def test(args, action_space):
         "n_checkpoints": args.n_checkpoints,
         "n_individuals": args.population_size,
         "action_space": action_space,
-        "cde": args.cde,
+        "cdb": args.cdb,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
@@ -189,7 +189,7 @@ def run_training(args, action_space):
             "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,
-            "cde": args.cde,
+            "cdb": args.cdb,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -211,7 +211,7 @@ def run_CV(args, action_space):
             "n_individuals": args.population_size,
             "run": None,
             "action_space": action_space,
-            "cde": args.cde,
+            "cdb": args.cdb,
         },
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -233,7 +233,7 @@ def run_baselines(args, action_space):
                 "n_individuals": args.population_size,
                 "baselines": True,
                 "n_checkpoints": args.n_checkpoints,
-                "cde": args.cde,
+                "cdb": args.cdb,
             },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,

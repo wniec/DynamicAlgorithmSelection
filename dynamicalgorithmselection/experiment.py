@@ -39,10 +39,10 @@ def dump_stats(
     max_function_evaluations,
     n_checkpoints,
     n_individuals,
-    cde,
+    cdb,
 ):
     checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals, cde
+        n_checkpoints, max_function_evaluations, n_individuals, cdb
     )
     with open(
         os.path.join(
@@ -71,10 +71,10 @@ def dump_extreme_stats(
     max_function_evaluations,
     n_checkpoints,
     n_individuals,
-    cde,
+    cdb,
 ):
     checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals, cde
+        n_checkpoints, max_function_evaluations, n_individuals, cdb
     )
     best_case, worst_case = get_extreme_stats(
         stats, max_function_evaluations, checkpoints
@@ -452,7 +452,7 @@ def run_testing(
             max_fe,
             options.get("n_checkpoints"),
             options.get("n_individuals"),
-            options.get("cde"),
+            options.get("cdb"),
         )
 
 
@@ -501,7 +501,7 @@ def run_comparison(
                 max_fe,
                 options.get("n_checkpoints"),
                 options.get("n_individuals"),
-                options.get("cde"),
+                options.get("cdb"),
             )
 
         dump_extreme_stats(
@@ -511,7 +511,7 @@ def run_comparison(
             max_fe,
             options.get("n_checkpoints"),
             options.get("n_individuals"),
-            options.get("cde"),
+            options.get("cdb"),
         )
 
 

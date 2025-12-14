@@ -20,7 +20,7 @@ class Agent(Optimizer):
         self.history = []
         self.actions = options.get("action_space")
         self.name = options.get("name")
-        self.cde = options.get("cde")
+        self.cdb = options.get("cdb")
 
         self.train_mode = options.get("train_mode", True)
 
@@ -30,7 +30,7 @@ class Agent(Optimizer):
             self.n_checkpoints,
             self.max_function_evaluations,
             self.n_individuals,
-            self.cde,
+            self.cdb,
         )
 
     def get_initial_state(self):
