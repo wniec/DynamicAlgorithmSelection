@@ -139,8 +139,8 @@ def print_info(args):
 
 
 def test(args, action_space):
-    if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
-        shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
+    if os.path.exists(os.path.join("exdata", f"DAS_{args.name}")):
+        shutil.rmtree(os.path.join("exdata", f"DAS_{args.name}"))
 
     options = {
         "n_checkpoints": args.n_checkpoints,
@@ -163,12 +163,12 @@ def test(args, action_space):
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         options,
-        name=f"DAS_test_{args.name}",
+        name=f"DAS_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=False,
         agent=args.agent,
     )
-    cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
+    cocopp.main(os.path.join("exdata", f"DAS_{args.name}"))
 
 
 def run_training(args, action_space):

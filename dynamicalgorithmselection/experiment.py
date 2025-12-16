@@ -232,7 +232,7 @@ def run_cross_validation(
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, cv_folds = get_cv_folds(5)
+    problems_suite, cv_folds = _get_cv_folds(4)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
     for i, (train_set, test_set) in enumerate(cv_folds):
         print(f"Running cross validation training, fold {i + 1}")
@@ -264,7 +264,7 @@ def run_cross_validation(
     return observer.result_folder
 
 
-def get_cv_folds(n: int):
+def _get_cv_folds(n: int):
     """
     :param n:  number of cross validation folds
     :return suite, list of (train set, test set) pairs:

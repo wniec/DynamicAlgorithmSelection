@@ -10,7 +10,7 @@ This project explores **Reinforcement Learning (RL)-based meta–black-box optim
   **LM-CMAES**, **standard PSO**, **CPSO**, **IPSO**, **PSOL**, **OPOA2015**, **POWELL**, and **G3PCX**
 - All algorithms share the same **population size** (`n_individuals`) for seamless transitions.
 - The core of the system is an **RL-based agent** that learns to **switch** between optimizers during the optimization process.
-- The agent makes switching decisions in **quantized stages**. Number of those switches is determined by the parameter (`n_checkpoints`). The length of optimization episodes increases exponentially with the base determined by parameter `cde`.
+- The agent makes switching decisions in **quantized stages**. Number of those switches is determined by the parameter (`n_checkpoints`). The length of optimization episodes increases exponentially with the base determined by parameter `cdb`.
 - The entry script, **`main.py`**, launches training of the RL agent, followed by evaluation and comparison with individual sub-optimizers.
 
 ---
@@ -53,7 +53,7 @@ uv run das <name> [options]
 | `-w`, `--wandb_project`            | `str`              | `None`                    | Weights and Biases project name                                                         |
 | `-a`, `--agent`                    | `str`              | `policy-gradient`         | What agent to use. Possible: neuroevolution, policy-gradient and random                 |
 | `-l`, `--mode`                     | `str`              | `'LOIO', 'easy', 'hard'`  | Determines how to split train and test examples [more](#Train-test-split)               | 
-| `-x`, `--cde`                      | `float`            | `2.0`                     | Checkpoint Division Exponent - determines how quickly length of checkpoints should rise | 
+| `-x`, `--cdb`                      | `float`            | `2.0`                     | Checkpoint Division Exponent - determines how quickly length of checkpoints should rise | 
 
 
 ## Train-test split
