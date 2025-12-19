@@ -187,6 +187,6 @@ class AgentState:
         return same_action_counter
 
     def mean_falling_behind(self) -> float:
-        return (self.y - self.best_y).mean() / (
-            max((self.y.max() - self.best_y), (self.y - self.best_y).mean()) or 1
-        )
+        return max((self.y - self.best_y).mean() / (
+            max((self.y.max() - self.best_y), 1e-8)
+        ), 0)
