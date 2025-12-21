@@ -1,5 +1,3 @@
-from operator import itemgetter
-
 import numpy as np
 import torch
 from torch import nn
@@ -70,43 +68,17 @@ def compute_gae(rewards, dones, values, last_value):
     return returns, advantages
 
 
-class LSTMModule(nn.Module):
-    def __init__(self, input_size, hidden_size, lstm_layers=1):
+class Actor(nn.Module):
+    def __init__(self, n_actions: int, dropout_p: float = 0.35):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.lstm_layers = lstm_layers
-        self.lstm = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=lstm_layers,
-            batch_first=True,
-        )
-        self.hidden = None
-
-    def reset_memory(self, batch_size=1, device=DEVICE):
-        self.hidden = (
-            torch.zeros(self.lstm_layers, batch_size, self.hidden_size, device=device),
-            torch.zeros(self.lstm_layers, batch_size, self.hidden_size, device=device),
+        # Replace LSTM with a standard MLP feature extractor
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE),
+            nn.LayerNorm(HIDDEN_SIZE),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p),  # Optional: Added dropout to feature extraction
         )
 
-    def forward_lstm(self, x):
-        batch_size = x.size(0)
-        device = x.device
-
-        # Reinitialize hidden state if needed
-        if self.hidden is None or self.hidden[0].size(1) != batch_size:
-            self.reset_memory(batch_size=batch_size, device=device)
-        else:
-            # Detach hidden state from previous graph
-            self.hidden = (self.hidden[0].detach(), self.hidden[1].detach())
-
-        out, self.hidden = self.lstm(x, self.hidden)
-        return out
-
-
-class Actor(LSTMModule):
-    def __init__(self, n_actions: int, dropout_p: float = 0.35, lstm_layers: int = 1):
-        super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
         self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
@@ -118,21 +90,27 @@ class Actor(LSTMModule):
         orthogonal_init(self)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() == 2:
-            x_seq = x.unsqueeze(1)
-        elif x.dim() == 3:
-            x_seq = x
-        else:
-            raise ValueError(f"Unsupported input tensor shape for Actor: {x.shape}")
-        x_seq = x_seq.to(next(self.parameters()).device)
-        lstm_out = self.forward_lstm(x_seq)
-        last = lstm_out[:, -1, :]
-        return self.head(last)
+        # Handle input shapes that might come with a sequence dimension (B, Seq, Feat)
+        # or just (B, Feat). We flatten sequence dim if present because this is now an MLP.
+        if x.dim() == 3:
+            x = x.squeeze(1)
+
+        x = x.to(next(self.parameters()).device)
+        features = self.feature_extractor(x)
+        return self.head(features)
 
 
-class Critic(LSTMModule):
-    def __init__(self, n_actions: int, dropout_p: float = 0.35, lstm_layers: int = 1):
-        super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
+class Critic(nn.Module):
+    def __init__(self, n_actions: int, dropout_p: float = 0.35):
+        super().__init__()
+        # Replace LSTM with a standard MLP feature extractor
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE),
+            nn.LayerNorm(HIDDEN_SIZE),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p),
+        )
+
         self.head = nn.Sequential(
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
@@ -143,16 +121,12 @@ class Critic(LSTMModule):
         orthogonal_init(self)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() == 2:
-            x_seq = x.unsqueeze(1)
-        elif x.dim() == 3:
-            x_seq = x
-        else:
-            raise ValueError(f"Unsupported input tensor shape for Critic: {x.shape}")
-        x_seq = x_seq.to(next(self.parameters()).device)
-        lstm_out = self.forward_lstm(x_seq)
-        last = lstm_out[:, -1, :]
-        return self.head(last)
+        if x.dim() == 3:
+            x = x.squeeze(1)
+
+        x = x.to(next(self.parameters()).device)
+        features = self.feature_extractor(x)
+        return self.head(features)
 
 
 class ActorLoss(nn.Module):
@@ -234,7 +208,9 @@ def get_extreme_stats(
         for fe, fitness in run:
             all_improvements.append((fe, algorithm, fitness))
 
-    all_improvements.sort(key=itemgetter(0))  # sort by fe - increasing
+    all_improvements.sort(
+        key=lambda x: (x[0], -x[2])
+    )  # sort by fe - increasing and fitness - increasing
     current_fitness = float("inf")
 
     best_history = []

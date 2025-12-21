@@ -50,9 +50,6 @@ class PolicyGradientAgent(Agent):
             self.critic_optimizer, gamma=decay_gamma
         )
 
-        self.actor.reset_memory()
-        self.critic.reset_memory()
-
     def ppo_update(
         self,
         buffer,
