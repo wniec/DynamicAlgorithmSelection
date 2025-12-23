@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.init as init
 
-GAMMA = 0.3
+GAMMA = 0.9
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
 LAMBDA = 0.9

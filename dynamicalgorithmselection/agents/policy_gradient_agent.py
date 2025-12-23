@@ -26,7 +26,7 @@ class PolicyGradientAgent(Agent):
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-5)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-4)
 
         decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
@@ -210,7 +210,7 @@ class PolicyGradientAgent(Agent):
                     value_coef=value_coef,
                     entropy_coef=entropy_coef,
                 )
-            entropy_coef = max(entropy_coef * 0.9999, 1e-4)
+            entropy_coef = max(entropy_coef * 0.99997, 1e-2)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
