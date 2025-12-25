@@ -167,6 +167,7 @@ def test(args, action_space):
         evaluations_multiplier=args.fe_multiplier,
         train=False,
         agent=args.agent,
+        mode=args.mode
     )
     cocopp.main(os.path.join("exdata", f"DAS_{args.name}"))
 

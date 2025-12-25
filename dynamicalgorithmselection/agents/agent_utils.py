@@ -260,6 +260,34 @@ def get_checkpoints(
     return checkpoints
 
 
+class RunningMeanStd:
+    def __init__(self, n_actions: int, epsilon=1e-4):
+        shape = (BASE_STATE_SIZE + n_actions * 2,)
+        self.mean = np.zeros(shape)
+        self.var = np.ones(shape)
+        self.count = epsilon
+
+    def update(self, x):
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        self.mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
+        self.var = M2 / tot_count
+        self.count = tot_count
+
+    def normalize(self, x):
+        # Expects x to be shape (batch_size, n_features)
+        self.update(x)
+        return (x - self.mean) / np.sqrt(self.var + 1e-8)
+
+
 def orthogonal_init(module):
     for name, param in module.named_parameters():
         if "weight_ih" in name:  # LSTM input -> hidden

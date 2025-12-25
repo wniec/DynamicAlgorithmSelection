@@ -10,6 +10,7 @@ from dynamicalgorithmselection.agents.agent_utils import (
     Actor,
     Critic,
     ActorLoss,
+    RunningMeanStd,
 )
 from dynamicalgorithmselection.agents.agent import Agent
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
@@ -19,14 +20,14 @@ class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 10_000), device=DEVICE
+            capacity=options.get("ppo_batch_size", 1_000), device=DEVICE
         )
         self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-4)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-5)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-5)
 
         decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
@@ -49,6 +50,7 @@ class PolicyGradientAgent(Agent):
         self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.critic_optimizer, gamma=decay_gamma
         )
+        self.state_normalizer = RunningMeanStd(n_actions=len(self.actions))
 
     def ppo_update(
         self,
@@ -149,15 +151,20 @@ class PolicyGradientAgent(Agent):
 
         batch_size = self.buffer.capacity
         ppo_epochs = self.options.get("ppo_epochs", 4)
-        clip_eps = self.options.get("ppo_eps", 0.3)
+        clip_eps = self.options.get("ppo_eps", 0.15)
         entropy_coef = 0.1
         value_coef = self.options.get("ppo_value_coef", 0.3)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
         while not self._check_terminations():
-            state = self.get_state(x, y).unsqueeze(0)
+            state_vector = self.get_state(x, y).numpy()  # Get raw values
+            normalized_state = self.state_normalizer.normalize(
+                state_vector.reshape(1, -1)
+            )  # Normalize
+            state = torch.tensor(normalized_state, dtype=torch.float)  # Back to tensor
             state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
+
             with torch.no_grad():
                 policy = self.actor(state.to(DEVICE))
                 value = self.critic(state.to(DEVICE))
@@ -169,6 +176,7 @@ class PolicyGradientAgent(Agent):
             )
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
+            self.run.log({"normalized entropy": np.sum(-probs * np.log(probs)) / np.log(len(probs))})
 
             action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
