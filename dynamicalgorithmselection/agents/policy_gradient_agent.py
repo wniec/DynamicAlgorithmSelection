@@ -27,7 +27,7 @@ class PolicyGradientAgent(Agent):
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-5)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-5)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=3e-5, weight_decay=1e-2)
 
         decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
@@ -74,10 +74,10 @@ class PolicyGradientAgent(Agent):
             values.detach().cpu(),
             last_value,
         )
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        # returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         advantages = advantages.to(DEVICE)
         returns = returns.to(DEVICE)
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        # advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         dataset_size = states.shape[0]
 
         for epoch in range(epochs):
