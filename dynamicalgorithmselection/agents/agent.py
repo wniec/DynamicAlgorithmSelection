@@ -1,10 +1,12 @@
 from itertools import product
+from typing import List, Type
 
 import numpy as np
 import torch
 from dynamicalgorithmselection.agents.agent_state import AgentState
 from dynamicalgorithmselection.agents.agent_utils import get_checkpoints
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
 
 
 class Agent(Optimizer):
@@ -18,7 +20,7 @@ class Agent(Optimizer):
         self.rewards = []
         self.options = options
         self.history = []
-        self.actions = options.get("action_space")
+        self.actions: List[Type[Optimizer]] = options.get("action_space") + [restart_optimizer(i) for i in options.get("action_space")]
         self.name = options.get("name")
         self.cdb = options.get("cdb")
 

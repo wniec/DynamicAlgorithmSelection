@@ -26,8 +26,8 @@ class PolicyGradientAgent(Agent):
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-5)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=3e-5, weight_decay=1e-2)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=5e-6, weight_decay=1e-2)
 
         decay_gamma = self.options.get("lr_decay_gamma", 0.9995)
         if p := options.get("actor_parameters", None):
@@ -178,7 +178,8 @@ class PolicyGradientAgent(Agent):
             )
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
-            self.run.log({"normalized entropy": np.sum(-probs * np.log(probs)) / np.log(len(probs))})
+            if self.run is not None:
+                self.run.log({"normalized entropy": np.sum(-probs * np.log(probs)) / np.log(len(probs))})
 
             action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
