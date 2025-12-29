@@ -3,10 +3,10 @@ import torch
 from torch import nn
 import torch.nn.init as init
 
-GAMMA = 0.9
+GAMMA = 0.3
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
-LAMBDA = 0.9
+LAMBDA = 0.4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 

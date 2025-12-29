@@ -29,7 +29,7 @@ class PolicyGradientAgent(Agent):
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-5)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=3e-5, weight_decay=1e-2)
 
-        decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
+        decay_gamma = self.options.get("lr_decay_gamma", 0.9995)
         if p := options.get("actor_parameters", None):
             self.actor.load_state_dict(p)
         if p := options.get("critic_parameters", None):
@@ -44,11 +44,11 @@ class PolicyGradientAgent(Agent):
 
         self.tau = self.options.get("critic_target_tau", 0.05)
 
-        self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            self.actor_optimizer, gamma=decay_gamma
+        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.actor_optimizer, gamma=decay_gamma, step_size=10
         )
-        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            self.critic_optimizer, gamma=decay_gamma
+        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.critic_optimizer, gamma=decay_gamma, step_size=10
         )
         self.state_normalizer = RunningMeanStd(n_actions=len(self.actions))
 
@@ -118,6 +118,8 @@ class PolicyGradientAgent(Agent):
                 torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
                 self.actor_optimizer.step()
                 self.critic_optimizer.step()
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
 
             if self.run:
                 self.run.log(
@@ -150,10 +152,10 @@ class PolicyGradientAgent(Agent):
         fitness = Optimizer.optimize(self, fitness_function)
 
         batch_size = self.buffer.capacity
-        ppo_epochs = self.options.get("ppo_epochs", 4)
-        clip_eps = self.options.get("ppo_eps", 0.15)
-        entropy_coef = 0.1
-        value_coef = self.options.get("ppo_value_coef", 0.3)
+        ppo_epochs = self.options.get("ppo_epochs", 6)
+        clip_eps = self.options.get("ppo_eps", 0.3)
+        entropy_coef = 0.0
+        value_coef = self.options.get("ppo_value_coef", 0.03)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
