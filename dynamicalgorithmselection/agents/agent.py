@@ -4,7 +4,7 @@ from typing import List, Type
 import numpy as np
 import torch
 from dynamicalgorithmselection.agents.agent_state import AgentState
-from dynamicalgorithmselection.agents.agent_utils import get_checkpoints
+from dynamicalgorithmselection.agents.agent_utils import get_checkpoints, StepwiseRewardNormalizer
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
 
@@ -34,6 +34,7 @@ class Agent(Optimizer):
             self.n_individuals,
             self.cdb,
         )
+        self.reward_normalizer = self.options.get("reward_normalizer", StepwiseRewardNormalizer(max_steps=self.n_checkpoints))
 
     def get_initial_state(self):
         vector = [

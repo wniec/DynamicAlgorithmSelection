@@ -259,6 +259,8 @@ def run_cross_validation(
                 "critic_parameters": None,
                 "actor_optimizer": None,
                 "critic_optimizer": None,
+                "reward_normalizer": None,
+                "state_normalizer": None
             }
         )
     return observer.result_folder

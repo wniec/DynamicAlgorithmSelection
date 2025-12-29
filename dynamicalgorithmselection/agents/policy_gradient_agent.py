@@ -10,7 +10,7 @@ from dynamicalgorithmselection.agents.agent_utils import (
     Actor,
     Critic,
     ActorLoss,
-    RunningMeanStd,
+    StateNormalizer,
 )
 from dynamicalgorithmselection.agents.agent import Agent
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
@@ -20,7 +20,7 @@ class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 1_000), device=DEVICE
+            capacity=options.get("ppo_batch_size", 5_000), device=DEVICE
         )
         self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
         self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
@@ -50,7 +50,7 @@ class PolicyGradientAgent(Agent):
         self.critic_scheduler = torch.optim.lr_scheduler.StepLR(
             self.critic_optimizer, gamma=decay_gamma, step_size=10
         )
-        self.state_normalizer = RunningMeanStd(n_actions=len(self.actions))
+        self.state_normalizer = self.options.get("state_normalizer", StateNormalizer(n_actions=len(self.actions),))
 
     def ppo_update(
         self,
@@ -139,6 +139,8 @@ class PolicyGradientAgent(Agent):
             "critic_optimizer": self.critic_optimizer.state_dict(),
             "buffer": self.buffer,
             "mean_rewards": self.mean_rewards,
+            "reward_normalizer": self.reward_normalizer,
+            "state_normalizer": self.state_normalizer
         }
         last_50_mean = sum(self.mean_rewards[-50:]) / len(self.mean_rewards[-50:])
         if self.best_50_mean > last_50_mean:
@@ -159,6 +161,7 @@ class PolicyGradientAgent(Agent):
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
+        idx = 0
         while not self._check_terminations():
             state_vector = self.get_state(x, y).numpy()  # Get raw values
             normalized_state = self.state_normalizer.normalize(
@@ -199,7 +202,10 @@ class PolicyGradientAgent(Agent):
             new_best_y = self.best_so_far_y
 
             reward = self.get_reward(new_best_y, best_parent)
+            print(reward, end="\t")
+            reward = self.reward_normalizer.normalize(reward, idx)
             self.rewards.append(reward)
+            print(reward)
             if self.run:
                 self.run.log({"reward": reward})
             self.n_function_evaluations = optimizer.n_function_evaluations
@@ -231,4 +237,5 @@ class PolicyGradientAgent(Agent):
                 self.stagnation_count = 0
 
             self.n_function_evaluations = optimizer.n_function_evaluations
+            idx += 1
         return self._collect(fitness, self.best_so_far_y)

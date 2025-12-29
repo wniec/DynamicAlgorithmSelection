@@ -260,7 +260,7 @@ def get_checkpoints(
     return checkpoints
 
 
-class RunningMeanStd:
+class StateNormalizer:
     def __init__(self, n_actions: int, epsilon=1e-4):
         shape = (BASE_STATE_SIZE + n_actions * 2,)
         self.mean = np.zeros(shape)
@@ -298,3 +298,51 @@ def orthogonal_init(module):
             init.orthogonal_(param.data)  # Linear layers
         elif "bias" in name:
             param.data.zero_()
+
+
+class RunningMeanStd:
+
+    def __init__(self, epsilon=1e-4, shape=()):
+        self.mean = np.zeros(shape, 'float64')
+        self.var = np.ones(shape, 'float64')
+        self.count = epsilon
+
+    def update(self, x):
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+
+        self.mean = new_mean
+        self.var = new_var
+        self.count = tot_count
+
+
+class StepwiseRewardNormalizer:
+
+    def __init__(self, max_steps, clip_reward=10.0):
+        self.max_steps = max_steps
+        self.clip = clip_reward
+        self.stats = [RunningMeanStd(shape=()) for _ in range(max_steps + 1)]
+
+    def normalize(self, reward, step_idx):
+        idx = min(step_idx, self.max_steps - 1)
+
+        self.stats[idx].update(np.array([reward]))
+
+        mean = self.stats[idx].mean
+        std = np.sqrt(self.stats[idx].var) + 1e-8
+
+        normalized_reward = (reward - mean) / std
+
+        return np.clip(normalized_reward, -self.clip, self.clip)
