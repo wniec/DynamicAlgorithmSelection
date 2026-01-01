@@ -7,6 +7,7 @@ GAMMA = 0.3
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
 LAMBDA = 0.4
+MAX_POP_DIM=40
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -23,14 +24,16 @@ class RolloutBuffer:
         self.dones = []
         self.log_probs = []
         self.values = []
+        self.populations = []
 
-    def add(self, state, action, reward, done, log_prob, value):
+    def add(self, state, action, reward, done, log_prob, value, populations):
         self.states.append(state)
         self.actions.append(action)
         self.rewards.append(reward)
         self.dones.append(done)
         self.log_probs.append(log_prob)
         self.values.append(value)
+        self.populations.append(populations)
 
     def size(self):
         return len(self.states)
@@ -46,7 +49,8 @@ class RolloutBuffer:
         values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
         rewards = self.rewards[-self.capacity :]
         dones = self.dones[-self.capacity :]
-        return states, actions, old_log_probs, values, rewards, dones
+        populations = self.populations[-self.capacity :]
+        return states, actions, old_log_probs, values, rewards, dones, populations
 
 
 def compute_gae(rewards, dones, values, last_value):
@@ -69,11 +73,11 @@ def compute_gae(rewards, dones, values, last_value):
 
 
 class Actor(nn.Module):
-    def __init__(self, n_actions: int, dropout_p: float = 0.35):
+    def __init__(self, input_size: int, output_size: int, dropout_p: float = 0.35):
         super().__init__()
         # Replace LSTM with a standard MLP feature extractor
         self.feature_extractor = nn.Sequential(
-            nn.Linear(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE),
+            nn.Linear(input_size, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),  # Optional: Added dropout to feature extraction
@@ -84,7 +88,7 @@ class Actor(nn.Module):
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),
-            nn.Linear(HIDDEN_SIZE, n_actions),
+            nn.Linear(HIDDEN_SIZE, output_size),
             nn.Softmax(dim=-1),
         )
         orthogonal_init(self)
@@ -101,11 +105,11 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, n_actions: int, dropout_p: float = 0.35):
+    def __init__(self, input_size: int, dropout_p: float = 0.35):
         super().__init__()
         # Replace LSTM with a standard MLP feature extractor
         self.feature_extractor = nn.Sequential(
-            nn.Linear(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE),
+            nn.Linear(input_size, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),
@@ -344,3 +348,63 @@ class StepwiseRewardNormalizer:
         normalized_reward = (reward - mean) / std
 
         return np.clip(normalized_reward, -self.clip, self.clip)
+
+
+class PopulationEncoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim=64, output_dim=32):
+        super().__init__()
+
+        self.individual_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+
+        self.final_net = nn.Sequential(
+            nn.Linear(hidden_dim * 2, output_dim),
+            nn.Tanh()
+        )
+
+    def forward(self, population_batch):
+        individual_feats = self.individual_net(population_batch)
+
+        max_pool, _ = torch.max(individual_feats, dim=0)
+
+        mean_pool = torch.mean(individual_feats, dim=0)
+        global_feats = torch.cat([max_pool, mean_pool], dim=0)
+        embedding = self.final_net(global_feats)
+
+        return embedding
+
+
+class ActorCritic(nn.Module):
+    def __init__(self, n_actions):
+        super().__init__()
+        state_dim = BASE_STATE_SIZE + n_actions * 2
+        self.pop_encoder = PopulationEncoder(MAX_POP_DIM + 1, hidden_dim=64, output_dim=32)  # +1 for concatenating x to y
+        total_input_dim = state_dim + 32
+
+        self.actor = Actor(total_input_dim, n_actions)
+
+        self.critic = Critic(total_input_dim)
+
+    def forward(self, global_state, population_data):
+        pop_embedding = self.pop_encoder(population_data)
+        combined_state = torch.cat([global_state, pop_embedding.unsqueeze(0)], dim=1)
+
+        probabilities = self.actor(combined_state)
+        value = self.critic(combined_state)
+
+        return probabilities, value
+
+
+def get_global_state(self):
+    real_dim = self.current_pop_x.shape[1]
+
+    global_state = np.array([
+        self.current_step / self.max_steps,  # Znormalizowany czas
+        real_dim / self.MAX_DIM,
+    ], dtype=np.float32)
+
+    return global_state

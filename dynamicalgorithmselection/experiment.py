@@ -257,10 +257,8 @@ def run_cross_validation(
         options.update(
             {
                 "buffer": None,
-                "actor_parameters": None,
-                "critic_parameters": None,
-                "actor_optimizer": None,
-                "critic_optimizer": None,
+                "model_parameters": None,
+                "optimizer": None,
                 "reward_normalizer": None,
                 "state_normalizer": None,
             }

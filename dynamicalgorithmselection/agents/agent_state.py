@@ -1,10 +1,11 @@
 from operator import itemgetter
 import numpy as np
+import torch
 
 from dynamicalgorithmselection.agents.agent_utils import (
     distance,
     inverse_scaling,
-    get_list_stats,
+    get_list_stats, MAX_POP_DIM,
 )
 
 
@@ -190,3 +191,19 @@ class AgentState:
         return max(
             (self.y - self.best_y).mean() / (max((self.y.max() - self.best_y), 1e-8)), 0
         )
+
+
+def get_padded_population_observation(x, y, pop_size):
+
+    padded_obs = np.zeros((pop_size, 1 + MAX_POP_DIM), dtype=np.float32)
+    if x is None or y is None:
+        return torch.tensor(padded_obs, dtype=torch.float)
+    best_indices = sorted(
+        list(range(len(y))), key=lambda idx: y[idx]
+    )[: pop_size]
+    considered_x = x[best_indices]
+    considered_y = y[best_indices]
+    real_dim = x.shape[1]
+    padded_obs[:, 0] = considered_y
+    padded_obs[:, 1:1 + real_dim] = considered_x
+    return torch.tensor(padded_obs, dtype=torch.float)

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from dynamicalgorithmselection.optimizers.ES.ES import ES
 
