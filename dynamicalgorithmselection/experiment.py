@@ -164,6 +164,8 @@ def eval_genomes(
             options["net"] = neat.nn.FeedForwardNetwork.create(genome, config)
             results = coco_bbob_single_function(optimizer, problem_instance, options)
             fitness += results["mean_reward"]
+            options["state_normalizer"] = results["state_normalizer"]
+            options["reward_normalizer"] = results["reward_normalizer"]
             actions.extend(results["actions"])
 
         choices_count = np.array(
@@ -259,6 +261,8 @@ def run_cross_validation(
                 "critic_parameters": None,
                 "actor_optimizer": None,
                 "critic_optimizer": None,
+                "reward_normalizer": None,
+                "state_normalizer": None,
             }
         )
     return observer.result_folder
@@ -379,11 +383,9 @@ def _coco_bbob_neuroevolution_train(
             options,
             evaluations_multiplier,
         ),
-        300,
+        1,
     )
-    with open(
-        os.path.join("models", f"DAS_train_{options.get('name')}.pkl"), "wb"
-    ) as f:
+    with open(os.path.join("models", f"{options.get('name')}.pkl"), "wb") as f:
         pickle.dump(winner, f)
 
 

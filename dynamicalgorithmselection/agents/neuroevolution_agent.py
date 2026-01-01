@@ -15,15 +15,23 @@ class NeuroevolutionAgent(Agent):
         results["_n_generations"] = self._n_generations
         results["mean_reward"] = sum(self.rewards) / len(self.rewards)
         results["actions"] = self.choices_history
+        results.update(
+            {
+                "reward_normalizer": self.reward_normalizer,
+                "state_normalizer": self.state_normalizer,
+            }
+        )
         return results
 
     def optimize(self, fitness_function=None, args=None):
         fitness = Optimizer.optimize(self, fitness_function)
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
+        step_idx = 0
         while not self._check_terminations():
             state = self.get_state(x, y)
             state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
+            state = self.state_normalizer.normalize(state)
             policy = self.net.activate(state)
             probs = np.array(policy)
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
@@ -46,6 +54,7 @@ class NeuroevolutionAgent(Agent):
 
             new_best_y = self.best_so_far_y
             reward = self.get_reward(new_best_y, best_parent)
+            reward = self.reward_normalizer.normalize(reward, step_idx)
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})
@@ -62,4 +71,5 @@ class NeuroevolutionAgent(Agent):
                 self.stagnation_count = 0
 
             self.n_function_evaluations = optimizer.n_function_evaluations
+            step_idx += 1
         return self._collect(fitness, self.best_so_far_y)

@@ -4,6 +4,7 @@ import pickle
 import shutil
 from typing import List, Type
 import cocopp
+import neat
 import torch
 import wandb
 
@@ -150,8 +151,16 @@ def test(args, action_space):
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
+        config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            "neuroevolution_config",
+        )
         with open(os.path.join("models", f"DAS_train_{args.name}.pkl"), "rb") as f:
-            net = pickle.load(f)
+            winner_genome = pickle.load(f)
+            net = neat.nn.FeedForwardNetwork.create(winner_genome, config)
         options.update({"net": net})
     elif args.agent == "policy-gradient":
         options.update(
@@ -167,6 +176,7 @@ def test(args, action_space):
         evaluations_multiplier=args.fe_multiplier,
         train=False,
         agent=args.agent,
+        mode=args.mode,
     )
     cocopp.main(os.path.join("exdata", f"DAS_{args.name}"))
 

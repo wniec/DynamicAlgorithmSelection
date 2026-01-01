@@ -1,7 +1,7 @@
 [NEAT]
 fitness_criterion     = max
 fitness_threshold     = 1.0
-pop_size              = 25
+pop_size              = 100
 reset_on_extinction   = False
 
 [DefaultGenome]
@@ -20,7 +20,7 @@ bias_init_mean          = 0.0
 bias_init_stdev         = 1.0
 bias_max_value          = 30.0
 bias_min_value          = -30.0
-bias_mutate_power       = 0.5
+bias_mutate_power       = 1.0
 bias_mutate_rate        = 0.7
 bias_replace_rate       = 0.1
 
@@ -29,19 +29,22 @@ compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.5
 
 # connection add/remove rates
-conn_add_prob           = 0.5
-conn_delete_prob        = 0.5
+# STRUCTURE GROWTH DISABLED FOR SPEED
+conn_add_prob           = 0.05
+conn_delete_prob        = 0.0
 
 # connection enable options
 enabled_default         = True
 enabled_mutate_rate     = 0.01
 
 feed_forward            = True
-initial_connection      = full_nodirect
+# Start with all inputs connected to outputs to be useful immediately
+initial_connection      = full_direct
 
 # node add/remove rates
-node_add_prob           = 0.2
-node_delete_prob        = 0.2
+# NODE GROWTH DISABLED FOR SPEED
+node_add_prob           = 0.0
+node_delete_prob        = 0.0
 
 # network parameters
 num_hidden = 10
@@ -62,18 +65,20 @@ weight_init_mean        = 0.0
 weight_init_stdev       = 1.0
 weight_max_value        = 30
 weight_min_value        = -30
-weight_mutate_power     = 0.5
+# AGGRESSIVE MUTATION SETTINGS
+weight_mutate_power     = 1.2
 weight_mutate_rate      = 0.8
 weight_replace_rate     = 0.1
 
 [DefaultSpeciesSet]
-compatibility_threshold = 2.5
+# High threshold to disable speciation (Survival of the fittest only)
+compatibility_threshold = 10.0
 
 [DefaultStagnation]
 species_fitness_func = max
-max_stagnation       = 3
+max_stagnation       = 5
 species_elitism      = 2
 
 [DefaultReproduction]
-elitism            = 2
+elitism            = 1
 survival_threshold = 0.2
