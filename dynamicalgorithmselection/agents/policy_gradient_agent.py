@@ -164,7 +164,9 @@ class PolicyGradientAgent(Agent):
             state = torch.tensor(normalized_state, dtype=torch.float)  # Back to tensor
             state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
             population_vector = get_padded_population_observation(
-                x, y, pop_size=self.n_individuals
+                x,
+                (y if y is None else (y - y.mean()) / (y.std() + 1e-8)),
+                pop_size=self.n_individuals,
             )
 
             with torch.no_grad():

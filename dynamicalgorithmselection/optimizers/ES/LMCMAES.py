@@ -1,5 +1,3 @@
-from typing import Optional
-
 import numpy as np
 from dynamicalgorithmselection.optimizers.ES.ES import ES
 
@@ -57,23 +55,16 @@ class LMCMAES(ES):
         d=None,
         y=None,
     ):
-        mean = (
-            mean if mean is not None else self._initialize_mean(is_restart)
-        )  # mean of Gaussian search distribution
-        x = (
-            x if x is not None else np.empty((self.n_individuals, self.ndim_problem))
-        )  # offspring population
-        p_c = (
-            p_c if p_c is not None else np.zeros((self.ndim_problem,))
-        )  # evolution path
-        s = s if s is not None else 0.0  # for PSR of global step-size adaptation
-        vm = vm if vm is not None else np.empty((self.m, self.ndim_problem))
-        pm = pm if pm is not None else np.empty((self.m, self.ndim_problem))
-        b = b if b is not None else np.empty((self.m,))
-        d = d if d is not None else np.empty((self.m,))
-        y = (
-            y if y is not None else np.empty((self.n_individuals,))
-        )  # fitness (no evaluation)
+        mean = mean if mean is not None else self._initialize_mean(is_restart)
+        x = x if x is not None else np.zeros((self.n_individuals, self.ndim_problem))
+        p_c = p_c if p_c is not None else np.zeros((self.ndim_problem,))
+        s = s if s is not None else 0.0
+        vm = vm if vm is not None else np.zeros((self.m, self.ndim_problem))
+        pm = pm if pm is not None else np.zeros((self.m, self.ndim_problem))
+        b = b if b is not None else np.zeros((self.m,))
+        d = d if d is not None else np.zeros((self.m,))
+        y = y if y is not None else np.zeros((self.n_individuals,))
+
         self._p_c_2 = np.sqrt(self.c_c * (2.0 - self.c_c) * self._mu_eff)
         self._rr = np.arange(self.n_individuals * 2, 0, -1) - 1
         self._j = [None] * self.m
@@ -95,15 +86,23 @@ class LMCMAES(ES):
             if sign == 1:
                 z = self.rng_optimization.standard_normal((self.ndim_problem,))
                 a_z = self._a_z(z, pm, vm, b)
-            x[k] = mean + sign * self.sigma * a_z
+
+            # FIX 2: Check for potential overflow before update
+            mutation_step = sign * self.sigma * a_z
+            if np.any(np.isnan(mutation_step)) or np.any(np.isinf(mutation_step)):
+                # Fallback to prevent crash, effectively skipping this mutation
+                mutation_step = np.zeros_like(mutation_step)
+
+            x[k] = mean + mutation_step
             y[k] = self._evaluate_fitness(x[k], args)
-            sign *= -1  # sampling in the opposite direction for mirrored sampling
+            sign *= -1
         return x, y
 
     def _a_inv_z(self, v=None, vm=None, d=None, i=None):  # Algorithm 4 Ainvz()
         x = np.copy(v)
         for t in range(0, i):
-            x = self._c * x - d[self._j[t]] * np.dot(vm[self._j[t]], x) * vm[self._j[t]]
+            dot_prod = np.dot(vm[self._j[t]], x)
+            x = self._c * x - d[self._j[t]] * dot_prod * vm[self._j[t]]
         return x
 
     def _update_distribution(
@@ -120,7 +119,12 @@ class LMCMAES(ES):
         y_bak=None,
     ):
         mean_bak = np.dot(self._w, x[np.argsort(y)[: self.n_parents]])
-        p_c = self._p_c_1 * p_c + self._p_c_2 * (mean_bak - mean) / self.sigma
+
+        # FIX 3: Safety clamp for sigma to prevent division by zero or overflow
+        safe_sigma = np.clip(self.sigma, 1e-20, 1e20)
+
+        p_c = self._p_c_1 * p_c + self._p_c_2 * (mean_bak - mean) / safe_sigma
+
         i_min = 1
         if self._n_generations < self.m:
             self._j[self._n_generations] = self._n_generations
@@ -130,31 +134,43 @@ class LMCMAES(ES):
                 d_cur = self._l[self._j[j]] - self._l[self._j[j - 1]]
                 if d_cur < d_min:
                     d_min, i_min = d_cur, j
-            # start from 0 if all pairwise distances exceed `self.n_steps`
             i_min = 0 if d_min >= self.n_steps else i_min
-            # update indexes of evolution paths (`self._j[i_min]` is index of evolution path needed to delete)
             updated = self._j[i_min]
             for j in range(i_min, self.m - 1):
                 self._j[j] = self._j[j + 1]
             self._j[self.m - 1] = updated
+
         self._it = np.minimum(self._n_generations + 1, self.m)
-        self._l[self._j[self._it - 1]] = self._n_generations  # to update its generation
-        pm[self._j[self._it - 1]] = p_c  # to add the latest evolution path
-        # since `self._j[i_min]` is deleted, all vectors (from vm) depending on it need to be computed again
+        self._l[self._j[self._it - 1]] = self._n_generations
+        pm[self._j[self._it - 1]] = p_c
+
         for i in range(0 if i_min == 1 else i_min, self._it):
             vm[self._j[i]] = self._a_inv_z(pm[self._j[i]], vm, d, i)
             v_n = np.dot(vm[self._j[i]], vm[self._j[i]])
+
+            # FIX 4: Safety clamp for v_n (denominator safety)
+            # If v_n is 0 or NaN, b and d will explode.
+            if v_n < 1e-20:
+                v_n = 1e-20
+
             bd_3 = np.sqrt(1.0 + self._bd_2 * v_n)
             b[self._j[i]] = self._bd_1 / v_n * (bd_3 - 1.0)
             d[self._j[i]] = 1.0 / (self._bd_1 * v_n) * (1.0 - 1.0 / bd_3)
-        if self._n_generations > 0:  # for population success rule (PSR)
+
+        if self._n_generations > 0:
             r = np.argsort(np.hstack((y, y_bak)))
             z_psr = np.sum(
                 self._rr[r < self.n_individuals] - self._rr[r >= self.n_individuals]
             )
             z_psr = z_psr / np.power(self.n_individuals, 2) - self.z_star
             s = (1.0 - self.c_s) * s + self.c_s * z_psr
+
+            # FIX 5: Clamp s to prevent sigma explosion via exp()
+            # exp(100) is huge, exp(709) is infinity. Clamp s to safe range.
+            s = np.clip(s, -50.0, 50.0)
+
             self.sigma *= np.exp(s / self.d_s)
+
         return mean_bak, p_c, s, vm, pm, b, d
 
     def restart_reinitialize(
@@ -174,9 +190,7 @@ class LMCMAES(ES):
             self.d_s *= 2.0
         return mean, x, p_c, s, vm, pm, b, d, y
 
-    def optimize(
-        self, fitness_function=None, args=None
-    ):  # for all generations (iterations)
+    def optimize(self, fitness_function=None, args=None):
         fitness = ES.optimize(self, fitness_function)
         mean = self.start_conditions.get("mean", None)
         x = self.start_conditions.get("x", None)
@@ -234,13 +248,7 @@ class LMCMAES(ES):
             self.start_conditions = {"x": None, "y": None, "mean": None}
         elif not isinstance(y, np.ndarray):
             self.start_conditions = {
-                i: locals().get(i, None)
-                for i in (
-                    "cf",
-                    "best_so_far_y",
-                    "p_s",
-                    "p_c",
-                )
+                i: locals().get(i, None) for i in ("cf", "best_so_far_y", "p_s", "p_c")
             }
         else:
             indices = np.argsort(y)[: self.individuals_at_start]
