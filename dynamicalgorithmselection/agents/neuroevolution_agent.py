@@ -54,7 +54,7 @@ class NeuroevolutionAgent(Agent):
 
             new_best_y = self.best_so_far_y
             reward = self.get_reward(new_best_y, best_parent)
-            reward = self.reward_normalizer.normalize(reward, step_idx)
+            # reward = self.reward_normalizer.normalize(reward, step_idx)
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})

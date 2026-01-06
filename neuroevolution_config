@@ -1,57 +1,58 @@
 [NEAT]
-# Balanced for 32 cores (20 jobs per core)
-pop_size              = 640
+# OPTIMIZED FOR 128 CORES
+# 128 genomes run in parallel. The generation finishes when the slowest one is done.
+pop_size              = 128
 fitness_criterion     = max
 fitness_threshold     = 1.0
 reset_on_extinction   = False
 
 [DefaultGenome]
-# node activation options
+# --- Node Activation ---
+# Sigmoid is standard, but you can add 'tanh' or 'relu' to options if desired.
 activation_default      = sigmoid
-activation_mutate_rate  = 0.1
-activation_options      = sigmoid tanh relu
+activation_mutate_rate  = 0.05
+activation_options      = sigmoid tanh
 
-# node aggregation options
+# --- Node Aggregation ---
 aggregation_default     = sum
 aggregation_mutate_rate = 0.0
 aggregation_options     = sum
 
-# node bias options
+# --- Node Bias ---
 bias_init_mean          = 0.0
 bias_init_stdev         = 1.0
 bias_max_value          = 30.0
 bias_min_value          = -30.0
 bias_mutate_power       = 0.5
-bias_mutate_rate        = 0.7
+bias_mutate_rate        = 0.1
 bias_replace_rate       = 0.1
 
-# genome compatibility options
+# --- Genome Compatibility (Speciation) ---
 compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.5
 
-# connection add/remove rates
-# RE-ENABLED GROWTH: Slow but steady structural evolution
-conn_add_prob           = 0.3
-conn_delete_prob        = 0.1
+# --- Structure Growth (Enabled for Long Runs) ---
+# We allow the network to grow slowly since you will likely run for 50+ generations.
+conn_add_prob           = 0.05
+conn_delete_prob        = 0.05
+node_add_prob           = 0.02
+node_delete_prob        = 0.05
 
-# connection enable options
+# --- Connection Enable ---
 enabled_default         = True
 enabled_mutate_rate     = 0.01
 
+# --- Network Parameters ---
 feed_forward            = True
-initial_connection      = full_direct
+# Start with a fully connected simple network.
+initial_connection      = partial_direct 0.4
 
-# node add/remove rates
-# RE-ENABLED GROWTH
-node_add_prob           = 0.1
-node_delete_prob        = 0.05
+num_hidden              = 10
+# These must match your specific problem (65 inputs, 3 outputs)
+num_inputs              = 65
+num_outputs             = 3
 
-# network parameters
-num_hidden = 10
-num_inputs = 65
-num_outputs = 3
-
-# node response options
+# --- Node Response ---
 response_init_mean      = 1.0
 response_init_stdev     = 0.0
 response_max_value      = 30.0
@@ -60,17 +61,19 @@ response_mutate_power   = 0.0
 response_mutate_rate    = 0.0
 response_replace_rate   = 0.0
 
-# connection weight options
+# --- Connection Weights ---
 weight_init_mean        = 0.0
 weight_init_stdev       = 1.0
 weight_max_value        = 30
 weight_min_value        = -30
+# Moderate mutation power for steady evolution
 weight_mutate_power     = 0.5
-weight_mutate_rate      = 0.8
+weight_mutate_rate      = 0.1
 weight_replace_rate     = 0.1
 
 [DefaultSpeciesSet]
-# Standard threshold to encourage speciation
+# Threshold of 3.0 is standard for populations between 100-150.
+# It creates enough species to protect innovation without fragmenting too much.
 compatibility_threshold = 3.0
 
 [DefaultStagnation]
@@ -79,5 +82,7 @@ max_stagnation       = 15
 species_elitism      = 2
 
 [DefaultReproduction]
+# Elitism = 2 ensures the top 2 from every species survive unchanged.
+# With ~10 species, you keep the top ~20 networks safe.
 elitism            = 2
 survival_threshold = 0.2
