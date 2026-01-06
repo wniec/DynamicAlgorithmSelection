@@ -481,7 +481,8 @@ def _coco_bbob_neuroevolution_train(
     for genome_id, genome in population.population.items():
         genome.problem_batch = next(batch_cycler)
 
-    num_workers = max(1, multiprocessing.cpu_count())
+    num_workers = len(os.sched_getaffinity(0)) -1
+    print(f"Using {num_workers} workers.")
 
     evaluator_func = GenomeEvaluator(optimizer, options, evaluations_multiplier)
 

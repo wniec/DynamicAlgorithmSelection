@@ -203,7 +203,6 @@ class PolicyGradientAgent(Agent):
             optimizer._n_generations = 0
             best_parent = self.best_so_far_y
             iteration_result = self.iterate(iteration_result, optimizer)
-            print(iteration_result)
             x, y = iteration_result.get("x"), iteration_result.get("y")
             new_best_y = self.best_so_far_y
 
