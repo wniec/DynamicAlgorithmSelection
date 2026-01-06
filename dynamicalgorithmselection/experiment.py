@@ -487,8 +487,8 @@ def _coco_bbob_neuroevolution_train(
 
     with ParallelEvaluator(num_workers, evaluator_func) as pe:
         winner = population.run(
-            pe.evaluate, 1
-        )  # Set generations to 1 or 3 as per config
+            pe.evaluate, 20
+        )
 
     with open(os.path.join("models", f"{options.get('name')}.pkl"), "wb") as f:
         pickle.dump(winner, f)
