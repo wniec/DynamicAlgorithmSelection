@@ -1,7 +1,7 @@
 [NEAT]
+pop_size              = 2500
 fitness_criterion     = max
 fitness_threshold     = 1.0
-pop_size              = 100
 reset_on_extinction   = False
 
 [DefaultGenome]
@@ -29,7 +29,6 @@ compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.5
 
 # connection add/remove rates
-# STRUCTURE GROWTH DISABLED FOR SPEED
 conn_add_prob           = 0.05
 conn_delete_prob        = 0.0
 
@@ -38,11 +37,9 @@ enabled_default         = True
 enabled_mutate_rate     = 0.01
 
 feed_forward            = True
-# Start with all inputs connected to outputs to be useful immediately
 initial_connection      = full_direct
 
 # node add/remove rates
-# NODE GROWTH DISABLED FOR SPEED
 node_add_prob           = 0.0
 node_delete_prob        = 0.0
 
@@ -65,20 +62,21 @@ weight_init_mean        = 0.0
 weight_init_stdev       = 1.0
 weight_max_value        = 30
 weight_min_value        = -30
-# AGGRESSIVE MUTATION SETTINGS
 weight_mutate_power     = 1.2
 weight_mutate_rate      = 0.8
 weight_replace_rate     = 0.1
 
 [DefaultSpeciesSet]
-# High threshold to disable speciation (Survival of the fittest only)
-compatibility_threshold = 10.0
+# ENABLE SPECIATION
+# 3.0 is the standard default.
+compatibility_threshold = 3.0
 
 [DefaultStagnation]
 species_fitness_func = max
-max_stagnation       = 5
+max_stagnation       = 3
 species_elitism      = 2
 
 [DefaultReproduction]
-elitism            = 1
+# Elitism = 2 means the top 2 from EACH species survive.
+elitism            = 2
 survival_threshold = 0.2

@@ -2,13 +2,16 @@ import json
 import os
 import pickle
 import re
+import random
+import multiprocessing
 from itertools import product, batched, cycle
-from typing import Type, Optional
+from typing import Type, Optional, Any
 
 import cocoex
 import numpy as np
 import neat
 from tqdm import tqdm
+import wandb
 
 from dynamicalgorithmselection.agents.agent_utils import (
     BASE_STATE_SIZE,
@@ -30,6 +33,150 @@ EASY_TRAIN_BBOB = {4, *range(6, 15), 18, 19, 20, 22, 23, 24}
 ALL_FUNCTIONS = {_ for _ in range(1, 25)}
 INSTANCE_IDS = [1, 2, 3, 4, 5, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]
 DIMENSIONS = [2, 3, 5, 10, 20, 40]
+
+
+def _eval_wrapper(eval_function, seed, genome, config):
+    """Wrapper that sets deterministic per-genome seed before evaluation."""
+    if seed is not None:
+        random.seed(seed + genome.key)
+    return eval_function(genome, config)
+
+
+class ParallelEvaluator:
+    def __init__(
+        self,
+        num_workers,
+        eval_function,
+        timeout=None,
+        initializer=None,
+        initargs=(),
+        maxtasksperchild=None,
+        seed=None,
+    ):
+        self.num_workers = num_workers
+        self.eval_function = eval_function
+        self.timeout = timeout
+        self.seed = seed
+        self.initializer = initializer
+        self.initargs = initargs
+        self.maxtasksperchild = maxtasksperchild
+        self.pool = multiprocessing.Pool(
+            processes=num_workers,
+            maxtasksperchild=maxtasksperchild,
+            initializer=initializer,
+            initargs=initargs,
+        )
+        self._closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    def close(self):
+        if self.pool is not None and not self._closed:
+            self._closed = True
+            self.pool.close()
+            self.pool.join()
+            self.pool = None
+
+    def __del__(self):
+        self.close()
+
+    def evaluate(self, genomes, config):
+        jobs = []
+        for ignored_genome_id, genome in genomes:
+            if self.seed is not None:
+                jobs.append(
+                    self.pool.apply_async(
+                        _eval_wrapper, (self.eval_function, self.seed, genome, config)
+                    )
+                )
+            else:
+                jobs.append(self.pool.apply_async(self.eval_function, (genome, config)))
+
+        for job, (ignored_genome_id, genome) in tqdm(
+            zip(jobs, genomes), total=len(jobs), desc="Evaluating Genomes"
+        ):
+            # Result is now a tuple: (fitness, log_dict)
+            fitness, log_data = job.get(timeout=self.timeout)
+            genome.fitness = fitness
+
+            # Log to wandb in the main process
+            if log_data and wandb.run is not None:
+                wandb.log(log_data)
+
+
+class GenomeEvaluator:
+    """
+    Functor class to evaluate a single genome.
+    Allows pickling of configuration/options for multiprocessing.
+    """
+
+    def __init__(self, optimizer, options, evaluations_multiplier):
+        self.optimizer = optimizer
+        self.evaluations_multiplier = evaluations_multiplier
+        # Create a clean copy of options (remove unpicklable loggers)
+        self.options = options.copy()
+        if "run" in self.options:
+            del self.options["run"]
+
+    def __call__(self, genome, config):
+        # Re-initialize suite inside worker to avoid pickling pointers
+        cocoex.utilities.MiniPrint()
+        suite = cocoex.Suite("bbob", "", "")
+
+        if not hasattr(genome, "problem_batch"):
+            return 0.0, {}
+
+        fitness = 0
+        actions = []
+        num_actions = len(self.options.get("action_space"))
+        local_options = self.options.copy()
+
+        for problem_id in genome.problem_batch:
+            problem_instance = suite.get_problem(problem_id)
+            local_options["max_function_evaluations"] = (
+                self.evaluations_multiplier * problem_instance.dimension
+            )
+            local_options["train_mode"] = True
+            local_options["verbose"] = False
+            local_options["net"] = neat.nn.FeedForwardNetwork.create(genome, config)
+
+            results = coco_bbob_single_function(
+                self.optimizer, problem_instance, local_options
+            )
+
+            fitness += results["mean_reward"]
+            local_options["state_normalizer"] = results["state_normalizer"]
+            local_options["reward_normalizer"] = results["reward_normalizer"]
+            actions.extend(results["actions"])
+
+            problem_instance.free()
+
+        # Calculate Entropy
+        choices_count = np.array(
+            [
+                sum(1 for i in actions if i == j) / (len(actions) or 1)
+                for j in range(len(actions))
+            ]
+        )
+        norm_entropy = -(
+            choices_count
+            * np.nan_to_num(np.log(choices_count), nan=0, neginf=0, posinf=0)
+        ).sum() / np.log(num_actions)
+
+        final_fitness = fitness / len(genome.problem_batch) + norm_entropy / 35
+
+        # Return fitness AND data to log
+        log_data = {
+            "fitness": final_fitness,
+            "entropy": norm_entropy,
+            "mean_reward": fitness / len(genome.problem_batch),
+        }
+        return final_fitness, log_data
 
 
 def dump_stats(
@@ -119,7 +266,7 @@ def coco_bbob_experiment(
     if mode == "CV":
         return run_cross_validation(optimizer, options, evaluations_multiplier)
     elif agent == "random":
-        # running only baselines
+        # running random baseline
         return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)
     elif options.get("baselines"):
         # running only baselines
@@ -136,53 +283,6 @@ def coco_bbob_experiment(
         return _coco_bbob_policy_gradient_train(
             optimizer, options, evaluations_multiplier, mode
         )
-
-
-def eval_genomes(
-    genomes,
-    config,
-    optimizer,
-    problem_batches,
-    suite,
-    options,
-    evaluations_multiplier,
-):
-    run = options.get("run", None)
-    num_actions = len(options.get("action_space"))
-    for problem_batch, (genome_id, genome) in zip(
-        cycle(problem_batches), tqdm(genomes)
-    ):
-        fitness = 0
-        actions = []
-        for problem_id in problem_batch:
-            problem_instance = suite.get_problem(problem_id)
-            options["max_function_evaluations"] = (
-                evaluations_multiplier * problem_instance.dimension
-            )
-            options["train_mode"] = True
-            options["verbose"] = False
-            options["net"] = neat.nn.FeedForwardNetwork.create(genome, config)
-            results = coco_bbob_single_function(optimizer, problem_instance, options)
-            fitness += results["mean_reward"]
-            options["state_normalizer"] = results["state_normalizer"]
-            options["reward_normalizer"] = results["reward_normalizer"]
-            actions.extend(results["actions"])
-
-        choices_count = np.array(
-            [
-                sum(1 for i in actions if i == j) / (len(actions) or 1)
-                for j in range(len(actions))
-            ]
-        )
-        norm_entropy = -(
-            choices_count
-            * np.nan_to_num(np.log(choices_count), nan=0, neginf=0, posinf=0)
-        ).sum() / np.log(num_actions)
-
-        genome.fitness = fitness / len(problem_batch) + norm_entropy / 35
-        if run is not None:
-            run.log({"fitness": genome.fitness})
-            run.log({"entropy": norm_entropy})
 
 
 def get_suite(mode, train):
@@ -354,8 +454,9 @@ def _coco_bbob_neuroevolution_train(
     mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(mode, True)
+    _, problem_ids = get_suite(mode, True)
     batch_size = 30
+
     adjust_config(
         2 * len(options.get("action_space")) + BASE_STATE_SIZE,
         len(options.get("action_space")),
@@ -368,21 +469,27 @@ def _coco_bbob_neuroevolution_train(
         neat.DefaultStagnation,
         "neuroevolution_config",
     )
-    # Create the population, which is the top-level object for a NEAT run.
+
     population = neat.Population(config)
-    problems_batches = list(batched((np.random.permutation(problem_ids)), batch_size))
-    winner = population.run(
-        lambda genomes, config: eval_genomes(
-            genomes,
-            config,
-            optimizer,
-            problems_batches,
-            problems_suite,
-            options,
-            evaluations_multiplier,
-        ),
-        1,
+
+    all_problem_batches = list(
+        batched((np.random.permutation(problem_ids)), batch_size)
     )
+    batch_cycler = cycle(all_problem_batches)
+
+    # Pre-assign batches
+    for genome_id, genome in population.population.items():
+        genome.problem_batch = next(batch_cycler)
+
+    num_workers = max(1, multiprocessing.cpu_count())
+
+    evaluator_func = GenomeEvaluator(optimizer, options, evaluations_multiplier)
+
+    with ParallelEvaluator(num_workers, evaluator_func) as pe:
+        winner = population.run(
+            pe.evaluate, 1
+        )  # Set generations to 1 or 3 as per config
+
     with open(os.path.join("models", f"{options.get('name')}.pkl"), "wb") as f:
         pickle.dump(winner, f)
 
