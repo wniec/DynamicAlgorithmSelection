@@ -150,7 +150,6 @@ class GenomeEvaluator:
             )
 
             fitness += results["mean_reward"]
-            local_options["state_normalizer"] = results["state_normalizer"]
             local_options["reward_normalizer"] = results["reward_normalizer"]
             actions.extend(results["actions"])
 
@@ -360,7 +359,6 @@ def run_cross_validation(
                 "model_parameters": None,
                 "optimizer": None,
                 "reward_normalizer": None,
-                "state_normalizer": None,
             }
         )
     return observer.result_folder
@@ -458,7 +456,7 @@ def _coco_bbob_neuroevolution_train(
     batch_size = 30
 
     adjust_config(
-        16 * options.get("n_individuals"),
+        16 * options.get("n_individuals") + 2 if options.get("state_representation") == "NeurELA" else 44,
         len(options.get("action_space")),
     )
 

@@ -1,5 +1,6 @@
 import numpy as np
 from dynamicalgorithmselection.agents.agent import Agent
+from dynamicalgorithmselection.agents.agent_utils import MAX_DIM
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
@@ -18,7 +19,6 @@ class NeuroevolutionAgent(Agent):
         results.update(
             {
                 "reward_normalizer": self.reward_normalizer,
-                "state_normalizer": self.state_normalizer,
             }
         )
         return results
@@ -27,17 +27,26 @@ class NeuroevolutionAgent(Agent):
         fitness = Optimizer.optimize(self, fitness_function)
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
+        x_history, y_history = None, None
         step_idx = 0
         while not self._check_terminations():
-            state = self.get_state(x, y)
-            state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
-            state = self.state_normalizer.normalize(state)
+            used_fe = self.n_function_evaluations / self.max_function_evaluations
+            dim_coef = self.ndim_problem / MAX_DIM
+            if x is not None and y is not None:
+                x, y = x.astype(np.float32), y.astype(np.float32)
+            state = (
+                self.get_state(
+                    x_history, y_history, pop_size=self.checkpoints[0]
+                ).flatten()
+                if self.options.get("state_representation") == "ELA"
+                else self.get_state(x, y, pop_size=self.n_individuals).flatten()
+            )
+            state = np.append(state, (used_fe, dim_coef))
+            state = np.nan_to_num(
+                state, nan=0.5, neginf=0.0, posinf=1.0
+            )
             policy = self.net.activate(state)
-            probs = np.array(policy)
-            probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
-            probs /= probs.sum()
-
-            action = np.random.choice(len(probs), p=probs)
+            action = np.argmax(policy)
             self.choices_history.append(action)
             action_options = {k: v for k, v in self.options.items()}
             action_options["max_function_evaluations"] = min(
@@ -51,6 +60,10 @@ class NeuroevolutionAgent(Agent):
             best_parent = self.best_so_far_y
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")
+            x_history, y_history = (
+                iteration_result.get("x_history"),
+                iteration_result.get("y_history"),
+            )
 
             new_best_y = self.best_so_far_y
             reward = self.get_reward(new_best_y, best_parent)

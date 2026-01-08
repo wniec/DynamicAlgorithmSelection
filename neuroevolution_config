@@ -1,79 +1,90 @@
 [NEAT]
-# OPTIMIZED FOR 128 CORES
-# 128 genomes run in parallel. The generation finishes when the slowest one is done.
-pop_size              = 128
-fitness_criterion     = max
-fitness_threshold     = 1.0
-reset_on_extinction   = False
+# Optimized for 128 cores
+pop_size               = 128
+fitness_criterion      = max
+fitness_threshold      = 1.0
+reset_on_extinction    = False
+no_fitness_termination = False
 
 [DefaultGenome]
-# --- Node Activation ---
-# Sigmoid is standard, but you can add 'tanh' or 'relu' to options if desired.
-activation_default      = sigmoid
-activation_mutate_rate  = 0.05
-activation_options      = sigmoid tanh
+# --- Network Structure ---
+# 320 inputs, 3 outputs, 10 hidden (Your project specs)
+num_inputs             = 320
+num_outputs            = 3
+num_hidden             = 10
+feed_forward           = True
+# partial_direct is better than 'full' for 320 inputs to avoid explosion
+initial_connection     = partial_direct 0.4
 
-# --- Node Aggregation ---
+# --- Activation Function ---
+activation_default     = sigmoid
+activation_mutate_rate = 0.05
+# Combined your options with the docs defaults
+activation_options     = sigmoid tanh
+
+# --- Aggregation Function ---
 aggregation_default     = sum
 aggregation_mutate_rate = 0.0
 aggregation_options     = sum
 
-# --- Node Bias ---
+# --- Node Bias Options ---
 bias_init_mean          = 0.0
 bias_init_stdev         = 1.0
+# Added from docs:
+bias_init_type          = gaussian
 bias_max_value          = 30.0
 bias_min_value          = -30.0
 bias_mutate_power       = 0.5
 bias_mutate_rate        = 0.1
 bias_replace_rate       = 0.1
 
-# --- Genome Compatibility (Speciation) ---
+# --- Genome Compatibility ---
 compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.5
 
-# --- Structure Growth (Enabled for Long Runs) ---
-# We allow the network to grow slowly since you will likely run for 50+ generations.
+# --- Connection Rates ---
 conn_add_prob           = 0.05
 conn_delete_prob        = 0.05
+
+# --- Connection Enable Options ---
+enabled_default           = True
+enabled_mutate_rate       = 0.01
+# Added from docs:
+enabled_rate_to_true_add  = 0.0
+enabled_rate_to_false_add = 0.0
+
+# --- Node Add/Remove Rates ---
 node_add_prob           = 0.02
 node_delete_prob        = 0.05
 
-# --- Connection Enable ---
-enabled_default         = True
-enabled_mutate_rate     = 0.01
-
-# --- Network Parameters ---
-feed_forward            = True
-# Start with a fully connected simple network.
-initial_connection      = partial_direct 0.4
-
-num_hidden              = 10
-# These must match your specific problem (65 inputs, 3 outputs)
-num_inputs = 320
-num_outputs = 3
-
-# --- Node Response ---
+# --- Node Response Options ---
 response_init_mean      = 1.0
 response_init_stdev     = 0.0
+# Added from docs:
+response_init_type      = gaussian
 response_max_value      = 30.0
 response_min_value      = -30.0
 response_mutate_power   = 0.0
 response_mutate_rate    = 0.0
 response_replace_rate   = 0.0
 
-# --- Connection Weights ---
+# --- Connection Weight Options ---
 weight_init_mean        = 0.0
 weight_init_stdev       = 1.0
+# Added from docs:
+weight_init_type        = gaussian
 weight_max_value        = 30
 weight_min_value        = -30
-# Moderate mutation power for steady evolution
 weight_mutate_power     = 0.5
 weight_mutate_rate      = 0.1
 weight_replace_rate     = 0.1
 
+# --- Structural Mutation ---
+single_structural_mutation = False
+# Added from docs (Warning: if this crashes, remove this line)
+structural_mutation_surer  = default
+
 [DefaultSpeciesSet]
-# Threshold of 3.0 is standard for populations between 100-150.
-# It creates enough species to protect innovation without fragmenting too much.
 compatibility_threshold = 3.0
 
 [DefaultStagnation]
@@ -82,7 +93,7 @@ max_stagnation       = 15
 species_elitism      = 2
 
 [DefaultReproduction]
-# Elitism = 2 ensures the top 2 from every species survive unchanged.
-# With ~10 species, you keep the top ~20 networks safe.
 elitism            = 2
 survival_threshold = 0.2
+# Added from docs:
+min_species_size   = 2
