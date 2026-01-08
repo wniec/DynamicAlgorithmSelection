@@ -111,6 +111,15 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "-r",
+        "--state-representation",
+        type=str,
+        default="ELA",
+        choices=["ELA", "NeurELA"],
+        help="specify which state representation to use",
+    )
+
+    parser.add_argument(
         "-x",
         "--cdb",
         type=float,
@@ -137,6 +146,7 @@ def print_info(args):
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
     print("Exponential checkpoint division base: ", args.cdb)
+    print("State representation variant: ", args.state_representation)
 
 
 def test(args, action_space):
@@ -148,6 +158,7 @@ def test(args, action_space):
         "n_individuals": args.population_size,
         "action_space": action_space,
         "cdb": args.cdb,
+        "state_representation": args.state_representation,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
@@ -200,6 +211,7 @@ def run_training(args, action_space):
             "run": run,
             "action_space": action_space,
             "cdb": args.cdb,
+            "state_representation": args.state_representation,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -222,6 +234,7 @@ def run_CV(args, action_space):
             "run": None,
             "action_space": action_space,
             "cdb": args.cdb,
+            "state_representation": args.state_representation,
         },
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -244,6 +257,7 @@ def run_baselines(args, action_space):
                 "baselines": True,
                 "n_checkpoints": args.n_checkpoints,
                 "cdb": args.cdb,
+                "state_representation": args.state_representation,
             },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,

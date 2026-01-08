@@ -214,12 +214,9 @@ class POWELL(DS):
             y = None
             u = None
         self.start_conditions = {
-            i: locals().get(i, None)
-            for i in (
-                "x",
-                "y",
-                "u",
-            )
+            "x": x,
+            "Y": y,
+            "u": u,
         }
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
@@ -233,5 +230,12 @@ class POWELL(DS):
         x = np.array(self.x_history)[best_indices]
         y = np.array(self.y_history)[best_indices]
         return (
-            self.results | {i: locals()[i] for i in pop_data} or self.start_conditions
+            self.results
+            | {
+                {
+                    "x": x,
+                    "Y": y,
+                }
+            }
+            or self.start_conditions
         )

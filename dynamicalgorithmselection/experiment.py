@@ -4,8 +4,9 @@ import pickle
 import re
 import random
 import multiprocessing
-from itertools import product, batched, cycle
+from itertools import product, cycle
 from typing import Type, Optional, Any
+from .utils import batched
 
 import cocoex
 import numpy as np
@@ -480,15 +481,13 @@ def _coco_bbob_neuroevolution_train(
     for genome_id, genome in population.population.items():
         genome.problem_batch = next(batch_cycler)
 
-    num_workers = len(os.sched_getaffinity(0)) -1
+    num_workers = len(os.sched_getaffinity(0)) - 1
     print(f"Using {num_workers} workers.")
 
     evaluator_func = GenomeEvaluator(optimizer, options, evaluations_multiplier)
 
     with ParallelEvaluator(num_workers, evaluator_func) as pe:
-        winner = population.run(
-            pe.evaluate, 20
-        )
+        winner = population.run(pe.evaluate, 20)
 
     with open(os.path.join("models", f"{options.get('name')}.pkl"), "wb") as f:
         pickle.dump(winner, f)

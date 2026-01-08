@@ -32,7 +32,7 @@ The project supports flexible configuration through command-line arguments.
 ### **Installation**
 The project can be Installed by just one command:
 ```bash
-uv sync
+CFLAGS="-g -O3 -fPIC" uv sync
 ```
 ### **Usage**
 ```bash

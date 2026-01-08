@@ -1,15 +1,16 @@
 from itertools import product
-from typing import List, Type
+from typing import List, Type, Optional
 
 import numpy as np
 import torch
+
+from dynamicalgorithmselection.agents.agent_state import get_state_representation_model
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
-from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 
 
 class Agent(Optimizer):
@@ -42,6 +43,9 @@ class Agent(Optimizer):
         self.reward_normalizer = self.options.get(
             "reward_normalizer", StepwiseRewardNormalizer(max_steps=self.n_checkpoints)
         )
+        self.state_representation = get_state_representation_model(
+            self.options.get("state_representation", None)
+        )
 
     def get_initial_state(self):
         vector = [
@@ -59,14 +63,16 @@ class Agent(Optimizer):
         ]
         return torch.tensor(vector, dtype=torch.float)
 
-    def get_state(self, x: np.ndarray, y: np.ndarray) -> np.array:
+    def get_state(
+        self, x: Optional[np.ndarray], y: Optional[np.ndarray], pop_size: int
+    ) -> np.array:
         if x is None or y is None:
-            return feature_embedder(
-                np.zeros((self.n_individuals, self.ndim_problem)),
-                np.zeros((self.n_individuals,)),
+            return self.state_representation(
+                np.zeros((pop_size, self.ndim_problem)),
+                np.zeros((pop_size,)),
             )
         best_idx = sorted(range(len(y)), key=lambda i: y[i])[: self.n_individuals]
-        return feature_embedder(x[best_idx], y[best_idx])
+        return self.state_representation(x[best_idx], y[best_idx])
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:

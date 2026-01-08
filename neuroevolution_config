@@ -49,8 +49,8 @@ initial_connection      = partial_direct 0.4
 
 num_hidden              = 10
 # These must match your specific problem (65 inputs, 3 outputs)
-num_inputs              = 65
-num_outputs             = 3
+num_inputs = 320
+num_outputs = 3
 
 # --- Node Response ---
 response_init_mean      = 1.0

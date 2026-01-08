@@ -109,13 +109,10 @@ class OPOA2015(ES):
         self._n_generations += 1
         self.results.update(
             {
-                i: locals()[i]
-                for i in (
-                    "cf",
-                    "best_so_far_y",
-                    "p_s",
-                    "p_c",
-                )
+                "cf": cf,
+                "best_so_far_y": best_so_far_y,
+                "p_s": p_s,
+                "p_c": p_c,
             }
         )
         self.mean_history.append(mean)
@@ -195,16 +192,14 @@ class OPOA2015(ES):
         )
         y = y if isinstance(y, float) else None
         self.start_conditions = {
-            i: locals()[i]
-            for i in (
-                "mean",
-                "y",
-                "cf",
-                "best_so_far_y",
-                "p_s",
-                "p_c",
-            )
+            "mean": mean,
+            "y": y,
+            "cf": cf,
+            "best_so_far_y": best_so_far_y,
+            "p_s": p_s,
+            "p_c": p_c,
         }
+
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
 
@@ -216,6 +211,4 @@ class OPOA2015(ES):
         )[:n_individuals]
         x = np.array(self.mean_history)[best_indices]
         y = np.array(self.y_history)[best_indices]
-        return (
-            self.results | {i: locals()[i] for i in pop_data} or self.start_conditions
-        )
+        return self.results | {"x": x, "y": y} or self.start_conditions

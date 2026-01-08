@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 
+from dynamicalgorithmselection.agents.agent_utils import MAX_DIM
 from dynamicalgorithmselection.agents.ppo_utils import (
     RolloutBuffer,
     DEVICE,
@@ -19,12 +20,15 @@ class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 5_000), device=DEVICE
+            capacity=options.get("ppo_batch_size", 1_000), device=DEVICE
         )
-        self.actor = Actor(n_actions=len(self.actions), pop_size=self.n_individuals).to(
-            DEVICE
-        )
-        self.critic = Critic(pop_size=self.n_individuals).to(DEVICE)
+        state_dim = (
+            42
+            if self.options.get("state_representation") == "ELA"
+            else 16 * self.n_individuals
+        ) + 2
+        self.actor = Actor(n_actions=len(self.actions), input_size=state_dim).to(DEVICE)
+        self.critic = Critic(input_size=state_dim).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
@@ -158,11 +162,25 @@ class PolicyGradientAgent(Agent):
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
+        x_history, y_history = None, None
         idx = 0
         while not self._check_terminations():
             used_fe = self.n_function_evaluations / self.max_function_evaluations
-            state = self.get_state(x, y).flatten().unsqueeze(0)
-            state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
+            dim_coef = self.ndim_problem / MAX_DIM
+            if x is not None and y is not None:
+                x, y = x.astype(np.float32), y.astype(np.float32)
+            state = (
+                self.get_state(
+                    x_history, y_history, pop_size=self.checkpoints[0]
+                ).flatten()
+                if self.options.get("state_representation") == "ELA"
+                else self.get_state(x, y, self.n_individuals).flatten()
+            )
+            state = np.append(state, (used_fe, dim_coef))
+            state = torch.nan_to_num(
+                torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
+            ).unsqueeze(0)
+            state = state.to(dtype=torch.float32)
             with torch.no_grad():
                 policy = self.actor(state.to(DEVICE))
                 value = self.critic(state.to(DEVICE))
@@ -196,6 +214,10 @@ class PolicyGradientAgent(Agent):
             best_parent = self.best_so_far_y
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")
+            x_history, y_history = (
+                iteration_result.get("x_history"),
+                iteration_result.get("y_history"),
+            )
             new_best_y = self.best_so_far_y
 
             reward = self.get_reward(new_best_y, best_parent)

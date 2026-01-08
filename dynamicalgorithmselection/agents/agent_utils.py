@@ -1,5 +1,7 @@
 import numpy as np
 
+MAX_DIM = 40
+
 
 def get_runtime_stats(
     fitness_history: list[tuple[int, float]],

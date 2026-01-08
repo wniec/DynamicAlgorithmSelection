@@ -91,7 +91,7 @@ class IPSO(PSO):
             p_x, p_y = np.vstack((p_x, xx)), np.hstack((p_y, yy))
             self.n_individuals += 1
         self._n_generations += 1
-        self.results.update({i: locals()[i] for i in ("v", "x", "y", "p_x", "p_y")})
+        self.results.update({"v": v, "x": x, "y": y, "p_x": p_x, "p_y": p_y})
         return v, x, y, p_x, p_y
 
     def optimize(self, fitness_function=None, args=None):

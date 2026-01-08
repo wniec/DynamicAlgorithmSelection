@@ -69,11 +69,11 @@ def compute_gae(rewards, dones, values, last_value):
 
 
 class Actor(nn.Module):
-    def __init__(self, n_actions: int, pop_size: int, dropout_p: float = 0.35):
+    def __init__(self, n_actions: int, input_size: int, dropout_p: float = 0.35):
         super().__init__()
         # Replace LSTM with a standard MLP feature extractor
         self.feature_extractor = nn.Sequential(
-            nn.Linear(pop_size * 16, HIDDEN_SIZE),
+            nn.Linear(input_size, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),  # Optional: Added dropout to feature extraction
@@ -101,10 +101,10 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, pop_size: int, dropout_p: float = 0.35):
+    def __init__(self, input_size: int, dropout_p: float = 0.35):
         super().__init__()
         self.feature_extractor = nn.Sequential(
-            nn.Linear(pop_size * 16, HIDDEN_SIZE),
+            nn.Linear(input_size, HIDDEN_SIZE),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),

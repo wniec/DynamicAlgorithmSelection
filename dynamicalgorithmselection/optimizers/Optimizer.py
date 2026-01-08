@@ -17,6 +17,7 @@ class Optimizer(BaseOptimizer):
             options.get("worst_so_far_y", -np.inf),
             None,
         )
+        self.x_history, self.y_history = [], []
 
     def _evaluate_fitness(self, x, args=None):
         self.start_function_evaluations = time.time()
@@ -37,6 +38,8 @@ class Optimizer(BaseOptimizer):
             self._counter_early_stopping += 1
         else:
             self._counter_early_stopping, self._base_early_stopping = 0, y
+        self.x_history.append(x[:])
+        self.y_history.append(float(y))
 
         return float(y)
 
@@ -69,6 +72,8 @@ class Optimizer(BaseOptimizer):
                 "best_x": self.best_so_far_x,
                 "best_y": self.best_so_far_y,
                 "fitness_history": self.fitness_history,
+                "x_history": np.array(self.x_history, dtype=np.float32),
+                "y_history": np.array(self.y_history, dtype=np.float32),
             }
         )
         return result

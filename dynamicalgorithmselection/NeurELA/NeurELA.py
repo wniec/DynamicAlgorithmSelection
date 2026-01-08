@@ -1,3 +1,5 @@
+import os
+
 import torch
 import copy
 from dynamicalgorithmselection.NeurELA.feature_extractor import Feature_Extractor
@@ -20,6 +22,7 @@ def vector2nn(x, net):
 
 
 def load_data(path):
+    print(os.getcwd())
     with open(path, "rb") as f:
         data = pickle.load(f)
     return data

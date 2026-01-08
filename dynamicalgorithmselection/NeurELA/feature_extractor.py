@@ -344,19 +344,3 @@ class Feature_Extractor(nn.Module):
             out = self.mlp(self.acti(h_ij)).view(bs, dim, pop_size, node_dim)
             out = torch.mean(out, -3)
             return out
-
-
-if __name__ == "__main__":
-    h_choices = [16, 64, 128]
-    n_choices = [1, 3, 5]
-
-    for h in h_choices:
-        for n in n_choices:
-            fe = Feature_Extractor(hidden_dim=h, n_layers=n, is_mlp=False)
-            num_para = fe.get_parameter_number()
-            print(f"h: {h}, n: {n}, num_para: {num_para}")
-
-    for h in h_choices:
-        fe = Feature_Extractor(hidden_dim=h, is_mlp=True)
-        num_para = fe.get_parameter_number()
-        print(f"mlp, h: {h}, num_para: {num_para}")

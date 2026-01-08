@@ -3,7 +3,7 @@ name = "dynamicalgorithmselection"
 version = "0.1.0"
 description = ""
 authors = [{ name = "wniec", email = "niecwladek@gmail.com" }]
-requires-python = "==3.12"
+requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
     "pypop7>=0.0.82,<0.0.83",
@@ -16,7 +16,8 @@ dependencies = [
     "tenacity>=9.1.2,<10",
     "neat-python>=0.92",
     "torch>=2.9.0",
-    "numpy==1.26",
+    "numpy>=1.20.0, <2.0",
+    "pflacco>=1.0.0",
 ]
 
 [build-system]

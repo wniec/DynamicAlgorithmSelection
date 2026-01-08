@@ -213,8 +213,15 @@ class LMCMAES(ES):
             )
             self.results.update(
                 {
-                    i: locals()[i]
-                    for i in ("p_c", "s", "vm", "pm", "b", "d", "x", "y", "mean")
+                    "p_c": p_c,
+                    "s": s,
+                    "vm": vm,
+                    "pm": pm,
+                    "b": b,
+                    "d": d,
+                    "x": x,
+                    "y": y,
+                    "mean": mean,
                 }
             )
             if self._check_terminations():
@@ -247,13 +254,15 @@ class LMCMAES(ES):
         if x is None or y is None:
             self.start_conditions = {"x": None, "y": None, "mean": None}
         elif not isinstance(y, np.ndarray):
+            loc = locals()
             self.start_conditions = {
-                i: locals().get(i, None) for i in ("cf", "best_so_far_y", "p_s", "p_c")
+                i: loc.get(i, None) for i in ("cf", "best_so_far_y", "p_s", "p_c")
             }
         else:
             indices = np.argsort(y)[: self.individuals_at_start]
+            loc = locals()
             start_conditions = {
-                i: locals().get(i, None) for i in ("p_c", "s", "vm", "pm", "b", "d")
+                i: loc.get(i, None) for i in ("p_c", "s", "vm", "pm", "b", "d")
             }
             start_conditions.update(
                 {
