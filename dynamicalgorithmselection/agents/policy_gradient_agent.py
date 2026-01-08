@@ -3,15 +3,13 @@ import os
 import numpy as np
 import torch
 
-from dynamicalgorithmselection.agents.agent_state import (
-    get_padded_population_observation,
-)
-from dynamicalgorithmselection.agents.agent_utils import (
+from dynamicalgorithmselection.agents.ppo_utils import (
     RolloutBuffer,
     DEVICE,
     compute_gae,
+    Actor,
+    Critic,
     ActorLoss,
-    ActorCritic,
 )
 from dynamicalgorithmselection.agents.agent import Agent
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
@@ -23,24 +21,35 @@ class PolicyGradientAgent(Agent):
         self.buffer = options.get("buffer") or RolloutBuffer(
             capacity=options.get("ppo_batch_size", 5_000), device=DEVICE
         )
-        self.model = ActorCritic(n_actions=len(self.actions)).to(DEVICE)
+        self.actor = Actor(n_actions=len(self.actions), pop_size=self.n_individuals).to(
+            DEVICE
+        )
+        self.critic = Critic(pop_size=self.n_individuals).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-4)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-5)
 
-        decay_gamma = self.options.get("lr_decay_gamma", 0.9995)
-        if p := options.get("model_parameters", None):
-            self.model.load_state_dict(p)
-        if p := options.get("optimizer", None):
-            self.optimizer.load_state_dict(p)
+        decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
+        if p := options.get("actor_parameters", None):
+            self.actor.load_state_dict(p)
+        if p := options.get("critic_parameters", None):
+            self.critic.load_state_dict(p)
+        if p := options.get("actor_optimizer", None):
+            self.actor_optimizer.load_state_dict(p)
+        if p := options.get("critic_optimizer", None):
+            self.critic_optimizer.load_state_dict(p)
 
         self.mean_rewards = options.get("mean_rewards", [])
         self.best_50_mean = float("inf")
 
         self.tau = self.options.get("critic_target_tau", 0.05)
 
-        self.scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optimizer, gamma=decay_gamma, step_size=10
+        self.actor_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            self.actor_optimizer, gamma=decay_gamma
+        )
+        self.critic_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            self.critic_optimizer, gamma=decay_gamma
         )
 
     def ppo_update(
@@ -52,18 +61,10 @@ class PolicyGradientAgent(Agent):
         value_coef=0.3,
         entropy_coef=0.02,
     ):
-        states, actions, old_log_probs, values, rewards, dones, populations = (
-            buffer.as_tensors()
-        )
+        states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
         with torch.no_grad():
             last_value = (
-                self.model(
-                    states[-1].unsqueeze(0).to(DEVICE),
-                    populations[-1].unsqueeze(0).to(DEVICE),
-                )[1]
-                .squeeze(0)
-                .cpu()
-                .item()
+                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
                 if buffer.size() > 0
                 else 0.0
             )
@@ -91,9 +92,8 @@ class PolicyGradientAgent(Agent):
                 mb_old_log_probs = old_log_probs[mb_idx]
                 mb_returns = returns[mb_idx]
                 mb_advantages = advantages[mb_idx]
-                mb_populations = populations[mb_idx].to(DEVICE)
                 # forward
-                policy = self.model(mb_states, mb_populations)[0]
+                policy = self.actor(mb_states)
                 dist_log_probs = torch.log(
                     policy.gather(1, mb_actions.unsqueeze(1)).squeeze(1) + 1e-12
                 )
@@ -106,16 +106,18 @@ class PolicyGradientAgent(Agent):
                 )
                 actor_loss = -torch.min(surr1, surr2).mean()
                 # value loss
-                values_pred = self.model(mb_states, mb_populations)[1].squeeze(1)
+                values_pred = self.critic(mb_states).squeeze(1)
                 value_loss = torch.nn.functional.mse_loss(values_pred, mb_returns)
                 loss = actor_loss + value_coef * value_loss - entropy_coef * entropy
                 # optimize
-                self.optimizer.zero_grad()
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
 
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
-                self.optimizer.step()
-                self.scheduler.step()
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
 
             if self.run:
                 self.run.log(
@@ -129,12 +131,13 @@ class PolicyGradientAgent(Agent):
         results, _ = super()._collect(fitness, y)
         self.mean_rewards.append(sum(self.rewards) / len(self.rewards))
         agent_state = {
-            "model_parameters": self.model.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
+            "actor_parameters": self.actor.state_dict(),
+            "critic_parameters": self.critic.state_dict(),
+            "actor_optimizer": self.actor_optimizer.state_dict(),
+            "critic_optimizer": self.critic_optimizer.state_dict(),
             "buffer": self.buffer,
             "mean_rewards": self.mean_rewards,
             "reward_normalizer": self.reward_normalizer,
-            "state_normalizer": self.state_normalizer,
         }
         last_50_mean = sum(self.mean_rewards[-50:]) / len(self.mean_rewards[-50:])
         if self.best_50_mean > last_50_mean:
@@ -150,30 +153,19 @@ class PolicyGradientAgent(Agent):
         batch_size = self.buffer.capacity
         ppo_epochs = self.options.get("ppo_epochs", 6)
         clip_eps = self.options.get("ppo_eps", 0.3)
-        entropy_coef = 0.0
+        entropy_coef = 0.02
         value_coef = self.options.get("ppo_value_coef", 0.03)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
         idx = 0
         while not self._check_terminations():
-            state_vector = self.get_state(x, y).numpy()  # Get raw values
-            normalized_state = self.state_normalizer.normalize(
-                state_vector.reshape(1, -1)
-            )  # Normalize
-            state = torch.tensor(normalized_state, dtype=torch.float)  # Back to tensor
+            used_fe = self.n_function_evaluations / self.max_function_evaluations
+            state = self.get_state(x, y).flatten().unsqueeze(0)
             state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
-            population_vector = get_padded_population_observation(
-                x,
-                (y if y is None else (y - y.mean()) / (y.std() + 1e-8)),
-                pop_size=self.n_individuals,
-            )
-
             with torch.no_grad():
-                policy, value = self.model(
-                    state.to(DEVICE), population_vector.unsqueeze(0).to(DEVICE)
-                )
-
+                policy = self.actor(state.to(DEVICE))
+                value = self.critic(state.to(DEVICE))
             probs = (
                 policy.cpu().numpy().squeeze(0)
                 if self.buffer.size() >= self.buffer.capacity
@@ -219,7 +211,6 @@ class PolicyGradientAgent(Agent):
                 self.n_function_evaluations == self.max_function_evaluations,
                 log_prob,
                 value.detach(),
-                torch.tensor(population_vector, dtype=torch.float),
             )
 
             # every batch_size steps or on termination, run ppo update

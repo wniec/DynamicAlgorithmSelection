@@ -14,7 +14,6 @@ from tqdm import tqdm
 import wandb
 
 from dynamicalgorithmselection.agents.agent_utils import (
-    BASE_STATE_SIZE,
     get_runtime_stats,
     get_extreme_stats,
     get_checkpoints,
@@ -458,7 +457,7 @@ def _coco_bbob_neuroevolution_train(
     batch_size = 30
 
     adjust_config(
-        2 * len(options.get("action_space")) + BASE_STATE_SIZE,
+        16 * options.get("n_individuals"),
         len(options.get("action_space")),
     )
 

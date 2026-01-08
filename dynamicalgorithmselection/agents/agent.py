@@ -3,14 +3,13 @@ from typing import List, Type
 
 import numpy as np
 import torch
-from dynamicalgorithmselection.agents.agent_state import AgentState
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
-    StateNormalizer,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
+from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 
 
 class Agent(Optimizer):
@@ -43,12 +42,6 @@ class Agent(Optimizer):
         self.reward_normalizer = self.options.get(
             "reward_normalizer", StepwiseRewardNormalizer(max_steps=self.n_checkpoints)
         )
-        self.state_normalizer = self.options.get(
-            "state_normalizer",
-            StateNormalizer(
-                n_actions=len(self.actions),
-            ),
-        )
 
     def get_initial_state(self):
         vector = [
@@ -68,50 +61,12 @@ class Agent(Optimizer):
 
     def get_state(self, x: np.ndarray, y: np.ndarray) -> np.array:
         if x is None or y is None:
-            return self.get_initial_state()
-        else:
-            state = AgentState(
-                x,
-                y,
-                self.best_so_far_x,
-                self.best_so_far_y,
-                self.lower_boundary,
-                self.upper_boundary,
-                self.worst_so_far_x,
-                self.worst_so_far_y,
-                self.history,
-                self.choices_history,
-                len(self.actions),
+            return feature_embedder(
+                np.zeros((self.n_individuals, self.ndim_problem)),
+                np.zeros((self.n_individuals,)),
             )
-            used_fe_ratio = self.n_function_evaluations / self.max_function_evaluations
-
-            vector = [
-                state.get_weighted_central_moment(3),
-                state.get_weighted_central_moment(2),
-                state.mean_falling_behind(),
-                state.population_relative_radius(),
-                state.relative_improvement(),
-                state.y_historic_improvement(),
-                state.y_deviation(),
-                1 - used_fe_ratio,
-                self.ndim_problem
-                / 40,  # maximum dimensionality in this COCO benchmark is 40
-                self.stagnation_count / self.max_function_evaluations,
-                *state.distances_from_best(),
-                *state.distances_from_mean(),
-                *state.relative_y_differences(),
-                *state.last_action_encoded,
-                state.same_action_counter() / self.n_checkpoints,
-                *state.choices_frequency,
-                state.explored_volume() ** (1 / self.ndim_problem),  # searched volume
-                *state.x_standard_deviation_stats(),
-                *state.normalized_x_stats(),
-                state.choice_entropy(),
-                state.normalized_distance(self.best_so_far_x, self.worst_so_far_x),
-                *state.y_difference_stats(),
-                *state.slopes_stats(),
-            ]
-        return torch.tensor(vector, dtype=torch.float)
+        best_idx = sorted(range(len(y)), key=lambda i: y[i])[: self.n_individuals]
+        return feature_embedder(x[best_idx], y[best_idx])
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
