@@ -1,6 +1,7 @@
 # Dynamic Algorithm Selection (DAS)
 
-This project explores **Reinforcement Learning (RL)-based meta–black-box optimization**, where an agent dynamically selects among several metaheuristics to optimize performance.
+This project explores **Reinforcement Learning (RL)-based meta–black-box optimization**, where an agent dynamically
+selects among several metaheuristics to optimize performance.
 
 ---
 
@@ -9,36 +10,44 @@ This project explores **Reinforcement Learning (RL)-based meta–black-box optim
 - Implements **five metaheuristic algorithms**:  
   **LM-CMAES**, **standard PSO**, **CPSO**, **IPSO**, **PSOL**, **OPOA2015**, **POWELL**, and **G3PCX**
 - All algorithms share the same **population size** (`n_individuals`) for seamless transitions.
-- The core of the system is an **RL-based agent** that learns to **switch** between optimizers during the optimization process.
-- The agent makes switching decisions in **quantized stages**. Number of those switches is determined by the parameter (`n_checkpoints`). The length of optimization episodes increases exponentially with the base determined by parameter `cdb`.
-- The entry script, **`main.py`**, launches training of the RL agent, followed by evaluation and comparison with individual sub-optimizers.
+- The core of the system is an **RL-based agent** that learns to **switch** between optimizers during the optimization
+  process.
+- The agent makes switching decisions in **quantized stages**. Number of those switches is determined by the
+  parameter (`n_checkpoints`). The length of optimization episodes increases exponentially with the base determined by
+  parameter `cdb`.
+- The entry script, **`main.py`**, launches training of the RL agent, followed by evaluation and comparison with
+  individual sub-optimizers.
 
 ---
 
 ## Features & Structure
 
-| Component                 | Description                                             |
-|---------------------------|---------------------------------------------------------|
-| **RL Agent**              | Learns dynamic optimizer selection policies             |
-| **Metaheuristics**        | LM-CMAES, PSO, IPSO, PSOL, CPSO, POWELL, OPOA2015 G3PCX |
-| **Population Handling**   | Shared `n_individuals` across all optimizers            |
-| **Evaluation**            | Trained RL model compared to standalone optimizers      |
+| Component               | Description                                             |
+|-------------------------|---------------------------------------------------------|
+| **RL Agent**            | Learns dynamic optimizer selection policies             |
+| **Metaheuristics**      | LM-CMAES, PSO, IPSO, PSOL, CPSO, POWELL, OPOA2015 G3PCX |
+| **Population Handling** | Shared `n_individuals` across all optimizers            |
+| **Evaluation**          | Trained RL model compared to standalone optimizers      |
 
 ---
 
 ## Command-Line Interface (CLI)
 
 The project supports flexible configuration through command-line arguments.
+
 ### **Installation**
+
 The project can be Installed by just one command:
+
 ```bash
 CFLAGS="-g -O3 -fPIC" uv sync
 ```
+
 ### **Usage**
+
 ```bash
 uv run das <name> [options]
 ```
-
 
 | Argument                           | Type               | Default                   | Description                                                                             |
 |------------------------------------|--------------------|---------------------------|-----------------------------------------------------------------------------------------|
@@ -53,23 +62,40 @@ uv run das <name> [options]
 | `-w`, `--wandb_project`            | `str`              | `None`                    | Weights and Biases project name                                                         |
 | `-a`, `--agent`                    | `str`              | `policy-gradient`         | What agent to use. Possible: neuroevolution, policy-gradient and random                 |
 | `-l`, `--mode`                     | `str`              | `'LOIO', 'easy', 'hard'`  | Determines how to split train and test examples [more](#Train-test-split)               | 
-| `-x`, `--cdb`                      | `float`            | `2.0`                     | Checkpoint Division Exponent - determines how quickly length of checkpoints should rise | 
-
+| `-x`, `--cdb`                      | `float`            | `1.0`                     | Checkpoint Division Exponent - determines how quickly length of checkpoints should rise |
+| `-r`, `--state-representation`     | `str`              | `ELA`                     | Determines, which method will be used to extract features from algorithms population    |
 
 ## Train-test split
+
 * `LOIO` - (*Leave One Instance Out*) uses LOLO_train_set.json, randomly generated subset with mixed problems.
-* `hard` - (*Leave One Problem Out*) splits dataset, grouping same problem instances in same resulting dataset, has twice more train functions than test ones.
+* `hard` - (*Leave One Problem Out*) splits dataset, grouping same problem instances in same resulting dataset, has
+  twice more train functions than test ones.
 * `easy` - (*Leave One Problem Out*) similar to hard, but has invertet train-test proportions.
 * `CV` - (*Leave One Problem Out*) splits problems into 4 folds and performs cross-validation
 
 ### Portfolio can also be examined for each standalone algorithm via `baselines` mode.
 
+## State Representation:
+
+There are three options for state representation in this project:
+
+* `ELA` - Exploratory Landscape Analysis, implemented
+  using [pflacco](https://pflacco.readthedocs.io/en/latest/index.html), using only some features, due to computational
+  complexity
+* `NeurELA` - pretrained model used for feature extraction. Its [implementation](https://github.com/MetaEvo/Neur-ELA) is
+  described [here](https://arxiv.org/pdf/2408.10672).
+* `custom` - proposed feature extraction method implemented  [here](dynamicalgorithmselection/agents/agent_state.py#49).
+  It can be modified to include other features.
+
 ## Acknowledgment
 
-Much of the implementation is adapted from:  
+Much of the implementation of optimizers is adapted from:  
 🔗 [Evolutionary-Intelligence/pypop](https://github.com/Evolutionary-Intelligence/pypop/tree/main)
+Substantial part of this work is inspired by works of :   
+[MetaEvolution Lab](https://metaevo.github.io/)
 
 ---
+
 ## TO BE DONE
 
 * Add more sub-optimizers

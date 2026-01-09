@@ -115,7 +115,7 @@ def parse_arguments():
         "--state-representation",
         type=str,
         default="ELA",
-        choices=["ELA", "NeurELA"],
+        choices=["ELA", "NeurELA", "custom"],
         help="specify which state representation to use",
     )
 
@@ -123,7 +123,7 @@ def parse_arguments():
         "-x",
         "--cdb",
         type=float,
-        default=2.0,
+        default=1.0,
         help="checkpoint division exponent",
     )
 

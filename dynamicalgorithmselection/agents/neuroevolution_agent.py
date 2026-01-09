@@ -35,16 +35,12 @@ class NeuroevolutionAgent(Agent):
             if x is not None and y is not None:
                 x, y = x.astype(np.float32), y.astype(np.float32)
             state = (
-                self.get_state(
-                    x_history, y_history, pop_size=self.checkpoints[0]
-                ).flatten()
+                self.get_state(x_history, y_history).flatten()
                 if self.options.get("state_representation") == "ELA"
-                else self.get_state(x, y, pop_size=self.n_individuals).flatten()
+                else self.get_state(x, y).flatten()
             )
             state = np.append(state, (used_fe, dim_coef))
-            state = np.nan_to_num(
-                state, nan=0.5, neginf=0.0, posinf=1.0
-            )
+            state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
             policy = self.net.activate(state)
             action = np.argmax(policy)
             self.choices_history.append(action)

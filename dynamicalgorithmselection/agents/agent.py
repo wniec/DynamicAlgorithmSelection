@@ -4,10 +4,11 @@ from typing import List, Type, Optional
 import numpy as np
 import torch
 
-from dynamicalgorithmselection.agents.agent_state import get_state_representation_model
+from dynamicalgorithmselection.agents.agent_state import get_state_representation
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
+    MAX_DIM,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
@@ -43,8 +44,8 @@ class Agent(Optimizer):
         self.reward_normalizer = self.options.get(
             "reward_normalizer", StepwiseRewardNormalizer(max_steps=self.n_checkpoints)
         )
-        self.state_representation = get_state_representation_model(
-            self.options.get("state_representation", None)
+        self.state_representation, self.state_dim = get_state_representation(
+            self.options.get("state_representation", None), len(self.actions)
         )
 
     def get_initial_state(self):
@@ -63,16 +64,32 @@ class Agent(Optimizer):
         ]
         return torch.tensor(vector, dtype=torch.float)
 
-    def get_state(
-        self, x: Optional[np.ndarray], y: Optional[np.ndarray], pop_size: int
-    ) -> np.array:
+    def get_state(self, x: Optional[np.ndarray], y: Optional[np.ndarray]) -> np.array:
         if x is None or y is None:
-            return self.state_representation(
-                np.zeros((pop_size, self.ndim_problem)),
-                np.zeros((pop_size,)),
+            state_representation = self.state_representation(
+                np.zeros((50, self.ndim_problem)),
+                np.zeros((50,)),
+                (
+                    self.lower_boundary,
+                    self.upper_boundary,
+                    self.choices_history,
+                    self.n_checkpoints,
+                    self.ndim_problem,
+                ),
             )
-        best_idx = sorted(range(len(y)), key=lambda i: y[i])[: self.n_individuals]
-        return self.state_representation(x[best_idx], y[best_idx])
+            return np.append(state_representation, (0, 0))
+        used_fe = self.n_function_evaluations / self.max_function_evaluations
+        # best_idx = sorted(range(len(y)), key=lambda i: y[i])[: self.n_individuals]
+        stagnation_coef = self.stagnation_count / self.max_function_evaluations
+        sr_additional_params = (
+            self.lower_boundary,
+            self.upper_boundary,
+            self.choices_history,
+            self.n_checkpoints,
+            self.ndim_problem,
+        )
+        state_representation = self.state_representation(x, y, sr_additional_params)
+        return np.append(state_representation, (used_fe, stagnation_coef))
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
@@ -121,7 +138,10 @@ class Agent(Optimizer):
             results["worst_so_far_x"],
             results["worst_so_far_y"],
         )  # fitness evaluation
-        return optimizer.get_data(self.n_individuals)
+        return optimizer.get_data(self.n_individuals) | {
+            "x_history": results["x_history"],
+            "y_history": results["y_history"],
+        }
 
     def _collect(self, fitness, y=None):
         if y is not None:

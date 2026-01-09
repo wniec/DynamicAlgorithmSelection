@@ -7,13 +7,10 @@ reset_on_extinction    = False
 no_fitness_termination = False
 
 [DefaultGenome]
-# --- Network Structure ---
-# 320 inputs, 3 outputs, 10 hidden (Your project specs)
-num_inputs             = 320
-num_outputs            = 3
+num_inputs = 43
+num_outputs = 3
 num_hidden             = 10
 feed_forward           = True
-# partial_direct is better than 'full' for 320 inputs to avoid explosion
 initial_connection     = partial_direct 0.4
 
 # --- Activation Function ---
@@ -30,7 +27,7 @@ aggregation_options     = sum
 # --- Node Bias Options ---
 bias_init_mean          = 0.0
 bias_init_stdev         = 1.0
-# Added from docs:
+
 bias_init_type          = gaussian
 bias_max_value          = 30.0
 bias_min_value          = -30.0
@@ -95,5 +92,4 @@ species_elitism      = 2
 [DefaultReproduction]
 elitism            = 2
 survival_threshold = 0.2
-# Added from docs:
 min_species_size   = 2

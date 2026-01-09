@@ -6,6 +6,8 @@ import random
 import multiprocessing
 from itertools import product, cycle
 from typing import Type, Optional, Any
+
+from .agents.agent_state import BASE_STATE_SIZE
 from .utils import batched
 
 import cocoex
@@ -454,9 +456,16 @@ def _coco_bbob_neuroevolution_train(
     cocoex.utilities.MiniPrint()
     _, problem_ids = get_suite(mode, True)
     batch_size = 30
+    input_dim = None
+    if options.get("state_representation") == "ELA":
+        input_dim = 43
+    elif options.get("state_representation") == "NeurELA":
+        input_dim = 16
+    elif options.get("state_representation") == "custom":
+        input_dim = BASE_STATE_SIZE + 2 * len(options.get("action_space")) + 2
 
     adjust_config(
-        16 * options.get("n_individuals") + 2 if options.get("state_representation") == "NeurELA" else 44,
+        input_dim,
         len(options.get("action_space")),
     )
 
