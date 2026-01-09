@@ -20,13 +20,17 @@ class Agent(Optimizer):
         self.history = []
         self.actions = options.get("action_space")
         self.name = options.get("name")
+        self.cdb = options.get("cdb")
 
         self.train_mode = options.get("train_mode", True)
 
         self.n_checkpoints = options["n_checkpoints"]
         self.run = options.get("run", None)
         self.checkpoints = get_checkpoints(
-            self.n_checkpoints, self.max_function_evaluations
+            self.n_checkpoints,
+            self.max_function_evaluations,
+            self.n_individuals,
+            self.cdb,
         )
 
     def get_initial_state(self):

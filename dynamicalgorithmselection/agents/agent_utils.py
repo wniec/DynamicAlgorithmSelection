@@ -1,9 +1,10 @@
+from operator import itemgetter
+
 import numpy as np
 import torch
 from torch import nn
 import torch.nn.init as init
 
-CHECKPOINT_DIVISION_EXPONENT = 1.98
 GAMMA = 0.3
 HIDDEN_SIZE = 144
 BASE_STATE_SIZE = 59
@@ -116,7 +117,6 @@ class Actor(LSTMModule):
         )
         orthogonal_init(self)
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 2:
             x_seq = x.unsqueeze(1)
@@ -183,7 +183,7 @@ def get_list_stats(data: list):
 def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
-    checkpoints: list[int],
+    checkpoints: np.ndarray,
 ) -> dict[str, float | list[float]]:
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
@@ -203,6 +203,9 @@ def get_runtime_stats(
             checkpoint_idx += 1
         last_i = i
         last_fitness = fitness
+    area_under_optimization_curve += fitness_history[-1][1] * (
+        function_evaluations - fitness_history[-1][0]
+    )
     final_fitness = fitness_history[-1][1]
     if function_evaluations == checkpoints[-1]:
         while len(checkpoints_fitness) < len(checkpoints):
@@ -215,25 +218,79 @@ def get_runtime_stats(
     }
 
 
-def get_checkpoints(n_checkpoints: int, max_function_evaluations: int) -> np.ndarray:
-    checkpoint_ratios = np.cumprod(
-        np.full(shape=(n_checkpoints,), fill_value=CHECKPOINT_DIVISION_EXPONENT)
+def get_extreme_stats(
+    fitness_histories: dict[str, list[tuple[int, float]]],
+    function_evaluations: int,
+    checkpoints: np.ndarray,
+) -> tuple[dict[str, float | list[float]], dict[str, float | list[float]]]:
+    """
+    :param fitness_histories: list of lists of tuples [fe, fitness] with only points where best so far fitness improved for each algorithm
+    :param function_evaluations: max number of function evaluations during run.
+    :param checkpoints: list of checkpoints by their n_function_evaluations
+    :return: dictionary of selected run statistics, ready to dump
+    """
+    all_improvements = []
+    for algorithm, run in fitness_histories.items():
+        for fe, fitness in run:
+            all_improvements.append((fe, algorithm, fitness))
+
+    all_improvements.sort(key=itemgetter(0))  # sort by fe - increasing
+    current_fitness = float("inf")
+
+    best_history = []
+    for fe, _, fitness in all_improvements:
+        if fitness < current_fitness:
+            current_fitness = fitness
+            best_history.append((fe, fitness))
+
+    all_improvements.sort(
+        key=lambda x: (x[0], -x[2])
+    )  # sort fe - increasing and by fitness - decreasing
+
+    current_fitness = {
+        alg: float("inf") for alg in fitness_histories
+    }  # current best fitness for each algorithm
+    current_worst_fitness = float("inf")  # worst performance so far for each algorithm
+
+    worst_history = []
+    for fe, algorithm, fitness in all_improvements:
+        if fitness < current_fitness[algorithm]:
+            current_fitness[algorithm] = fitness
+            new_worst_fitness = max(
+                i for i in current_fitness.values() if i != float("inf")
+            )
+            if new_worst_fitness < current_worst_fitness:
+                worst_history.append((fe, fitness))
+                current_worst_fitness = new_worst_fitness
+
+    return (
+        get_runtime_stats(best_history, function_evaluations, checkpoints),
+        get_runtime_stats(worst_history, function_evaluations, checkpoints),
     )
+
+
+def get_checkpoints(
+    n_checkpoints: int, max_function_evaluations: int, n_individuals: int, cdb: float
+) -> np.ndarray:
+    checkpoint_ratios = np.cumprod(np.full(shape=(n_checkpoints,), fill_value=cdb))
     checkpoint_ratios = np.cumsum(checkpoint_ratios / checkpoint_ratios.sum())
     checkpoints = (checkpoint_ratios * max_function_evaluations).astype(int)
     checkpoints[-1] = (
         max_function_evaluations  # eliminate possibility of "error by one"
     )
+    checkpoints[0] = max(checkpoints[0], n_individuals)
+    for i in range(1, len(checkpoints)):
+        checkpoints[i] = max(checkpoints[i - 1] + n_individuals, checkpoints[i])
     return checkpoints
 
 
 def orthogonal_init(module):
     for name, param in module.named_parameters():
-        if 'weight_ih' in name:      # LSTM input -> hidden
+        if "weight_ih" in name:  # LSTM input -> hidden
             init.orthogonal_(param.data)
-        elif 'weight_hh' in name:    # LSTM hidden -> hidden
+        elif "weight_hh" in name:  # LSTM hidden -> hidden
             init.orthogonal_(param.data)
-        elif 'weight' in name and param.dim() >= 2:
-            init.orthogonal_(param.data)   # Linear layers
-        elif 'bias' in name:
+        elif "weight" in name and param.dim() >= 2:
+            init.orthogonal_(param.data)  # Linear layers
+        elif "bias" in name:
             param.data.zero_()

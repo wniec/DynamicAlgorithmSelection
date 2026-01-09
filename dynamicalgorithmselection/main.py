@@ -105,8 +105,16 @@ def parse_arguments():
         "--mode",
         type=str,
         default="easy",
-        choices=["LOIO", "hard", "easy"],
+        choices=["LOIO", "hard", "easy", "CV", "baselines"],
         help="specify which agent to use",
+    )
+
+    parser.add_argument(
+        "-x",
+        "--cdb",
+        type=float,
+        default=2.0,
+        help="checkpoint division exponent",
     )
 
     return parser.parse_args()
@@ -126,17 +134,19 @@ def print_info(args):
     print("Compare mode: ", args.compare)
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
-    print("Agent type: ", args.agent)
+    print("Agent type: ", args.agent if args.mode != "baselines" else None)
+    print("Exponential checkpoint division base: ", args.cdb)
 
 
 def test(args, action_space):
-    if os.path.exists(os.path.join("exdata", f"DAS_test_{args.name}")):
-        shutil.rmtree(os.path.join("exdata", f"DAS_test_{args.name}"))
+    if os.path.exists(os.path.join("exdata", f"DAS_{args.name}")):
+        shutil.rmtree(os.path.join("exdata", f"DAS_{args.name}"))
 
     options = {
         "n_checkpoints": args.n_checkpoints,
         "n_individuals": args.population_size,
         "action_space": action_space,
+        "cdb": args.cdb,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
@@ -153,11 +163,12 @@ def test(args, action_space):
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         options,
-        name=f"DAS_test_{args.name}",
+        name=f"DAS_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=False,
+        agent=args.agent,
     )
-    cocopp.main(os.path.join("exdata", f"DAS_test_{args.name}"))
+    cocopp.main(os.path.join("exdata", f"DAS_{args.name}"))
 
 
 def run_training(args, action_space):
@@ -178,6 +189,7 @@ def run_training(args, action_space):
             "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,
+            "cdb": args.cdb,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -187,6 +199,48 @@ def run_training(args, action_space):
     )
     if run is not None:
         run.finish()
+
+
+def run_CV(args, action_space):
+    if os.path.exists(os.path.join("exdata", f"DAS_CV_{args.name}")):
+        shutil.rmtree(os.path.join("exdata", f"DAS_CV_{args.name}"))
+    coco_bbob_experiment(
+        AGENTS_DICT[args.agent],
+        {
+            "n_checkpoints": args.n_checkpoints,
+            "n_individuals": args.population_size,
+            "run": None,
+            "action_space": action_space,
+            "cdb": args.cdb,
+        },
+        name=f"DAS_CV_{args.name}",
+        evaluations_multiplier=args.fe_multiplier,
+        train=True,
+        agent=args.agent,
+        mode=args.mode,
+    )
+    cocopp.main(os.path.join("exdata", f"DAS_CV_{args.name}"))
+
+
+def run_baselines(args, action_space):
+    for optimizer in action_space:
+        if os.path.exists(os.path.join("exdata", optimizer.__name__)):
+            shutil.rmtree(os.path.join("exdata", optimizer.__name__))
+        coco_bbob_experiment(
+            None,
+            {
+                "optimizer_portfolio": action_space,
+                "n_individuals": args.population_size,
+                "baselines": True,
+                "n_checkpoints": args.n_checkpoints,
+                "cdb": args.cdb,
+            },
+            name=optimizer.__name__,
+            evaluations_multiplier=args.fe_multiplier,
+            train=False,
+            agent=None,
+        )
+        cocopp.main(os.path.join("exdata", optimizer.__name__))
 
 
 def main():
@@ -203,23 +257,15 @@ def main():
         os.mkdir("models")
     if not os.path.exists("results"):
         os.mkdir("results")
-    if args.agent != "random":
-        run_training(args, action_space)
-    if args.test:
-        test(args, action_space)
-    if args.compare:
-        for optimizer in action_space:
-            if os.path.exists(os.path.join("exdata", optimizer.__name__)):
-                shutil.rmtree(os.path.join("exdata", optimizer.__name__))
-            coco_bbob_experiment(
-                optimizer,
-                {"n_individuals": args.population_size},
-                name=optimizer.__name__,
-                evaluations_multiplier=args.fe_multiplier,
-                train=False,
-                agent=None,
-            )
-            cocopp.main(os.path.join("exdata", optimizer.__name__))
+    if args.mode == "CV":
+        run_CV(args, action_space)
+    else:
+        if args.agent != "random" and args.mode != "baselines":
+            run_training(args, action_space)
+        if args.test and args.mode != "baselines":
+            test(args, action_space)
+    if args.compare or args.mode == "baselines":
+        run_baselines(args, action_space)
 
 
 if __name__ == "__main__":

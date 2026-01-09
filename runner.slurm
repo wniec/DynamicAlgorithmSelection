@@ -4,9 +4,10 @@
 #SBATCH --error=logs/experiment_%A_%a.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --mem=32G
+#SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
+#SBATCH -A plgautopt26-gpu-a100
 
 # CONFIGURATION
 ENV_PATH="$SCRATCH/DynamicAlgorithmSelection/.venv/bin/activate"
