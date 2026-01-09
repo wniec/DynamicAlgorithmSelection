@@ -8,7 +8,6 @@ from dynamicalgorithmselection.agents.agent_state import get_state_representatio
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
-    MAX_DIM,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
@@ -25,9 +24,11 @@ class Agent(Optimizer):
         self.rewards = []
         self.options = options
         self.history = []
-        self.actions: List[Type[Optimizer]] = options.get(
-            "action_space"
-        )  # + [restart_optimizer(i) for i in options.get("action_space")]
+        self.actions: List[Type[Optimizer]] = options.get("action_space") + (
+            [restart_optimizer(i) for i in options.get("action_space")]
+            if options.get("force_restarts")
+            else []
+        )
         self.name = options.get("name")
         self.cdb = options.get("cdb")
 

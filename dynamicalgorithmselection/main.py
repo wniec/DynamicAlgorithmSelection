@@ -11,7 +11,7 @@ import wandb
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
-from dynamicalgorithmselection.experiment import coco_bbob_experiment
+from dynamicalgorithmselection.experiments.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -127,6 +127,13 @@ def parse_arguments():
         help="checkpoint division exponent",
     )
 
+    parser.add_argument(
+        "-d",
+        "--force-restarts",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable selection of forcibly restarting optimizers",
+    )
     return parser.parse_args()
 
 
@@ -147,6 +154,7 @@ def print_info(args):
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
     print("Exponential checkpoint division base: ", args.cdb)
     print("State representation variant: ", args.state_representation)
+    print("Forcing restarts: ", args.force_restarts)
 
 
 def test(args, action_space):
@@ -159,6 +167,7 @@ def test(args, action_space):
         "action_space": action_space,
         "cdb": args.cdb,
         "state_representation": args.state_representation,
+        "force_restarts": args.force_restarts,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
@@ -212,6 +221,7 @@ def run_training(args, action_space):
             "action_space": action_space,
             "cdb": args.cdb,
             "state_representation": args.state_representation,
+            "force_restarts": args.force_restarts,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -235,6 +245,7 @@ def run_CV(args, action_space):
             "action_space": action_space,
             "cdb": args.cdb,
             "state_representation": args.state_representation,
+            "force_restarts": args.force_restarts,
         },
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -258,6 +269,7 @@ def run_baselines(args, action_space):
                 "n_checkpoints": args.n_checkpoints,
                 "cdb": args.cdb,
                 "state_representation": args.state_representation,
+                "force_restarts": args.force_restarts,
             },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,
