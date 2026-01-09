@@ -264,8 +264,8 @@ def coco_bbob_experiment(
     agent: Optional[str] = "policy-gradient",
 ):
     options["name"] = name
-    if mode == "CV":
-        return run_cross_validation(optimizer, options, evaluations_multiplier)
+    if mode.startswith("CV"):
+        return run_cross_validation(optimizer, options, evaluations_multiplier, is_loio=mode.endswith("LOIO"))
     elif agent == "random":
         # running random baseline
         return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)
@@ -330,12 +330,13 @@ def run_cross_validation(
     optimizer: Type[Optimizer],
     options: dict,
     evaluations_multiplier: int = 1_000,
+    is_loio: bool = True
 ):
     results_dir = os.path.join("results", f"{options.get('name')}")
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, cv_folds = _get_cv_folds(4)
+    problems_suite, cv_folds = _get_cv_folds(4, is_loio)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
     for i, (train_set, test_set) in enumerate(cv_folds):
         print(f"Running cross validation training, fold {i + 1}")
@@ -366,9 +367,10 @@ def run_cross_validation(
     return observer.result_folder
 
 
-def _get_cv_folds(n: int):
+def _get_cv_folds(n: int, is_loio: bool):
     """
     :param n:  number of cross validation folds
+    :param is_loio: boolean to indicate how train and test sets should be split (leave-instance-out/leave-problem-out).
     :return suite, list of (train set, test set) pairs:
     """
     np.random.seed(1234)
@@ -379,13 +381,22 @@ def _get_cv_folds(n: int):
         for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
     ]
     remaining_problem_ids = set(all_problem_ids)
+    remaining_function_ids = {i for i in ALL_FUNCTIONS}
     test_sets = []
     for i in range(n):
-        selected = np.random.choice(
-            list(remaining_problem_ids), size=len(all_problem_ids) // n, replace=False
-        ).tolist()
+        if is_loio:
+            selected = np.random.choice(
+                list(remaining_problem_ids), size=len(all_problem_ids) // n, replace=False
+            ).tolist()
+            remaining_problem_ids = remaining_problem_ids.difference(selected)
+        else:
+            selected_functions = np.random.choice(
+                list(remaining_function_ids), size=len(ALL_FUNCTIONS) // n, replace=False
+            ).tolist()
+            selected = [i for i in all_problem_ids if any(i.startswith(f"bbob_f{f_id:03d}") for f_id in selected_functions)]
+            remaining_function_ids = remaining_function_ids.difference(selected_functions)
         test_sets.append(selected)
-        remaining_problem_ids = remaining_problem_ids.difference(selected)
+
     return problems_suite, [
         (list(set(all_problem_ids).difference(test_set)), test_set)
         for test_set in test_sets

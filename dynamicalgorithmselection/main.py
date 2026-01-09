@@ -106,7 +106,7 @@ def parse_arguments():
         "--mode",
         type=str,
         default="easy",
-        choices=["LOIO", "hard", "easy", "CV", "baselines"],
+        choices=["LOIO", "hard", "easy", "CV-LOIO", "CV-LOPO", "baselines"],
         help="specify which agent to use",
     )
 
@@ -281,7 +281,7 @@ def main():
         os.mkdir("models")
     if not os.path.exists("results"):
         os.mkdir("results")
-    if args.mode == "CV":
+    if args.mode.startswith("CV"):
         run_CV(args, action_space)
     else:
         if args.agent != "random" and args.mode != "baselines":
