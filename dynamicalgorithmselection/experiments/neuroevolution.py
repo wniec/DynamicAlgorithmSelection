@@ -175,9 +175,9 @@ def _coco_bbob_neuroevolution_train(
     batch_size = 30
     input_dim = None
     if options.get("state_representation") == "ELA":
-        input_dim = 43
+        input_dim = 41
     elif options.get("state_representation") == "NeurELA":
-        input_dim = 16
+        input_dim = 18
     elif options.get("state_representation") == "custom":
         input_dim = BASE_STATE_SIZE + 2 * len(options.get("action_space")) + 2
 
@@ -211,7 +211,7 @@ def _coco_bbob_neuroevolution_train(
     evaluator_func = GenomeEvaluator(optimizer, options, evaluations_multiplier)
 
     with ParallelEvaluator(num_workers, evaluator_func) as pe:
-        winner = population.run(pe.evaluate, 20)
+        winner = population.run(pe.evaluate, 80)
 
     with open(os.path.join("models", f"{options.get('name')}.pkl"), "wb") as f:
         pickle.dump(winner, f)

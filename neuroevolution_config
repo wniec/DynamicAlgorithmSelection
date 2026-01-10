@@ -82,7 +82,7 @@ single_structural_mutation = False
 structural_mutation_surer  = default
 
 [DefaultSpeciesSet]
-compatibility_threshold = 3.0
+compatibility_threshold = 10000.0
 
 [DefaultStagnation]
 species_fitness_func = max
@@ -90,6 +90,6 @@ max_stagnation       = 15
 species_elitism      = 2
 
 [DefaultReproduction]
-elitism            = 2
-survival_threshold = 0.2
+elitism            = 32
+survival_threshold = 0.5
 min_species_size   = 2

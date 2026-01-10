@@ -3,6 +3,7 @@ from operator import itemgetter
 from typing import Tuple, Callable, Any
 
 import numpy as np
+import pandas as pd
 from pflacco.classical_ela_features import (
     calculate_ela_meta,  # Meta-Model (Linear/Quadratic fit)
     calculate_nbc,  # Nearest Better Clustering
@@ -14,6 +15,7 @@ from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
 
 BASE_STATE_SIZE = 57
+MAX_CONSIDERED_POPSIZE = 1000
 
 
 def get_state_representation(
@@ -26,9 +28,9 @@ def get_state_representation(
     """
     if name == "NeurELA":
         # raise NotImplementedError("NeurELA not implemented yet")
-        return lambda x, y, *args: feature_embedder(x, y)[0].mean(axis=0), 18
+        return lambda x, y, *args: feature_embedder(x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:])[0].mean(axis=0), 18
     elif name == "ELA":
-        return ela_state_representation, 43
+        return ela_state_representation, 41
     elif name == "custom":
         return lambda x, y, args: AgentState(
             x, y, n_actions, *args
@@ -44,10 +46,20 @@ def ela_state_representation(x, y, *args):
             (x - x.mean()) / (x.std() + 1e-8),
             (y - y.mean()) / (y.std() + 1e-8),
         )
+        x_norm, y_norm = x_norm[-MAX_CONSIDERED_POPSIZE:], y_norm[-MAX_CONSIDERED_POPSIZE:]
         meta_feats = calculate_ela_meta(x_norm, y_norm)
         nbc_feats = calculate_nbc(x_norm, y_norm)
         disp_feats = calculate_dispersion(x_norm, y_norm)
-        ic_feats = calculate_information_content(x_norm, y_norm)
+        df_temp = pd.DataFrame(x_norm)
+        df_temp.columns = [f"x_{i}" for i in range(df_temp.shape[1])]
+
+        df_temp['__y_target__'] = np.array(y_norm).flatten()
+
+        df_dedup = df_temp.drop_duplicates(subset=df_temp.columns[:-1], keep='first')
+
+        X_clean = df_dedup.drop(columns=['__y_target__']).reset_index(drop=True)
+        y_clean = df_dedup['__y_target__'].reset_index(drop=True)
+        ic_feats = calculate_information_content(X_clean, y_clean)
 
         all_features = {**meta_feats, **nbc_feats, **disp_feats, **ic_feats}
         return np.array(list(all_features.values()), dtype=np.float32)
