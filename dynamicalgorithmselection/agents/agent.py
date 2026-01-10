@@ -53,8 +53,11 @@ class Agent(Optimizer):
         self.state_normalizer = StateNormalizer(input_shape=(self.state_dim,))
         self.initial_value_range = None  # New variable to store the baseline
 
-    def get_state(
-        self, x: Optional[np.ndarray], y: Optional[np.ndarray], train_mode: bool
+    def get_partial_state(
+        self,
+        x: Optional[np.ndarray],
+        y: Optional[np.ndarray],
+        optimization_state: bool = False,
     ) -> np.array:
         if x is None or y is None:
             state_representation = self.state_representation(
@@ -68,10 +71,7 @@ class Agent(Optimizer):
                     self.ndim_problem,
                 ),
             )
-            state_representation = np.append(state_representation, (0, 0))
-            return self.state_normalizer.normalize(
-                state_representation, update=train_mode
-            )
+            return np.append(state_representation, (0, 0) if optimization_state else ())
         used_fe = self.n_function_evaluations / self.max_function_evaluations
         stagnation_coef = self.stagnation_count / self.max_function_evaluations
         sr_additional_params = (
@@ -82,10 +82,28 @@ class Agent(Optimizer):
             self.ndim_problem,
         )
         state_representation = self.state_representation(x, y, sr_additional_params)
-        state_representation = np.append(
-            state_representation, (used_fe, stagnation_coef)
+        return np.append(
+            state_representation,
+            (used_fe, stagnation_coef) if optimization_state else (),
         )
-        return self.state_normalizer.normalize(state_representation, update=train_mode)
+
+    def get_state(
+        self,
+        x: Optional[np.ndarray],
+        y: Optional[np.ndarray],
+        x_history: Optional[np.ndarray],
+        y_history: Optional[np.ndarray],
+        update=True,
+    ):
+        if x_history is not None and y_history is not None:
+            _, indices = np.unique(x_history, axis=0, return_index=True)
+            indices = np.sort(indices)
+            x_history = x_history[indices]
+            y_history = y_history[indices]
+        landscape_state = self.get_partial_state(x_history, y_history).flatten()
+        optimization_state = self.get_partial_state(x, y, True).flatten()
+        state = np.concatenate((landscape_state, optimization_state))
+        return self.state_normalizer.normalize(state, update)
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
@@ -117,7 +135,6 @@ class Agent(Optimizer):
             self.best_so_far_x, self.best_so_far_y = np.copy(best_x), best_y
         if worst_y > self.worst_so_far_y:
             self.worst_so_far_x, self.worst_so_far_y = np.copy(worst_x), worst_y
-        # update all settings related to early stopping
         if (self._base_early_stopping - best_y) <= self.early_stopping_threshold:
             self._counter_early_stopping += 1
         else:

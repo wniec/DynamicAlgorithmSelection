@@ -19,7 +19,7 @@ class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 1_000), device=DEVICE
+            capacity=options.get("ppo_batch_size", 2_500), device=DEVICE
         )
         self.actor = Actor(n_actions=len(self.actions), input_size=self.state_dim).to(
             DEVICE
@@ -28,7 +28,7 @@ class PolicyGradientAgent(Agent):
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-5)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-5)
 
         decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
@@ -56,7 +56,7 @@ class PolicyGradientAgent(Agent):
         self,
         buffer,
         epochs=4,
-        minibatch_size=128,
+        minibatch_size=256,
         clip_eps=0.3,
         value_coef=0.3,
         entropy_coef=0.02,
@@ -153,15 +153,18 @@ class PolicyGradientAgent(Agent):
         batch_size = self.buffer.capacity
         ppo_epochs = self.options.get("ppo_epochs", 6)
         clip_eps = self.options.get("ppo_eps", 0.3)
-        entropy_coef = 0.02
-        value_coef = self.options.get("ppo_value_coef", 0.03)
+        entropy_coef = 0.01
+        value_coef = self.options.get("ppo_value_coef", 0.3)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
         x_history, y_history = None, None
         idx = 0
         while not self._check_terminations():
-            state = self.get_state(x_history, y_history, self.train_mode).flatten()
+            full_buffer = self.buffer.size() >= self.buffer.capacity
+            state = self.get_state(
+                x, y, x_history, y_history, self.train_mode and not full_buffer
+            )
             state = torch.nan_to_num(
                 torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
             ).unsqueeze(0)
@@ -172,7 +175,7 @@ class PolicyGradientAgent(Agent):
                 value = self.critic(state.to(DEVICE))
             probs = (
                 policy.cpu().numpy().squeeze(0)
-                if self.buffer.size() >= self.buffer.capacity
+                if full_buffer
                 else np.ones_like(self.actions, dtype=float) / len(self.actions)
             )
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
@@ -245,7 +248,7 @@ class PolicyGradientAgent(Agent):
                     value_coef=value_coef,
                     entropy_coef=entropy_coef,
                 )
-            entropy_coef = max(entropy_coef * 0.99997, 1e-2)
+            entropy_coef = max(entropy_coef * 0.97, 5e-4)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (

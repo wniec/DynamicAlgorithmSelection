@@ -29,7 +29,7 @@ class NeuroevolutionAgent(Agent):
         x_history, y_history = None, None
         step_idx = 0
         while not self._check_terminations():
-            state = self.get_state(x_history, y_history, self.train_mode).flatten()
+            state = self.get_state(x, y, x_history, y_history, self.train_mode)
             state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
             policy = self.net.activate(state)
             action = np.argmax(policy)

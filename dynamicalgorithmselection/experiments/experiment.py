@@ -33,7 +33,7 @@ def dump_extreme_stats(
     cdb,
 ):
     checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals, cdb
+        n_checkpoints, max_function_evaluations, n_individuals or 100, cdb
     )
     best_case, worst_case = get_extreme_stats(
         stats, max_function_evaluations, checkpoints
