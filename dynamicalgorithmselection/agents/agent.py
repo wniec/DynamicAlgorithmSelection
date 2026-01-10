@@ -1,10 +1,10 @@
 from itertools import product
 from typing import List, Type, Optional
-
 import numpy as np
-import torch
-
-from dynamicalgorithmselection.agents.agent_state import get_state_representation
+from dynamicalgorithmselection.agents.agent_state import (
+    get_state_representation,
+    StateNormalizer,
+)
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
@@ -48,24 +48,11 @@ class Agent(Optimizer):
         self.state_representation, self.state_dim = get_state_representation(
             self.options.get("state_representation", None), len(self.actions)
         )
+        self.state_normalizer = StateNormalizer(input_shape=(self.state_dim,))
 
-    def get_initial_state(self):
-        vector = [
-            0.0,  # third weighted central moment
-            0.0,  # second weighted central moment
-            0.0,  # normalized domination of best solution
-            0.0,  # normalized radius of the smallest sphere containing entire population
-            0.5,  # normalized relative fitness difference
-            0.5,  # average_y relative to best
-            1.0,  # normalized y deviation measure
-            1.0,  # full remaining budget (max evaluations)
-            self.ndim_problem / 40,  # normalized problem dimension
-            0.0,  # stagnation count
-            *([0.0] * (49 + 2 * len(self.actions))),
-        ]
-        return torch.tensor(vector, dtype=torch.float)
-
-    def get_state(self, x: Optional[np.ndarray], y: Optional[np.ndarray]) -> np.array:
+    def get_state(
+        self, x: Optional[np.ndarray], y: Optional[np.ndarray], train_mode: bool
+    ) -> np.array:
         if x is None or y is None:
             state_representation = self.state_representation(
                 np.zeros((50, self.ndim_problem)),
@@ -78,7 +65,10 @@ class Agent(Optimizer):
                     self.ndim_problem,
                 ),
             )
-            return np.append(state_representation, (0, 0))
+            state_representation = np.append(state_representation, (0, 0))
+            return self.state_normalizer.normalize(
+                state_representation, update=train_mode
+            )
         used_fe = self.n_function_evaluations / self.max_function_evaluations
         # best_idx = sorted(range(len(y)), key=lambda i: y[i])[: self.n_individuals]
         stagnation_coef = self.stagnation_count / self.max_function_evaluations
@@ -90,7 +80,10 @@ class Agent(Optimizer):
             self.ndim_problem,
         )
         state_representation = self.state_representation(x, y, sr_additional_params)
-        return np.append(state_representation, (used_fe, stagnation_coef))
+        state_representation = np.append(
+            state_representation, (used_fe, stagnation_coef)
+        )
+        return self.state_normalizer.normalize(state_representation, update=train_mode)
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:

@@ -11,7 +11,7 @@ from pflacco.classical_ela_features import (
 )
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
-from dynamicalgorithmselection.agents.agent_utils import MAX_DIM
+from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
 
 BASE_STATE_SIZE = 57
 
@@ -77,10 +77,10 @@ class AgentState:
         best_idx = y.argmin()
         worst_idx = y.argmax()
 
-        self.best_x = x[best_idx]
-        self.best_y = y[best_idx]
-        self.worst_x = x[worst_idx]
-        self.worst_y = y[worst_idx]
+        self.best_x: np.ndarray = x[best_idx]
+        self.best_y: float = y[best_idx]
+        self.worst_x: np.ndarray = x[worst_idx]
+        self.worst_y: float = y[worst_idx]
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.choice_history = choice_history
@@ -302,3 +302,35 @@ def get_list_stats(data: list):
         min(data),
         sum(data) / len(data),
     )
+
+
+class StateNormalizer:
+    def __init__(self, input_shape):
+        self.rms = RunningMeanStd(shape=input_shape)
+
+    def normalize(self, state, update=True):
+        """
+        Normalizes the state: (state - mean) / std.
+
+        Args:
+            state (np.array): The input state vector.
+            update (bool): Whether to update the running statistics.
+                           Usually True during training, False during testing.
+        """
+        # Ensure state is an array
+        state = np.asarray(state)
+
+        # If training, update the statistics
+        if update:
+            # RunningMeanStd expects a batch, so we add a dimension if needed
+            if len(state.shape) == 1:
+                self.rms.update(state.reshape(1, -1))
+            else:
+                self.rms.update(state)
+
+        # Calculate standard deviation
+        std = np.sqrt(self.rms.var) + 1e-8
+
+        # Normalize and Clip to prevent extreme outliers (e.g., -5 to 5)
+        normalized_state = (state - self.rms.mean) / std
+        return np.clip(normalized_state, -5.0, 5.0)

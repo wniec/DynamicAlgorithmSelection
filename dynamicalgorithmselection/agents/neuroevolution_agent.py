@@ -1,6 +1,5 @@
 import numpy as np
 from dynamicalgorithmselection.agents.agent import Agent
-from dynamicalgorithmselection.agents.agent_utils import MAX_DIM
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
@@ -30,16 +29,7 @@ class NeuroevolutionAgent(Agent):
         x_history, y_history = None, None
         step_idx = 0
         while not self._check_terminations():
-            used_fe = self.n_function_evaluations / self.max_function_evaluations
-            dim_coef = self.ndim_problem / MAX_DIM
-            if x is not None and y is not None:
-                x, y = x.astype(np.float32), y.astype(np.float32)
-            state = (
-                self.get_state(x_history, y_history).flatten()
-                if self.options.get("state_representation") == "ELA"
-                else self.get_state(x, y).flatten()
-            )
-            state = np.append(state, (used_fe, dim_coef))
+            state = self.get_state(x_history, y_history, self.train_mode).flatten()
             state = np.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
             policy = self.net.activate(state)
             action = np.argmax(policy)

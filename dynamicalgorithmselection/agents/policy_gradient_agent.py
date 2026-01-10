@@ -161,7 +161,7 @@ class PolicyGradientAgent(Agent):
         x_history, y_history = None, None
         idx = 0
         while not self._check_terminations():
-            state = self.get_state(x_history, y_history).flatten()
+            state = self.get_state(x_history, y_history, self.train_mode).flatten()
             state = torch.nan_to_num(
                 torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
             ).unsqueeze(0)
