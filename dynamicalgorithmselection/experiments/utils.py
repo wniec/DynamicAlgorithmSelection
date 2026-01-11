@@ -98,7 +98,7 @@ def dump_stats(
     cdb,
 ):
     checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals, cdb
+        n_checkpoints, max_function_evaluations, n_individuals or 100, cdb
     )
     with open(
         os.path.join(

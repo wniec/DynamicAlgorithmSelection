@@ -19,16 +19,16 @@ class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 1_000), device=DEVICE
+            capacity=options.get("ppo_batch_size", 2_500), device=DEVICE
         )
         self.actor = Actor(n_actions=len(self.actions), input_size=self.state_dim).to(
             DEVICE
         )
         self.critic = Critic(input_size=self.state_dim).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
-        self.critic_loss_fn = torch.nn.MSELoss()
+        self.critic_loss_fn = torch.nn.HuberLoss(delta=1.0)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-5)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-5)
 
         decay_gamma = self.options.get("lr_decay_gamma", 0.9999)
         if p := options.get("actor_parameters", None):
@@ -56,7 +56,7 @@ class PolicyGradientAgent(Agent):
         self,
         buffer,
         epochs=4,
-        minibatch_size=128,
+        minibatch_size=256,
         clip_eps=0.3,
         value_coef=0.3,
         entropy_coef=0.02,
