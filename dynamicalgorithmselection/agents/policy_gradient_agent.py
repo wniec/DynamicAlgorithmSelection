@@ -56,7 +56,7 @@ class PolicyGradientAgent(Agent):
         self,
         buffer,
         epochs=4,
-        minibatch_size=512,
+        minibatch_size=128,
         clip_eps=0.3,
         value_coef=0.3,
         entropy_coef=0.02,
@@ -211,6 +211,14 @@ class PolicyGradientAgent(Agent):
                 y_history = np.concatenate(
                     (y_history, iteration_result.get("y_history"))
                 )
+            _, unique_indices = np.unique(x_history, axis=0, return_index=True)
+            # population deduplication - collapse case
+            unique_indices = np.sort(unique_indices)
+
+            x_history = x_history[unique_indices]
+            y_history = y_history[unique_indices]
+
+            iteration_result["x"], iteration_result["y"] = x_history, y_history
             new_best_y = self.best_so_far_y
 
             reward = self.get_reward(new_best_y, best_parent)

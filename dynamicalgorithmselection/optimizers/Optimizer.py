@@ -38,7 +38,7 @@ class Optimizer(BaseOptimizer):
             self._counter_early_stopping += 1
         else:
             self._counter_early_stopping, self._base_early_stopping = 0, y
-        self.x_history.append(x[:])
+        self.x_history.append(np.copy(x))
         self.y_history.append(float(y))
 
         return float(y)
@@ -80,8 +80,8 @@ class Optimizer(BaseOptimizer):
 
     def set_data(self, x=None, y=None, best_x=None, best_y=None, *args, **kwargs):
         self.start_conditions = {
-            "x": x,
-            "y": (y if isinstance(y, np.ndarray) else None),
+            "x": x[: self.n_individuals] if x is not None else x,
+            "y": (y[: self.n_individuals] if isinstance(y, np.ndarray) else None),
             "best_x": best_x,
             "best_y": best_y,
         }

@@ -29,6 +29,8 @@ class Agent(Optimizer):
             if options.get("force_restarts")
             else []
         )
+        if self.n_individuals is None:
+            self.min_individuals = 100
         self.name = options.get("name")
         self.cdb = options.get("cdb")
 
@@ -39,7 +41,7 @@ class Agent(Optimizer):
         self.checkpoints = get_checkpoints(
             self.n_checkpoints,
             self.max_function_evaluations,
-            self.n_individuals,
+            self.n_individuals if self.n_individuals is not None else self.min_individuals,
             self.cdb,
         )
         self.reward_normalizer = self.options.get(
@@ -49,6 +51,7 @@ class Agent(Optimizer):
             self.options.get("state_representation", None), len(self.actions)
         )
         self.state_normalizer = StateNormalizer(input_shape=(self.state_dim,))
+        self.initial_value_range = None  # New variable to store the baseline
 
     def get_state(
         self, x: Optional[np.ndarray], y: Optional[np.ndarray], train_mode: bool
@@ -70,7 +73,6 @@ class Agent(Optimizer):
                 state_representation, update=train_mode
             )
         used_fe = self.n_function_evaluations / self.max_function_evaluations
-        # best_idx = sorted(range(len(y)), key=lambda i: y[i])[: self.n_individuals]
         stagnation_coef = self.stagnation_count / self.max_function_evaluations
         sr_additional_params = (
             self.lower_boundary,
@@ -105,6 +107,10 @@ class Agent(Optimizer):
             )
 
     def _save_fitness(self, best_x, best_y, worst_x, worst_y):
+        if self.initial_value_range is None:
+            # Calculate the gap in the initial random population
+            # We use max(..., 1e-5) to avoid division by zero
+            self.initial_value_range = max(worst_y - best_y, 1e-5)
         self.best_parent = best_y
         self.history.append(best_y)
         if best_y < self.best_so_far_y:
@@ -168,16 +174,19 @@ class Agent(Optimizer):
         raise NotImplementedError
 
     def get_reward(self, new_best_y, old_best_y):
-        value_range = max(
-            self.worst_so_far_y
-            - (self.best_so_far_y if old_best_y == float("inf") else old_best_y),
-            1e-5,
-        )
+        # 1. Handle Infinity (First step)
+        if old_best_y == float("inf"):
+            return 0.0
+
+        # 2. Calculate raw improvement
         improvement = old_best_y - new_best_y
 
-        if len(self.choices_history) > 1:
-            reward = improvement / value_range
-        else:
-            return 0.0
-        reward = min(reward, 1.0)
-        return reward
+        # 3. Normalize using the FIXED Initial Range
+        # This is the key change: we divide by the constant 'initial_yardstick'
+        # instead of the ever-growing 'worst_so_far - best_so_far'
+        reward = improvement / self.initial_value_range
+
+        # 4. Clip for PPO stability (Standard practice)
+        # We allow rewards up to 10.0 (meaning 10x the initial improvement)
+        # but prevent massive spikes.
+        return np.clip(reward, -1.0, 10.0)

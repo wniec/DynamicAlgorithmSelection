@@ -5,7 +5,6 @@ from dynamicalgorithmselection.optimizers.ES.ES import ES
 class LMCMAES(ES):
     def __init__(self, problem, options):
         ES.__init__(self, problem, options | {"sigma": 1.5})
-        self.individuals_at_start = self.n_individuals
         self.m = options.get(
             "m", 4 + int(3 * np.log(self.ndim_problem))
         )  # number of direction vectors
@@ -259,7 +258,7 @@ class LMCMAES(ES):
                 i: loc.get(i, None) for i in ("cf", "best_so_far_y", "p_s", "p_c")
             }
         else:
-            indices = np.argsort(y)[: self.individuals_at_start]
+            indices = np.argsort(y)[: self.n_individuals]
             loc = locals()
             start_conditions = {
                 i: loc.get(i, None) for i in ("p_c", "s", "vm", "pm", "b", "d")

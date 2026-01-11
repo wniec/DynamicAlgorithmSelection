@@ -2,7 +2,7 @@ import argparse
 import os
 import pickle
 import shutil
-from typing import List, Type
+from typing import List, Type, Optional
 import cocopp
 import neat
 import torch
@@ -40,8 +40,8 @@ def parse_arguments():
     parser.add_argument(
         "-m",
         "--population_size",
-        type=int,
-        default=20,
+        type=Optional[int],
+        default=None,
         help="Population size (default: 20)",
     )
     parser.add_argument(
