@@ -41,7 +41,9 @@ class Agent(Optimizer):
         self.checkpoints = get_checkpoints(
             self.n_checkpoints,
             self.max_function_evaluations,
-            self.n_individuals if self.n_individuals is not None else self.min_individuals,
+            self.n_individuals
+            if self.n_individuals is not None
+            else self.min_individuals,
             self.cdb,
         )
         self.reward_normalizer = self.options.get(
@@ -100,9 +102,13 @@ class Agent(Optimizer):
             indices = np.sort(indices)
             x_history = x_history[indices]
             y_history = y_history[indices]
-        landscape_state = self.get_partial_state(x_history, y_history).flatten()
-        optimization_state = self.get_partial_state(x, y, True).flatten()
-        state = np.concatenate((landscape_state, optimization_state))
+
+        if self.options.get("state_representation") != "ELA":
+            landscape_state = self.get_partial_state(x_history, y_history).flatten()
+            optimization_state = self.get_partial_state(x, y, True).flatten()
+            state = np.concatenate((landscape_state, optimization_state))
+        else:
+            state = self.get_partial_state(x_history, y_history, True).flatten()
         return self.state_normalizer.normalize(state, update)
 
     def _print_verbose_info(self, fitness, y):

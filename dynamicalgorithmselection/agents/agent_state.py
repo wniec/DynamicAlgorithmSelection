@@ -31,7 +31,9 @@ def get_state_representation(
             x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
         )[0].mean(axis=0), 34
     elif name == "ELA":
-        return lambda x, y, *args: ela_state_representation(x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]), 80
+        return lambda x, y, *args: ela_state_representation(
+            x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
+        ), 41
     elif name == "custom":
         return lambda x, y, args: AgentState(
             x, y, n_actions, *args
