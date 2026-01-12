@@ -260,10 +260,15 @@ def run_baselines(args, action_space):
     for optimizer in action_space:
         if os.path.exists(os.path.join("exdata", optimizer.__name__)):
             shutil.rmtree(os.path.join("exdata", optimizer.__name__))
+
+        print(f"--- Running Baseline: {optimizer.__name__} ---")
+
+        # 2. Run experiment for ONLY this optimizer
+        # NOTICE: We pass `[optimizer]` instead of `action_space` here.
         coco_bbob_experiment(
             None,
             {
-                "optimizer_portfolio": action_space,
+                "optimizer_portfolio": [optimizer],  # <--- FIXED: List of 1
                 "n_individuals": args.population_size,
                 "baselines": True,
                 "n_checkpoints": args.n_checkpoints,
