@@ -142,10 +142,10 @@ class StepwiseRewardNormalizer:
         self.clip = clip_reward
         self.stats = [RunningMeanStd(shape=()) for _ in range(max_steps + 1)]
 
-    def normalize(self, reward, step_idx):
+    def normalize(self, reward, step_idx, update=True):
         idx = min(step_idx, self.max_steps - 1)
-
-        self.stats[idx].update(np.array([reward]))
+        if update:
+            self.stats[idx].update(np.array([reward]))
 
         mean = self.stats[idx].mean
         std = np.sqrt(self.stats[idx].var) + 1e-8

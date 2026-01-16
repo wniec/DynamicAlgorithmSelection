@@ -57,5 +57,7 @@ def run_training(
         results, agent_state = coco_bbob_single_function(
             optimizer, problem_instance, options
         )
+        options["state_normalizer"] = agent_state["state_normalizer"]
+        options["reward_normalizer"] = agent_state["reward_normalizer"]
         options["buffer"] = agent_state["buffer"]
         problem_instance.free()

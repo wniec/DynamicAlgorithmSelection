@@ -197,19 +197,12 @@ class Agent(Optimizer):
         raise NotImplementedError
 
     def get_reward(self, new_best_y, old_best_y):
-        # 1. Handle Infinity (First step)
         if old_best_y == float("inf"):
             return 0.0
 
-        # 2. Calculate raw improvement
         improvement = old_best_y - new_best_y
 
-        # 3. Normalize using the FIXED Initial Range
-        # This is the key change: we divide by the constant 'initial_yardstick'
-        # instead of the ever-growing 'worst_so_far - best_so_far'
+        return float(improvement > 1e-3)
         reward = improvement / self.initial_value_range
 
-        # 4. Clip for PPO stability (Standard practice)
-        # We allow rewards up to 10.0 (meaning 10x the initial improvement)
-        # but prevent massive spikes.
         return np.clip(reward, -1.0, 10.0)

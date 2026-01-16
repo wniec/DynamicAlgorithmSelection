@@ -49,6 +49,7 @@ def run_cross_validation(
                 "buffer": None,
                 "model_parameters": None,
                 "optimizer": None,
+                "state_normalizer": None,
                 "reward_normalizer": None,
             }
         )

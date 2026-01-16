@@ -138,6 +138,7 @@ class PolicyGradientAgent(Agent):
             "buffer": self.buffer,
             "mean_rewards": self.mean_rewards,
             "reward_normalizer": self.reward_normalizer,
+            "state_normalizer": self.state_normalizer
         }
         last_50_mean = sum(self.mean_rewards[-50:]) / len(self.mean_rewards[-50:])
         if self.best_50_mean > last_50_mean:
@@ -225,7 +226,7 @@ class PolicyGradientAgent(Agent):
             new_best_y = self.best_so_far_y
 
             reward = self.get_reward(new_best_y, best_parent)
-            reward = self.reward_normalizer.normalize(reward, idx)
+            reward = self.reward_normalizer.normalize(reward, idx, update=self.train_mode and not full_buffer)
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})
