@@ -18,6 +18,7 @@ class RandomAgent(Agent):
         fitness = Optimizer.optimize(self, fitness_function)
 
         x, y = None, None
+        x_history, y_history = None, None
         iteration_result = {"x": x, "y": y}
         while not self._check_terminations():
             action = np.random.choice(len(self.actions))
@@ -31,7 +32,25 @@ class RandomAgent(Agent):
             optimizer.n_function_evaluations = self.n_function_evaluations
             optimizer._n_generations = 0
             iteration_result = self.iterate(iteration_result, optimizer)
+
             x, y = iteration_result.get("x"), iteration_result.get("y")
+            if x_history is None:
+                x_history = iteration_result.get("x_history")
+                y_history = iteration_result.get("y_history")
+            else:
+                x_history = np.concatenate(
+                    (x_history, iteration_result.get("x_history"))
+                )
+                y_history = np.concatenate(
+                    (y_history, iteration_result.get("y_history"))
+                )
+            _, unique_indices = np.unique(x_history, axis=0, return_index=True)
+            # population deduplication - collapse case
+            unique_indices = np.sort(unique_indices)
+
+            x_history = x_history[unique_indices]
+            y_history = y_history[unique_indices]
+            iteration_result["x"], iteration_result["y"] = x_history, y_history
 
             self.n_function_evaluations = optimizer.n_function_evaluations
             self._print_verbose_info(fitness, y)
