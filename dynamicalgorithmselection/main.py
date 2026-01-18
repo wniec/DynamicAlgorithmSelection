@@ -2,15 +2,16 @@ import argparse
 import os
 import pickle
 import shutil
-from typing import List, Type
+from typing import List, Type, Optional
 import cocopp
+import neat
 import torch
 import wandb
 
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
-from dynamicalgorithmselection.experiment import coco_bbob_experiment
+from dynamicalgorithmselection.experiments.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -39,8 +40,8 @@ def parse_arguments():
     parser.add_argument(
         "-m",
         "--population_size",
-        type=int,
-        default=20,
+        type=Optional[int],
+        default=None,
         help="Population size (default: 20)",
     )
     parser.add_argument(
@@ -105,18 +106,34 @@ def parse_arguments():
         "--mode",
         type=str,
         default="easy",
-        choices=["LOIO", "hard", "easy", "CV", "baselines"],
+        choices=["LOIO", "hard", "easy", "CV-LOIO", "CV-LOPO", "baselines"],
         help="specify which agent to use",
+    )
+
+    parser.add_argument(
+        "-r",
+        "--state-representation",
+        type=str,
+        default="ELA",
+        choices=["ELA", "NeurELA", "custom"],
+        help="specify which state representation to use",
     )
 
     parser.add_argument(
         "-x",
         "--cdb",
         type=float,
-        default=2.0,
+        default=1.0,
         help="checkpoint division exponent",
     )
 
+    parser.add_argument(
+        "-d",
+        "--force-restarts",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable selection of forcibly restarting optimizers",
+    )
     return parser.parse_args()
 
 
@@ -136,6 +153,8 @@ def print_info(args):
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
     print("Exponential checkpoint division base: ", args.cdb)
+    print("State representation variant: ", args.state_representation)
+    print("Forcing restarts: ", args.force_restarts)
 
 
 def test(args, action_space):
@@ -147,11 +166,21 @@ def test(args, action_space):
         "n_individuals": args.population_size,
         "action_space": action_space,
         "cdb": args.cdb,
+        "state_representation": args.state_representation,
+        "force_restarts": args.force_restarts,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
+        config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            "neuroevolution_config",
+        )
         with open(os.path.join("models", f"DAS_train_{args.name}.pkl"), "rb") as f:
-            net = pickle.load(f)
+            winner_genome = pickle.load(f)
+            net = neat.nn.FeedForwardNetwork.create(winner_genome, config)
         options.update({"net": net})
     elif args.agent == "policy-gradient":
         options.update(
@@ -167,6 +196,7 @@ def test(args, action_space):
         evaluations_multiplier=args.fe_multiplier,
         train=False,
         agent=args.agent,
+        mode=args.mode,
     )
     cocopp.main(os.path.join("exdata", f"DAS_{args.name}"))
 
@@ -190,6 +220,8 @@ def run_training(args, action_space):
             "run": run,
             "action_space": action_space,
             "cdb": args.cdb,
+            "state_representation": args.state_representation,
+            "force_restarts": args.force_restarts,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -212,6 +244,8 @@ def run_CV(args, action_space):
             "run": None,
             "action_space": action_space,
             "cdb": args.cdb,
+            "state_representation": args.state_representation,
+            "force_restarts": args.force_restarts,
         },
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -234,6 +268,8 @@ def run_baselines(args, action_space):
                 "baselines": True,
                 "n_checkpoints": args.n_checkpoints,
                 "cdb": args.cdb,
+                "state_representation": args.state_representation,
+                "force_restarts": args.force_restarts,
             },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,
@@ -257,7 +293,7 @@ def main():
         os.mkdir("models")
     if not os.path.exists("results"):
         os.mkdir("results")
-    if args.mode == "CV":
+    if args.mode.startswith("CV"):
         run_CV(args, action_space)
     else:
         if args.agent != "random" and args.mode != "baselines":

@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 
-from dynamicalgorithmselection.agents.agent_utils import (
+from dynamicalgorithmselection.agents.ppo_utils import (
     RolloutBuffer,
     DEVICE,
     compute_gae,
@@ -19,10 +19,12 @@ class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 10_000), device=DEVICE
+            capacity=options.get("ppo_batch_size", 1_000), device=DEVICE
         )
-        self.actor = Actor(n_actions=len(self.actions)).to(DEVICE)
-        self.critic = Critic(n_actions=len(self.actions)).to(DEVICE)
+        self.actor = Actor(n_actions=len(self.actions), input_size=self.state_dim).to(
+            DEVICE
+        )
+        self.critic = Critic(input_size=self.state_dim).to(DEVICE)
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
@@ -50,14 +52,11 @@ class PolicyGradientAgent(Agent):
             self.critic_optimizer, gamma=decay_gamma
         )
 
-        self.actor.reset_memory()
-        self.critic.reset_memory()
-
     def ppo_update(
         self,
         buffer,
         epochs=4,
-        minibatch_size=512,
+        minibatch_size=128,
         clip_eps=0.3,
         value_coef=0.3,
         entropy_coef=0.02,
@@ -75,10 +74,10 @@ class PolicyGradientAgent(Agent):
             values.detach().cpu(),
             last_value,
         )
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        # returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         advantages = advantages.to(DEVICE)
         returns = returns.to(DEVICE)
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        # advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         dataset_size = states.shape[0]
 
         for epoch in range(epochs):
@@ -138,6 +137,7 @@ class PolicyGradientAgent(Agent):
             "critic_optimizer": self.critic_optimizer.state_dict(),
             "buffer": self.buffer,
             "mean_rewards": self.mean_rewards,
+            "reward_normalizer": self.reward_normalizer,
         }
         last_50_mean = sum(self.mean_rewards[-50:]) / len(self.mean_rewards[-50:])
         if self.best_50_mean > last_50_mean:
@@ -151,20 +151,25 @@ class PolicyGradientAgent(Agent):
         fitness = Optimizer.optimize(self, fitness_function)
 
         batch_size = self.buffer.capacity
-        ppo_epochs = self.options.get("ppo_epochs", 4)
+        ppo_epochs = self.options.get("ppo_epochs", 6)
         clip_eps = self.options.get("ppo_eps", 0.3)
-        entropy_coef = 0.1
-        value_coef = self.options.get("ppo_value_coef", 0.3)
+        entropy_coef = 0.02
+        value_coef = self.options.get("ppo_value_coef", 0.03)
 
         x, y, reward = None, None, None
         iteration_result = {"x": x, "y": y}
+        x_history, y_history = None, None
+        idx = 0
         while not self._check_terminations():
-            state = self.get_state(x, y).unsqueeze(0)
-            state = torch.nan_to_num(state, nan=0.5, neginf=0.0, posinf=1.0)
+            state = self.get_state(x_history, y_history, self.train_mode).flatten()
+            state = torch.nan_to_num(
+                torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
+            ).unsqueeze(0)
+            state = state.to(dtype=torch.float32)
+
             with torch.no_grad():
                 policy = self.actor(state.to(DEVICE))
                 value = self.critic(state.to(DEVICE))
-
             probs = (
                 policy.cpu().numpy().squeeze(0)
                 if self.buffer.size() >= self.buffer.capacity
@@ -172,6 +177,13 @@ class PolicyGradientAgent(Agent):
             )
             probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
             probs /= probs.sum()
+            if self.run is not None:
+                self.run.log(
+                    {
+                        "normalized entropy": np.sum(-probs * np.log(probs))
+                        / np.log(len(probs))
+                    }
+                )
 
             action = np.random.choice(len(probs), p=probs)
             self.choices_history.append(action)
@@ -188,9 +200,29 @@ class PolicyGradientAgent(Agent):
             best_parent = self.best_so_far_y
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")
+
+            if x_history is None:
+                x_history = iteration_result.get("x_history")
+                y_history = iteration_result.get("y_history")
+            else:
+                x_history = np.concatenate(
+                    (x_history, iteration_result.get("x_history"))
+                )
+                y_history = np.concatenate(
+                    (y_history, iteration_result.get("y_history"))
+                )
+            _, unique_indices = np.unique(x_history, axis=0, return_index=True)
+            # population deduplication - collapse case
+            unique_indices = np.sort(unique_indices)
+
+            x_history = x_history[unique_indices]
+            y_history = y_history[unique_indices]
+
+            iteration_result["x"], iteration_result["y"] = x_history, y_history
             new_best_y = self.best_so_far_y
 
             reward = self.get_reward(new_best_y, best_parent)
+            reward = self.reward_normalizer.normalize(reward, idx)
             self.rewards.append(reward)
             if self.run:
                 self.run.log({"reward": reward})
@@ -213,7 +245,7 @@ class PolicyGradientAgent(Agent):
                     value_coef=value_coef,
                     entropy_coef=entropy_coef,
                 )
-            entropy_coef = max(entropy_coef * 0.9999, 1e-4)
+            entropy_coef = max(entropy_coef * 0.99997, 1e-2)
             self._print_verbose_info(fitness, y)
             if optimizer.best_so_far_y >= self.best_so_far_y:
                 self.stagnation_count += (
@@ -223,4 +255,5 @@ class PolicyGradientAgent(Agent):
                 self.stagnation_count = 0
 
             self.n_function_evaluations = optimizer.n_function_evaluations
+            idx += 1
         return self._collect(fitness, self.best_so_far_y)

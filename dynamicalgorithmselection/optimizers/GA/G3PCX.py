@@ -26,7 +26,7 @@ class G3PCX(GA):
                 size=(self.n_individuals, self.ndim_problem),
             )
         )  # population
-        y = np.empty((self.n_individuals,)) if recalculate_y else y  # fitness
+        y = np.zeros((self.n_individuals,)) if recalculate_y else y  # fitness
         if recalculate_y:
             for i in range(self.n_individuals):
                 if self._check_terminations():
@@ -44,8 +44,8 @@ class G3PCX(GA):
             parents[0] = self._elitist
         # (Step 2:) generate offspring from the chosen parents using a recombination scheme
         xx, yy = (
-            np.empty((self.n_offsprings, self.ndim_problem)),
-            np.empty((self.n_offsprings,)),
+            np.zeros((self.n_offsprings, self.ndim_problem)),
+            np.zeros((self.n_offsprings,)),
         )
         g = np.mean(x[parents], axis=0)  # mean vector of the chosen parents
         for i in range(self.n_offsprings):
@@ -54,8 +54,8 @@ class G3PCX(GA):
             p = self._elitist  # for faster local convergence
             d = g - x[p]
             d_norm = np.linalg.norm(d)
-            d_mean = np.empty((self.n_parents - 1,))
-            diff = np.empty(
+            d_mean = np.zeros((self.n_parents - 1,))
+            diff = np.zeros(
                 (self.n_parents - 1, self.ndim_problem)
             )  # for distance computation
             for ii, j in enumerate(parents[1:]):

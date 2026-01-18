@@ -1,39 +1,106 @@
+import warnings
 from operator import itemgetter
-import numpy as np
+from typing import Tuple, Callable, Any
 
-from dynamicalgorithmselection.agents.agent_utils import (
-    distance,
-    inverse_scaling,
-    get_list_stats,
+import numpy as np
+import pandas as pd
+from pflacco.classical_ela_features import (
+    calculate_ela_meta,  # Meta-Model (Linear/Quadratic fit)
+    calculate_nbc,  # Nearest Better Clustering
+    calculate_dispersion,  # Dispersion of good solutions
+    calculate_information_content,  # Information Content
 )
+
+from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
+from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
+
+BASE_STATE_SIZE = 57
+MAX_CONSIDERED_POPSIZE = 2000
+
+
+def get_state_representation(
+    name: str, n_actions: int
+) -> Tuple[Callable[[np.ndarray, np.ndarray, Any], np.ndarray], int]:
+    """
+    :param name: name of the state representation mode
+    :param n_actions: number of actions to take
+    :return: function used to infer state representation from population and dimensionality of that state representation
+    """
+    if name == "NeurELA":
+        # raise NotImplementedError("NeurELA not implemented yet")
+        return lambda x, y, *args: feature_embedder(
+            x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
+        )[0].mean(axis=0), 18
+    elif name == "ELA":
+        return ela_state_representation, 41
+    elif name == "custom":
+        return lambda x, y, args: AgentState(
+            x, y, n_actions, *args
+        ).get_state(), BASE_STATE_SIZE + 2 * n_actions + 2
+    else:
+        raise ValueError("incorrect state representation")
+
+
+def ela_state_representation(x, y, *args):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        x_norm, y_norm = (
+            (x - x.mean()) / (x.std() + 1e-8),
+            (y - y.mean()) / (y.std() + 1e-8),
+        )
+        x_norm, y_norm = (
+            x_norm[-MAX_CONSIDERED_POPSIZE:],
+            y_norm[-MAX_CONSIDERED_POPSIZE:],
+        )
+        meta_feats = calculate_ela_meta(x_norm, y_norm)
+        nbc_feats = calculate_nbc(x_norm, y_norm)
+        disp_feats = calculate_dispersion(x_norm, y_norm)
+        df_temp = pd.DataFrame(x_norm)
+        df_temp.columns = [f"x_{i}" for i in range(df_temp.shape[1])]
+
+        df_temp["__y_target__"] = np.array(y_norm).flatten()
+
+        df_dedup = df_temp.drop_duplicates(subset=df_temp.columns[:-1], keep="first")
+
+        X_clean = df_dedup.drop(columns=["__y_target__"]).reset_index(drop=True)
+        y_clean = df_dedup["__y_target__"].reset_index(drop=True)
+        ic_feats = calculate_information_content(X_clean, y_clean)
+
+        all_features = {**meta_feats, **nbc_feats, **disp_feats, **ic_feats}
+        return np.array(list(all_features.values()), dtype=np.float32)
 
 
 class AgentState:
     def __init__(
         self,
-        x,
-        y,
-        best_x,
-        best_y,
+        x: np.ndarray,
+        y: np.ndarray,
+        n_actions,
         lower_bound,
         upper_bound,
-        worst_x,
-        worst_y,
-        y_history,
         choice_history,
-        n_actions,
+        n_checkpoints,
+        n_dim_problem,
     ):
         self.x = x
         self.y = y
-        self.best_x = best_x
-        self.best_y = best_y
-        self.worst_x = worst_x
-        self.worst_y = worst_y
+        self.n_actions = n_actions
+        self.n_checkpoints = n_checkpoints
+        self.ndim_problem = n_dim_problem
+
+        if x is None:
+            return
+
+        best_idx = y.argmin()
+        worst_idx = y.argmax()
+
+        self.best_x: np.ndarray = x[best_idx]
+        self.best_y: float = y[best_idx]
+        self.worst_x: np.ndarray = x[worst_idx]
+        self.worst_y: float = y[worst_idx]
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
-        self.y_history = y_history
         self.choice_history = choice_history
-        self.n_actions = n_actions
 
         self.y_normalized = (y - y.mean()) / (y.std() + 1e-6)
         self.max_distance = distance(self.lower_bound, self.upper_bound)
@@ -50,7 +117,7 @@ class AgentState:
         self.normalized_x = (x - x.mean(axis=0)) / (x.std() + 1e-8)
         self.x_std = 2 * x.std(axis=0) / (self.upper_bound - self.lower_bound)
 
-        self.mean_historic_y = sum(self.y_history) / (len(self.y_history) or 1)
+        self.mean_historic_y = y.mean()
         self.last_action_index = (
             self.choice_history[-1] if self.choice_history else None
         )
@@ -165,8 +232,8 @@ class AgentState:
         max_possible_std = self.best_y - middle_y
         # dividing twice by std instead of variance due to numerical instability issues
         return (
-            sum((i - self.mean_historic_y) ** 2 for i in self.y_history)
-            / len(self.y_history)
+            sum((i - self.mean_historic_y) ** 2 for i in self.y)
+            / len(self.y)
             / max_possible_std
             / max_possible_std
         )
@@ -187,6 +254,100 @@ class AgentState:
         return same_action_counter
 
     def mean_falling_behind(self) -> float:
-        return max((self.y - self.best_y).mean() / (
-            max((self.y.max() - self.best_y), 1e-8)
-        ), 0)
+        return (self.y - self.best_y).mean() / (
+            max((self.y.max() - self.best_y), (self.y - self.best_y).mean()) or 1
+        )
+
+    def get_initial_state(self):
+        vector = [
+            0.0,  # third weighted central moment
+            0.0,  # second weighted central moment
+            0.0,  # normalized domination of best solution
+            0.0,  # normalized radius of the smallest sphere containing entire population
+            0.5,  # normalized relative fitness difference
+            0.5,  # average_y relative to best
+            1.0,  # normalized y deviation measure
+            1.0,  # full remaining budget (max evaluations)
+            0.0,  # stagnation count
+            *([0.0] * (51 + 2 * self.n_actions)),
+            self.ndim_problem / 40,  # normalized problem dimension
+        ]
+        return np.array(vector, dtype=np.float32)
+
+    def get_state(self) -> np.ndarray:
+        if len(self.x) < 1:
+            return self.get_initial_state()
+        else:
+            vector = [
+                self.get_weighted_central_moment(3),
+                self.get_weighted_central_moment(2),
+                self.mean_falling_behind(),
+                self.population_relative_radius(),
+                self.relative_improvement(),
+                self.y_historic_improvement(),
+                self.y_deviation(),
+                *self.distances_from_best(),
+                *self.distances_from_mean(),
+                *self.relative_y_differences(),
+                *self.last_action_encoded,
+                self.same_action_counter() / self.n_checkpoints,
+                *self.choices_frequency,
+                self.explored_volume() ** (1 / self.ndim_problem),  # searched volume
+                *self.x_standard_deviation_stats(),
+                *self.normalized_x_stats(),
+                self.choice_entropy(),
+                self.normalized_distance(self.best_x, self.worst_x),
+                *self.y_difference_stats(),
+                *self.slopes_stats(),
+                self.ndim_problem / MAX_DIM,
+            ]
+        return np.array(vector, dtype=np.float32)
+
+
+def distance(x0: np.ndarray, x1: np.ndarray) -> float:
+    return np.linalg.norm(x0 - x1)
+
+
+def inverse_scaling(x):
+    # Monotonic increacing in [0, inf) function that is bounded in [0, 1)
+    return x / (x + 5)
+
+
+def get_list_stats(data: list):
+    return (
+        max(data),
+        min(data),
+        sum(data) / len(data),
+    )
+
+
+class StateNormalizer:
+    def __init__(self, input_shape):
+        self.rms = RunningMeanStd(shape=input_shape)
+
+    def normalize(self, state, update=True):
+        """
+        Normalizes the state: (state - mean) / std.
+
+        Args:
+            state (np.array): The input state vector.
+            update (bool): Whether to update the running statistics.
+                           Usually True during training, False during testing.
+        """
+        # Ensure state is an array
+        state = np.asarray(state)
+
+        # If training, update the statistics
+        if update:
+            # RunningMeanStd expects a batch, so we add a dimension if needed
+            if len(state.shape) == 1:
+                self.rms.update(state.reshape(1, -1))
+            else:
+                self.rms.update(state)
+
+        # Calculate standard deviation
+        std = np.sqrt(self.rms.var) + 1e-8
+
+        # Normalize and Clip to prevent extreme outliers (e.g., -5 to 5)
+        normalized_state = (state - self.rms.mean) / std
+        return np.clip(normalized_state, -5.0, 5.0)

@@ -1,10 +1,16 @@
 from itertools import product
-
+from typing import List, Type, Optional
 import numpy as np
-import torch
-from dynamicalgorithmselection.agents.agent_state import AgentState
-from dynamicalgorithmselection.agents.agent_utils import get_checkpoints
+from dynamicalgorithmselection.agents.agent_state import (
+    get_state_representation,
+    StateNormalizer,
+)
+from dynamicalgorithmselection.agents.agent_utils import (
+    get_checkpoints,
+    StepwiseRewardNormalizer,
+)
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
+from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
 
 
 class Agent(Optimizer):
@@ -18,7 +24,13 @@ class Agent(Optimizer):
         self.rewards = []
         self.options = options
         self.history = []
-        self.actions = options.get("action_space")
+        self.actions: List[Type[Optimizer]] = options.get("action_space") + (
+            [restart_optimizer(i) for i in options.get("action_space")]
+            if options.get("force_restarts")
+            else []
+        )
+        if self.n_individuals is None:
+            self.min_individuals = 100
         self.name = options.get("name")
         self.cdb = options.get("cdb")
 
@@ -29,72 +41,51 @@ class Agent(Optimizer):
         self.checkpoints = get_checkpoints(
             self.n_checkpoints,
             self.max_function_evaluations,
-            self.n_individuals,
+            self.n_individuals if self.n_individuals is not None else self.min_individuals,
             self.cdb,
         )
+        self.reward_normalizer = self.options.get(
+            "reward_normalizer", StepwiseRewardNormalizer(max_steps=self.n_checkpoints)
+        )
+        self.state_representation, self.state_dim = get_state_representation(
+            self.options.get("state_representation", None), len(self.actions)
+        )
+        self.state_normalizer = StateNormalizer(input_shape=(self.state_dim,))
+        self.initial_value_range = None  # New variable to store the baseline
 
-    def get_initial_state(self):
-        vector = [
-            0.0,  # third weighted central moment
-            0.0,  # second weighted central moment
-            0.0,  # normalized domination of best solution
-            0.0,  # normalized radius of the smallest sphere containing entire population
-            0.5,  # normalized relative fitness difference
-            0.5,  # average_y relative to best
-            1.0,  # normalized y deviation measure
-            1.0,  # full remaining budget (max evaluations)
-            self.ndim_problem / 40,  # normalized problem dimension
-            0.0,  # stagnation count
-            *([0.0] * (49 + 2 * len(self.actions))),
-        ]
-        return torch.tensor(vector, dtype=torch.float)
-
-    def get_state(self, x: np.ndarray, y: np.ndarray) -> np.array:
+    def get_state(
+        self, x: Optional[np.ndarray], y: Optional[np.ndarray], train_mode: bool
+    ) -> np.array:
         if x is None or y is None:
-            return self.get_initial_state()
-        else:
-            state = AgentState(
-                x,
-                y,
-                self.best_so_far_x,
-                self.best_so_far_y,
-                self.lower_boundary,
-                self.upper_boundary,
-                self.worst_so_far_x,
-                self.worst_so_far_y,
-                self.history,
-                self.choices_history,
-                len(self.actions),
+            state_representation = self.state_representation(
+                np.zeros((50, self.ndim_problem)),
+                np.zeros((50,)),
+                (
+                    self.lower_boundary,
+                    self.upper_boundary,
+                    self.choices_history,
+                    self.n_checkpoints,
+                    self.ndim_problem,
+                ),
             )
-            used_fe_ratio = self.n_function_evaluations / self.max_function_evaluations
-
-            vector = [
-                state.get_weighted_central_moment(3),
-                state.get_weighted_central_moment(2),
-                state.mean_falling_behind(),
-                state.population_relative_radius(),
-                state.relative_improvement(),
-                state.y_historic_improvement(),
-                state.y_deviation(),
-                1 - used_fe_ratio,
-                self.ndim_problem
-                / 40,  # maximum dimensionality in this COCO benchmark is 40
-                self.stagnation_count / self.max_function_evaluations,
-                *state.distances_from_best(),
-                *state.distances_from_mean(),
-                *state.relative_y_differences(),
-                *state.last_action_encoded,
-                state.same_action_counter() / self.n_checkpoints,
-                *state.choices_frequency,
-                state.explored_volume() ** (1 / self.ndim_problem),  # searched volume
-                *state.x_standard_deviation_stats(),
-                *state.normalized_x_stats(),
-                state.choice_entropy(),
-                state.normalized_distance(self.best_so_far_x, self.worst_so_far_x),
-                *state.y_difference_stats(),
-                *state.slopes_stats(),
-            ]
-        return torch.tensor(vector, dtype=torch.float)
+            state_representation = np.append(state_representation, (0, 0))
+            return self.state_normalizer.normalize(
+                state_representation, update=train_mode
+            )
+        used_fe = self.n_function_evaluations / self.max_function_evaluations
+        stagnation_coef = self.stagnation_count / self.max_function_evaluations
+        sr_additional_params = (
+            self.lower_boundary,
+            self.upper_boundary,
+            self.choices_history,
+            self.n_checkpoints,
+            self.ndim_problem,
+        )
+        state_representation = self.state_representation(x, y, sr_additional_params)
+        state_representation = np.append(
+            state_representation, (used_fe, stagnation_coef)
+        )
+        return self.state_normalizer.normalize(state_representation, update=train_mode)
 
     def _print_verbose_info(self, fitness, y):
         if self.saving_fitness:
@@ -116,6 +107,10 @@ class Agent(Optimizer):
             )
 
     def _save_fitness(self, best_x, best_y, worst_x, worst_y):
+        if self.initial_value_range is None:
+            # Calculate the gap in the initial random population
+            # We use max(..., 1e-5) to avoid division by zero
+            self.initial_value_range = max(worst_y - best_y, 1e-5)
         self.best_parent = best_y
         self.history.append(best_y)
         if best_y < self.best_so_far_y:
@@ -143,7 +138,10 @@ class Agent(Optimizer):
             results["worst_so_far_x"],
             results["worst_so_far_y"],
         )  # fitness evaluation
-        return optimizer.get_data(self.n_individuals)
+        return optimizer.get_data(self.n_individuals) | {
+            "x_history": results["x_history"],
+            "y_history": results["y_history"],
+        }
 
     def _collect(self, fitness, y=None):
         if y is not None:
@@ -176,16 +174,19 @@ class Agent(Optimizer):
         raise NotImplementedError
 
     def get_reward(self, new_best_y, old_best_y):
-        value_range = max(
-            self.worst_so_far_y
-            - (self.best_so_far_y if old_best_y == float("inf") else old_best_y),
-            1e-5,
-        )
+        # 1. Handle Infinity (First step)
+        if old_best_y == float("inf"):
+            return 0.0
+
+        # 2. Calculate raw improvement
         improvement = old_best_y - new_best_y
 
-        if len(self.choices_history) > 1:
-            reward = improvement / value_range
-        else:
-            return 0.0
-        reward = min(reward, 1.0)
-        return reward
+        # 3. Normalize using the FIXED Initial Range
+        # This is the key change: we divide by the constant 'initial_yardstick'
+        # instead of the ever-growing 'worst_so_far - best_so_far'
+        reward = improvement / self.initial_value_range
+
+        # 4. Clip for PPO stability (Standard practice)
+        # We allow rewards up to 10.0 (meaning 10x the initial improvement)
+        # but prevent massive spikes.
+        return np.clip(reward, -1.0, 10.0)

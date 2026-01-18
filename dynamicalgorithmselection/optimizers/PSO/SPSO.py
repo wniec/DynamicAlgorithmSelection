@@ -27,6 +27,6 @@ class SPSO(PSO):
                 p_x[i], p_y[i] = x[i], y[i]
         self._n_generations += 1
         self.results.update(
-            {i: locals()[i] for i in ("v", "x", "y", "p_x", "p_y", "n_x")}
+            {"v": v, "x": x, "y": y, "p_x": p_x, "p_y": p_y, "n_x": n_x}
         )
         return v, x, y, p_x, p_y, n_x

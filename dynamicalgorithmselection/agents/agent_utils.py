@@ -1,183 +1,6 @@
-from operator import itemgetter
-
 import numpy as np
-import torch
-from torch import nn
-import torch.nn.init as init
 
-GAMMA = 0.3
-HIDDEN_SIZE = 144
-BASE_STATE_SIZE = 59
-LAMBDA = 0.9
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-
-class RolloutBuffer:
-    def __init__(self, capacity, device=DEVICE):
-        self.capacity = capacity
-        self.device = device
-        self.clear()
-
-    def clear(self):
-        self.states = []
-        self.actions = []
-        self.rewards = []
-        self.dones = []
-        self.log_probs = []
-        self.values = []
-
-    def add(self, state, action, reward, done, log_prob, value):
-        self.states.append(state)
-        self.actions.append(action)
-        self.rewards.append(reward)
-        self.dones.append(done)
-        self.log_probs.append(log_prob)
-        self.values.append(value)
-
-    def size(self):
-        return len(self.states)
-
-    def as_tensors(self):
-        import torch
-
-        states = torch.stack(self.states)[-self.capacity :].to(self.device)
-        actions = torch.tensor(self.actions, dtype=torch.long, device=self.device)[
-            -self.capacity :
-        ]
-        old_log_probs = torch.stack(self.log_probs).to(self.device)[-self.capacity :]
-        values = torch.stack(self.values).squeeze(-1).to(self.device)[-self.capacity :]
-        rewards = self.rewards[-self.capacity :]
-        dones = self.dones[-self.capacity :]
-        return states, actions, old_log_probs, values, rewards, dones
-
-
-def compute_gae(rewards, dones, values, last_value):
-    T = len(rewards)
-    returns = torch.zeros(T, device=DEVICE)
-    advantages = torch.zeros(T, device=DEVICE)
-    prev_return = last_value
-    prev_value = last_value
-    prev_adv = 0.0
-    for t in reversed(range(T)):
-        mask = 1.0 - float(dones[t])
-        delta = rewards[t] + GAMMA * prev_value * mask - values[t]
-        adv = delta + GAMMA * LAMBDA * prev_adv * mask
-        advantages[t] = adv
-        prev_adv = adv
-        prev_value = values[t]
-        prev_return = rewards[t] + GAMMA * prev_return * mask
-        returns[t] = prev_return
-    return returns, advantages
-
-
-class LSTMModule(nn.Module):
-    def __init__(self, input_size, hidden_size, lstm_layers=1):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.lstm_layers = lstm_layers
-        self.lstm = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=lstm_layers,
-            batch_first=True,
-        )
-        self.hidden = None
-
-    def reset_memory(self, batch_size=1, device=DEVICE):
-        self.hidden = (
-            torch.zeros(self.lstm_layers, batch_size, self.hidden_size, device=device),
-            torch.zeros(self.lstm_layers, batch_size, self.hidden_size, device=device),
-        )
-
-    def forward_lstm(self, x):
-        batch_size = x.size(0)
-        device = x.device
-
-        # Reinitialize hidden state if needed
-        if self.hidden is None or self.hidden[0].size(1) != batch_size:
-            self.reset_memory(batch_size=batch_size, device=device)
-        else:
-            # Detach hidden state from previous graph
-            self.hidden = (self.hidden[0].detach(), self.hidden[1].detach())
-
-        out, self.hidden = self.lstm(x, self.hidden)
-        return out
-
-
-class Actor(LSTMModule):
-    def __init__(self, n_actions: int, dropout_p: float = 0.35, lstm_layers: int = 1):
-        super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
-        self.head = nn.Sequential(
-            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p),
-            nn.Linear(HIDDEN_SIZE, n_actions),
-            nn.Softmax(dim=-1),
-        )
-        orthogonal_init(self)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() == 2:
-            x_seq = x.unsqueeze(1)
-        elif x.dim() == 3:
-            x_seq = x
-        else:
-            raise ValueError(f"Unsupported input tensor shape for Actor: {x.shape}")
-        x_seq = x_seq.to(next(self.parameters()).device)
-        lstm_out = self.forward_lstm(x_seq)
-        last = lstm_out[:, -1, :]
-        return self.head(last)
-
-
-class Critic(LSTMModule):
-    def __init__(self, n_actions: int, dropout_p: float = 0.35, lstm_layers: int = 1):
-        super().__init__(BASE_STATE_SIZE + n_actions * 2, HIDDEN_SIZE, lstm_layers)
-        self.head = nn.Sequential(
-            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p),
-            nn.Linear(HIDDEN_SIZE, 1),
-        )
-        orthogonal_init(self)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() == 2:
-            x_seq = x.unsqueeze(1)
-        elif x.dim() == 3:
-            x_seq = x
-        else:
-            raise ValueError(f"Unsupported input tensor shape for Critic: {x.shape}")
-        x_seq = x_seq.to(next(self.parameters()).device)
-        lstm_out = self.forward_lstm(x_seq)
-        last = lstm_out[:, -1, :]
-        return self.head(last)
-
-
-class ActorLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, advantage, log_prob):
-        return -advantage * log_prob
-
-
-def distance(x0: np.ndarray, x1: np.ndarray) -> float:
-    return np.linalg.norm(x0 - x1)
-
-
-def inverse_scaling(x):
-    # Monotonic increacing in [0, inf) function that is bounded in [0, 1)
-    return x / (x + 5)
-
-
-def get_list_stats(data: list):
-    return (
-        max(data),
-        min(data),
-        sum(data) / len(data),
-    )
+MAX_DIM = 40
 
 
 def get_runtime_stats(
@@ -234,7 +57,9 @@ def get_extreme_stats(
         for fe, fitness in run:
             all_improvements.append((fe, algorithm, fitness))
 
-    all_improvements.sort(key=itemgetter(0))  # sort by fe - increasing
+    all_improvements.sort(
+        key=lambda x: (x[0], -x[2])
+    )  # sort by fe - increasing and fitness - increasing
     current_fitness = float("inf")
 
     best_history = []
@@ -284,13 +109,47 @@ def get_checkpoints(
     return checkpoints
 
 
-def orthogonal_init(module):
-    for name, param in module.named_parameters():
-        if "weight_ih" in name:  # LSTM input -> hidden
-            init.orthogonal_(param.data)
-        elif "weight_hh" in name:  # LSTM hidden -> hidden
-            init.orthogonal_(param.data)
-        elif "weight" in name and param.dim() >= 2:
-            init.orthogonal_(param.data)  # Linear layers
-        elif "bias" in name:
-            param.data.zero_()
+class RunningMeanStd:
+    def __init__(self, epsilon=1e-4, shape=()):
+        self.mean = np.zeros(shape, "float64")
+        self.var = np.ones(shape, "float64")
+        self.count = epsilon
+
+    def update(self, x):
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+
+        self.mean = new_mean
+        self.var = new_var
+        self.count = tot_count
+
+
+class StepwiseRewardNormalizer:
+    def __init__(self, max_steps, clip_reward=10.0):
+        self.max_steps = max_steps
+        self.clip = clip_reward
+        self.stats = [RunningMeanStd(shape=()) for _ in range(max_steps + 1)]
+
+    def normalize(self, reward, step_idx):
+        idx = min(step_idx, self.max_steps - 1)
+
+        self.stats[idx].update(np.array([reward]))
+
+        mean = self.stats[idx].mean
+        std = np.sqrt(self.stats[idx].var) + 1e-8
+
+        normalized_reward = (reward - mean) / std
+
+        return np.clip(normalized_reward, -self.clip, self.clip)
