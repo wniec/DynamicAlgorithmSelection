@@ -191,6 +191,7 @@ class LMCMAES(ES):
 
     def optimize(self, fitness_function=None, args=None):
         fitness = ES.optimize(self, fitness_function)
+        self.sigma = self.start_conditions.get("sigma", self.sigma)
         mean = self.start_conditions.get("mean", None)
         x = self.start_conditions.get("x", None)
         p_c = self.start_conditions.get("p_c", None)
@@ -263,12 +264,12 @@ class LMCMAES(ES):
             start_conditions = {
                 i: loc.get(i, None) for i in ("p_c", "s", "vm", "pm", "b", "d")
             }
+            mean = x[indices].mean(axis=0)
+            stds = np.std(x[indices], axis=0)
+            sigma = np.max(stds)
+            sigma = max(sigma, 1e-8)
             start_conditions.update(
-                {
-                    "x": x[indices],
-                    "y": y[indices],
-                    "mean": x.mean(axis=0),
-                }
+                {"x": x[indices], "y": y[indices], "mean": mean, "sigma": sigma}
             )
             self.start_conditions = start_conditions
         self.best_so_far_x = kwargs.get("best_x", None)

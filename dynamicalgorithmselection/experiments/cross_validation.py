@@ -44,15 +44,12 @@ def run_cross_validation(
             problem_ids=test_set,
             observer=observer,
         )
-        options.update(
-            {
-                "buffer": None,
-                "model_parameters": None,
-                "optimizer": None,
-                "state_normalizer": None,
-                "reward_normalizer": None,
-            }
-        )
+        options.pop("buffer", None)
+        options.pop("model_parameters", None)
+        options.pop("optimizer", None)
+        options.pop("state_normalizer", None)
+        options.pop("reward_normalizer", None)
+
     return observer.result_folder
 
 

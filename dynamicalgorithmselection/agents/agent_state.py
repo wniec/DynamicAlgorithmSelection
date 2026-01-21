@@ -8,7 +8,8 @@ from pflacco.classical_ela_features import (
     calculate_ela_meta,  # Meta-Model (Linear/Quadratic fit)
     calculate_nbc,  # Nearest Better Clustering
     calculate_dispersion,  # Dispersion of good solutions
-    calculate_information_content,  # Information Content
+    calculate_information_content,
+    calculate_ela_distribution,  # Information Content
 )
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
@@ -33,7 +34,7 @@ def get_state_representation(
     elif name == "ELA":
         return lambda x, y, *args: ela_state_representation(
             x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
-        ), 41
+        ), 45
     elif name == "custom":
         return lambda x, y, args: AgentState(
             x, y, n_actions, *args
@@ -50,13 +51,24 @@ def ela_state_representation(x, y, *args):
             (y - y.mean()) / (y.std() + 1e-8),
         )
         meta_feats = calculate_ela_meta(x_norm, y_norm)
+        ela_distr = (
+            calculate_ela_distribution(x_norm, y_norm)
+            if (y**2).sum() > 0
+            else {str(i): 0 for i in range(4)}
+        )
         nbc_feats = calculate_nbc(x_norm, y_norm)
         disp_feats = calculate_dispersion(x_norm, y_norm)
         df_temp = pd.DataFrame(x_norm)
         df_temp.columns = [f"x_{i}" for i in range(df_temp.shape[1])]
         ic_feats = calculate_information_content(x_norm, y_norm)
 
-        all_features = {**meta_feats, **nbc_feats, **disp_feats, **ic_feats}
+        all_features = {
+            **meta_feats,
+            **nbc_feats,
+            **disp_feats,
+            **ic_feats,
+            **ela_distr,
+        }
         return np.array(list(all_features.values()), dtype=np.float32)
 
 

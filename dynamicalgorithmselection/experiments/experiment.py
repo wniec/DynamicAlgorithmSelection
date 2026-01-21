@@ -159,9 +159,9 @@ def _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode):
 
 
 def run_comparison(
-        optimizer_portfolio: list[Type[Optimizer]],
-        options: dict,
-        evaluations_multiplier: int,
+    optimizer_portfolio: list[Type[Optimizer]],
+    options: dict,
+    evaluations_multiplier: int,
 ):
     observers = {}
     suites = {}
