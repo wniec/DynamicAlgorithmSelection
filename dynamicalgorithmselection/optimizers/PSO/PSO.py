@@ -117,38 +117,67 @@ class PSO(Optimizer):
         return self._collect(fitness, y)
 
     def set_data(
-        self,
-        x=None,
-        y=None,
-        v=None,
-        p_x=None,
-        p_y=None,
-        n_x=None,
-        best_x=None,
-        best_y=None,
-        *args,
-        **kwargs,
+            self,
+            x=None,
+            y=None,
+            v=None,
+            p_x=None,
+            p_y=None,
+            n_x=None,
+            best_x=None,
+            best_y=None,
+            *args,
+            **kwargs,
     ):
-        if x is not None and len(x) >= self.n_individuals:
-            start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
-            if not isinstance(x, np.ndarray) or not isinstance(y, np.ndarray):
-                self.start_conditions = start_conditions
-                return
-            start_conditions["x"] = x
-            start_conditions["y"] = y
-            if v is None:
-                v = self.rng_initialization.uniform(
+        start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
+
+        if x is None or y is None:
+            self.start_conditions = start_conditions
+            return
+
+        if len(x) >= self.n_individuals:
+            indices = np.argsort(y)[: self.n_individuals]
+
+            x_subset = x[indices]
+            y_subset = y[indices]
+
+            if v is not None and len(v) >= self.n_individuals:
+                v_subset = v[indices]
+                v_subset = np.clip(v_subset, self._min_v, self._max_v)
+            else:
+                v_subset = self.rng_initialization.uniform(
                     self._min_v, self._max_v, size=self._swarm_shape
                 )
+
+            p_x_subset = (
+                p_x[indices]
+                if (p_x is not None and len(p_x) >= self.n_individuals)
+                else np.copy(x_subset)
+            )
+            p_y_subset = (
+                p_y[indices]
+                if (p_y is not None and len(p_y) >= self.n_individuals)
+                else np.copy(y_subset)
+            )
+            n_x_subset = (
+                n_x[indices]
+                if (n_x is not None and len(n_x) >= self.n_individuals)
+                else np.copy(x_subset)
+            )
+
+            if best_x is not None:
                 random_idx = np.random.randint(self.n_individuals)
-                p_x, p_y, n_x = np.copy(x), np.copy(y), np.copy(x)
-                p_x[random_idx] = best_x
-                p_y[random_idx] = best_y
-                n_x[random_idx] = best_x
-            start_conditions["v"] = v
-            start_conditions["p_x"] = p_x
-            start_conditions["n_x"] = n_x
-            start_conditions["p_y"] = p_y
+                p_x_subset[random_idx] = best_x
+                p_y_subset[random_idx] = best_y if best_y is not None else float('inf')
+                n_x_subset[random_idx] = best_x
+
+            start_conditions["x"] = x_subset
+            start_conditions["y"] = y_subset
+            start_conditions["v"] = v_subset
+            start_conditions["p_x"] = p_x_subset
+            start_conditions["p_y"] = p_y_subset
+            start_conditions["n_x"] = n_x_subset
+
             self.start_conditions = start_conditions
         self.best_so_far_x = best_x
-        self.best_so_far_y = best_y or float("inf")
+        self.best_so_far_y = best_y if best_y is not None else float("inf")
