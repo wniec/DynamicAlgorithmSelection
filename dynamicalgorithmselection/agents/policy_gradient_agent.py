@@ -56,7 +56,7 @@ class PolicyGradientAgent(Agent):
         elif mean_kl < self.target_kl / 1.5:
             current_lr *= 1.5
 
-        current_lr = np.clip(current_lr, 1e-5, 1e-3)
+        current_lr = np.clip(current_lr, 5e-7, 3e-5)
 
         for param_group in self.actor_optimizer.param_groups:
             param_group["lr"] = current_lr

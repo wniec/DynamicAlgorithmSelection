@@ -231,10 +231,20 @@ class LMCMAES(ES):
             mean, x, p_c, s, vm, pm, b, d, y = self.restart_reinitialize(
                 mean, x, p_c, s, vm, pm, b, d, y
             )
-
+        self.results.update(
+            {
+                "p_c": p_c,
+                "s": s,
+                "vm": vm,
+                "pm": pm,
+                "b": b,
+                "d": d,
+                "x": x,
+                "y": y,
+                "mean": mean,
+            }
+        )
         results = self._collect(fitness, y, mean)
-        results["p_c"] = p_c
-        results["s"] = s
         return results
 
     def set_data(
