@@ -171,8 +171,7 @@ class Agent(Optimizer):
         )
 
         return optimizer.get_data(self.n_individuals) | {
-            "x_history": results["x_history"],
-            "y_history": results["y_history"],
+            i: results[i] for i in results if i.endswith("_history")
         }
 
     def _log_run_metrics(self):

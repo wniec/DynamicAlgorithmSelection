@@ -93,7 +93,7 @@ class LMCMAES(ES):
                 mutation_step = np.zeros_like(mutation_step)
 
             x[k] = mean + mutation_step
-            y[k] = self._evaluate_fitness(x[k], args)
+            y[k] = self._evaluate_fitness(x[k], args, pm=pm, vm=vm, b=b)
             sign *= -1
         return x, y
 

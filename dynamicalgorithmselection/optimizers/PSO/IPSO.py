@@ -6,6 +6,8 @@ from dynamicalgorithmselection.optimizers.PSO.PSO import PSO
 
 
 class IPSO(PSO):
+    start_condition_parameters = ["v", "x", "y", "p_x", "p_y"]
+
     def __init__(self, problem, options):
         PSO.__init__(self, problem, options)
         self.n_individuals = 1  # minimum of swarm size
@@ -48,7 +50,13 @@ class IPSO(PSO):
             for i in range(self.n_individuals):
                 if self._check_terminations():
                     return v, x, y, p_x, p_y
-                y[i] = self._evaluate_fitness(x[i], args)
+                y[i] = self._evaluate_fitness(
+                    x[i],
+                    args,
+                    v=v[i],
+                    p_x=p_x[i],
+                    p_y=float("inf"),  # Pass inf as history doesn't exist yet
+                )
             p_y = np.copy(y)
         return v, x, y, p_x, p_y
 
@@ -110,18 +118,19 @@ class IPSO(PSO):
         return self._collect(fitness, y)
 
     def set_data(
-            self,
-            x=None,
-            y=None,
-            v=None,
-            p_x=None,
-            p_y=None,
-            best_x=None,
-            best_y=None,
-            *args,
-            **kwargs,
+        self,
+        x=None,
+        y=None,
+        v=None,
+        p_x=None,
+        p_y=None,
+        best_x=None,
+        best_y=None,
+        *args,
+        **kwargs,
     ):
-        start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y")}
+        start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
+
         if x is None or y is None:
             self.start_conditions = start_conditions
             return
@@ -132,39 +141,28 @@ class IPSO(PSO):
             x_subset = x[indices]
             y_subset = y[indices]
 
-            if v is not None and len(v) >= self.n_individuals:
-                v_subset = v[indices]
-                v_subset = np.clip(v_subset, self._min_v, self._max_v)
-            else:
-                v_subset = self.rng_initialization.uniform(
+            if v is None:
+                v = self.rng_initialization.uniform(
                     self._min_v, self._max_v, size=self._swarm_shape
                 )
 
-            p_x_subset = (
-                p_x[indices]
-                if (p_x is not None and len(p_x) >= self.n_individuals)
-                else np.copy(x_subset)
-            )
-            p_y_subset = (
-                p_y[indices]
-                if (p_y is not None and len(p_y) >= self.n_individuals)
-                else np.copy(y_subset)
-            )
+            p_x = p_x if (p_x is not None) else np.copy(x_subset)
+            p_y = p_y if (p_y is not None) else np.copy(y_subset)
 
             if best_x is not None:
                 random_idx = np.random.randint(self.n_individuals)
-                p_x_subset[random_idx] = best_x
-                p_y_subset[random_idx] = best_y if best_y is not None else float('inf')
+                p_x[random_idx] = best_x
+                p_y[random_idx] = best_y if best_y is not None else float("inf")
 
             start_conditions["x"] = x_subset
             start_conditions["y"] = y_subset
-            start_conditions["v"] = v_subset
-            start_conditions["p_x"] = p_x_subset
-            start_conditions["p_y"] = p_y_subset
+            start_conditions["v"] = v
+            start_conditions["p_x"] = p_x
+            start_conditions["p_y"] = p_y
 
             self.start_conditions = start_conditions
-        self.best_so_far_x = kwargs.get("best_x", None)
-        self.best_so_far_y = kwargs.get("best_y", float("inf"))
+        self.best_so_far_x = best_x
+        self.best_so_far_y = best_y if best_y is not None else float("inf")
 
     def get_data(self, n_individuals: Optional[int] = None):
         pop_data = ["x", "v", "y", "p_x", "p_y"]
