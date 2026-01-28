@@ -2,6 +2,8 @@ import json
 import os
 from typing import Type, Optional
 
+import cocopp
+
 from dynamicalgorithmselection.experiments.core import run_testing, run_training
 from dynamicalgorithmselection.experiments.cross_validation import run_cross_validation
 from dynamicalgorithmselection.experiments.neuroevolution import (
@@ -33,7 +35,7 @@ def dump_extreme_stats(
     cdb,
 ):
     checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals, cdb
+        n_checkpoints, max_function_evaluations, n_individuals or 100, cdb
     )
     best_case, worst_case = get_extreme_stats(
         stats, max_function_evaluations, checkpoints
@@ -161,42 +163,55 @@ def run_comparison(
     options: dict,
     evaluations_multiplier: int,
 ):
-    for optimizer in optimizer_portfolio:
-        results_dir = os.path.join("results", f"{optimizer.__name__}")
-        if not os.path.exists(results_dir):
-            os.mkdir(results_dir)
-    best_dir = os.path.join(
-        "results", "_".join(i.__name__ for i in optimizer_portfolio) + "_best"
-    )
-    if not os.path.exists(best_dir):
-        os.mkdir(best_dir)
-    worst_dir = os.path.join(
-        "results", "_".join(i.__name__ for i in optimizer_portfolio) + "_worst"
-    )
-    if not os.path.exists(worst_dir):
-        os.mkdir(worst_dir)
-    cocoex.utilities.MiniPrint()
-    _, problem_ids = get_suite("all", False)
-    suites = {
-        optimizer.__name__: get_suite("all", False)[0]
-        for optimizer in optimizer_portfolio
-    }
-    for problem_id in tqdm(problem_ids):
-        max_fe = None
-        stats = {}
-        for optimizer in optimizer_portfolio:
-            problem_instance = suites[optimizer.__name__].get_problem(problem_id)
-            max_fe = evaluations_multiplier * problem_instance.dimension
+    observers = {}
+    suites = {}
+    results_folders = []
 
+    print("Initializing Observers...")
+    for optimizer in optimizer_portfolio:
+        optimizer_name = optimizer.__name__
+
+        results_dir = os.path.join("results", f"{optimizer_name}")
+        os.makedirs(results_dir, exist_ok=True)
+
+        observer = cocoex.Observer("bbob", "result_folder: " + optimizer_name)
+        observers[optimizer_name] = observer
+        results_folders.append("exdata/" + optimizer_name)  # Adjust path if needed
+
+        suites[optimizer_name] = get_suite("all", False)[0]
+
+    # Create directories for best/worst JSON stats
+    portfolio_name = "_".join(i.__name__ for i in optimizer_portfolio)
+    for ext in ["best", "worst"]:
+        os.makedirs(os.path.join("results", f"{portfolio_name}_{ext}"), exist_ok=True)
+
+    cocoex.utilities.MiniPrint()
+
+    # We use the problem_ids from the first suite to iterate
+    _, problem_ids = get_suite("all", False)
+
+    for problem_id in tqdm(problem_ids, desc="Evaluating Problems"):
+        stats = {}
+        max_fe = None
+
+        for optimizer in optimizer_portfolio:
+            optimizer_name = optimizer.__name__
+
+            problem_instance = suites[optimizer_name].get_problem(problem_id)
+            problem_instance.observe_with(observers[optimizer_name])
+
+            max_fe = evaluations_multiplier * problem_instance.dimension
             options["max_function_evaluations"] = max_fe
             options["train_mode"] = False
             options["verbose"] = False
             results = coco_bbob_single_function(optimizer, problem_instance, options)
-            problem_instance.free()
-            stats[optimizer.__name__] = results["fitness_history"]
+
+            problem_instance.free()  # Flushes data to disk
+
+            stats[optimizer_name] = results["fitness_history"]
             dump_stats(
                 results[0] if isinstance(results, tuple) else results,
-                optimizer.__name__,
+                optimizer_name,
                 problem_id,
                 max_fe,
                 options.get("n_checkpoints"),

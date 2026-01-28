@@ -4,6 +4,8 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 class PSO(Optimizer):
+    start_condition_parameters = ["v", "x", "y", "p_x", "p_y", "n_x"]
+
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
         if (
@@ -53,21 +55,28 @@ class PSO(Optimizer):
                 self.initial_upper_boundary,
                 size=self._swarm_shape,
             )
-        )  # positions
-        y = y if y is not None else np.empty((self.n_individuals,))  # fitness
+        )
+        y = y if y is not None else np.empty((self.n_individuals,))
         p_x, p_y = (
             p_x if p_x is not None else np.copy(x),
             p_y if p_y is not None else np.copy(y),
-        )  # personally previous-best positions and fitness
-        n_x = (
-            n_x if n_x is not None else np.copy(x)
-        )  # neighborly previous-best positions
+        )
+        n_x = n_x if n_x is not None else np.copy(x)
 
         if recalculate_y:
             for i in range(self.n_individuals):
                 if self._check_terminations():
                     return v, x, y, p_x, p_y, n_x
-                y[i] = self._evaluate_fitness(x[i], args)
+
+                # [Modified] Pass generic kwargs to _evaluate_fitness
+                y[i] = self._evaluate_fitness(
+                    x[i],
+                    args,
+                    v=v[i],
+                    p_x=p_x[i],
+                    p_y=float("inf"),  # Pass inf as history doesn't exist yet
+                    n_x=n_x[i],
+                )
             p_y = np.copy(y)
         return v, x, y, p_x, p_y, n_x
 
@@ -129,26 +138,40 @@ class PSO(Optimizer):
         *args,
         **kwargs,
     ):
-        if x is not None and len(x) >= self.n_individuals:
-            start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
-            if not isinstance(x, np.ndarray) or not isinstance(y, np.ndarray):
-                self.start_conditions = start_conditions
-                return
-            start_conditions["x"] = x
-            start_conditions["y"] = y
+        start_conditions = {i: None for i in ("x", "y", "v", "p_x", "p_y", "n_x")}
+
+        if x is None or y is None:
+            self.start_conditions = start_conditions
+            return
+
+        if len(x) >= self.n_individuals:
+            indices = np.argsort(y)[: self.n_individuals]
+
+            x_subset = x[indices]
+            y_subset = y[indices]
+
             if v is None:
                 v = self.rng_initialization.uniform(
                     self._min_v, self._max_v, size=self._swarm_shape
                 )
+
+            p_x = p_x if (p_x is not None) else np.copy(x_subset)
+            p_y = p_y if (p_y is not None) else np.copy(y_subset)
+            n_x = n_x if (n_x is not None) else np.copy(x_subset)
+
+            if best_x is not None:
                 random_idx = np.random.randint(self.n_individuals)
-                p_x, p_y, n_x = np.copy(x), np.copy(y), np.copy(x)
                 p_x[random_idx] = best_x
-                p_y[random_idx] = best_y
+                p_y[random_idx] = best_y if best_y is not None else float("inf")
                 n_x[random_idx] = best_x
+
+            start_conditions["x"] = x_subset
+            start_conditions["y"] = y_subset
             start_conditions["v"] = v
             start_conditions["p_x"] = p_x
-            start_conditions["n_x"] = n_x
             start_conditions["p_y"] = p_y
+            start_conditions["n_x"] = n_x
+
             self.start_conditions = start_conditions
         self.best_so_far_x = best_x
-        self.best_so_far_y = best_y or float("inf")
+        self.best_so_far_y = best_y if best_y is not None else float("inf")
