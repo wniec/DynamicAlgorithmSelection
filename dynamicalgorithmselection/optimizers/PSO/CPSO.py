@@ -33,7 +33,7 @@ class CPSO(PSO):
                     return v, x, y, p_x, p_y, n_x, fitness
                 n_x[i, j] = p_x[np.argmin(p_y), j]
                 v[i, j] = (
-                    self._w[min(self._n_generations, len(self._w)-1)] * v[i, j]
+                    self._w[min(self._n_generations, len(self._w) - 1)] * v[i, j]
                     + self.cognition * cognition_rand[i, j] * (p_x[i, j] - x[i, j])
                     + self.society * society_rand[i, j] * (n_x[i, j] - x[i, j])
                 )  # velocity update

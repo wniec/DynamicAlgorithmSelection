@@ -37,6 +37,9 @@ class PolicyGradientAgent(Agent):
         self.tau = self.options.get("critic_target_tau", 0.05)
         self.target_kl = 0.02
 
+        # Initialize history dict
+        self.iterations_history = {"x": None, "y": None}
+
     def _load_parameters(self, options):
         """Loads state dicts if provided in options."""
         if p := options.get("actor_parameters", None):
@@ -202,10 +205,14 @@ class PolicyGradientAgent(Agent):
 
         return results, agent_state
 
-    def _prepare_state_tensor(self, x, y, x_history, y_history, full_buffer):
-        """Generates and normalizes the state tensor."""
+    def _prepare_state_tensor(self, x, y, full_buffer):
+        """Generates and normalizes the state tensor using self.iterations_history."""
         state = self.get_state(
-            x, y, x_history, y_history, self.train_mode and not full_buffer
+            x,
+            y,
+            self.iterations_history["x"],
+            self.iterations_history["y"],
+            self.train_mode and not full_buffer,
         )
         state = torch.nan_to_num(
             torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
@@ -251,28 +258,22 @@ class PolicyGradientAgent(Agent):
         # Run optimization step
         return self.iterate(iteration_result, optimizer), optimizer
 
-    def _update_history(self, iteration_result, x_history, y_history):
-        """Merges new results into history and performs deduplication."""
-        new_x = iteration_result.get("x_history")
-        new_y = iteration_result.get("y_history")
+    def _update_history(self, iteration_result):
+        """Merges new results into self.iterations_history"""
+        for key, val in iteration_result.items():
+            if key.endswith("_history") and key != "fitness_history":
+                variable_name = key[: -len("_history")]
+                appended_val = iteration_result.get(key)
+                historic_val = self.iterations_history.get(variable_name)
 
-        if x_history is None:
-            x_history, y_history = new_x, new_y
-        else:
-            x_history = np.concatenate((x_history, new_x))
-            y_history = np.concatenate((y_history, new_y))
+                if historic_val is None:
+                    self.iterations_history[variable_name] = appended_val
+                else:
+                    self.iterations_history[variable_name] = np.concatenate(
+                        (historic_val, appended_val)
+                    )
 
-        # Deduplication
-        _, unique_indices = np.unique(x_history, axis=0, return_index=True)
-        unique_indices = np.sort(unique_indices)
-
-        x_history = x_history[unique_indices]
-        y_history = y_history[unique_indices]
-
-        iteration_result["x"] = x_history
-        iteration_result["y"] = y_history
-
-        return x_history, y_history, iteration_result
+        return iteration_result
 
     def _process_step_reward(self, best_parent, idx, full_buffer):
         """Calculates and normalizes the reward."""
@@ -300,15 +301,16 @@ class PolicyGradientAgent(Agent):
         entropy_coef = 0.01
 
         # State initialization
-        x, y, x_history, y_history = None, None, None, None
+        x, y = None, None
+        self.iterations_history = {"x": None, "y": None}
         iteration_result = {"x": x, "y": y}
         idx = 0
-
+        last_used_params = []
         while not self._check_terminations():
             full_buffer = self.buffer.size() >= self.buffer.capacity
 
-            # 1. Prepare State
-            state = self._prepare_state_tensor(x, y, x_history, y_history, full_buffer)
+            # 1. Prepare State (uses self.iterations_history internally)
+            state = self._prepare_state_tensor(x, y, full_buffer)
 
             # 2. Select Action
             action, log_prob, value = self._select_action(state, full_buffer)
@@ -316,13 +318,18 @@ class PolicyGradientAgent(Agent):
 
             # 3. Execute Optimization Step
             best_parent = self.best_so_far_y
+
             iteration_result, optimizer = self._execute_action(action, iteration_result)
+            if len(last_used_params) > 0:
+                for key in last_used_params:
+                    if key in self.iterations_history and key not in iteration_result:
+                        self.iterations_history.pop(key)
+            last_used_params = optimizer.start_condition_parameters
             x, y = iteration_result.get("x"), iteration_result.get("y")
 
-            # 4. Update and Deduplicate History
-            x_history, y_history, iteration_result = self._update_history(
-                iteration_result, x_history, y_history
-            )
+            # 4. Update and Deduplicate History (updates self.iterations_history internally)
+
+            iteration_result = self._update_history(iteration_result)
 
             # 5. Process Reward
             reward = self._process_step_reward(best_parent, idx, full_buffer)

@@ -4,9 +4,21 @@ from dynamicalgorithmselection.optimizers.ES.ES import ES
 
 
 class CMAES(ES):
+    start_condition_parameters = [
+        "mean",
+        "x",
+        "p_c",
+        "p_s",
+        "cm",
+        "e_ve",
+        "e_va",
+        "d",
+        "y",
+    ]
+
     def __init__(self, problem, options):
         self.options = options
-        ES.__init__(self, problem, options | {'sigma': 1.5})
+        ES.__init__(self, problem, options | {"sigma": 1.5})
         assert self.n_individuals >= 2
         self._w, self._mu_eff, self._mu_eff_minus = (
             None,
@@ -36,7 +48,7 @@ class CMAES(ES):
     def _set_c_c(self):
         """Set decay rate of evolution path for the rank-one update of CMA."""
         return (4.0 + self._mu_eff / self.ndim_problem) / (
-                self.ndim_problem + 4.0 + 2.0 * self._mu_eff / self.ndim_problem
+            self.ndim_problem + 4.0 + 2.0 * self._mu_eff / self.ndim_problem
         )
 
     def _set_c_w(self):
@@ -45,33 +57,33 @@ class CMAES(ES):
             self._alpha_cov
             * (1.0 / 4.0 + self._mu_eff + 1.0 / self._mu_eff - 2.0)
             / (
-                    np.square(self.ndim_problem + 2.0)
-                    + self._alpha_cov * self._mu_eff / 2.0
+                np.square(self.ndim_problem + 2.0)
+                + self._alpha_cov * self._mu_eff / 2.0
             ),
         )
 
     def _set_d_sigma(self):
         return (
-                1.0
-                + 2.0
-                * np.maximum(
-            0.0, np.sqrt((self._mu_eff - 1.0) / (self.ndim_problem + 1.0)) - 1.0
-        )
-                + self.c_s
+            1.0
+            + 2.0
+            * np.maximum(
+                0.0, np.sqrt((self._mu_eff - 1.0) / (self.ndim_problem + 1.0)) - 1.0
+            )
+            + self.c_s
         )
 
     def initialize(
-            self,
-            is_restart=False,
-            mean=None,
-            x=None,
-            p_c=None,
-            p_s=None,
-            cm=None,
-            e_ve=None,
-            e_va=None,
-            d=None,
-            y=None,
+        self,
+        is_restart=False,
+        mean=None,
+        x=None,
+        p_c=None,
+        p_s=None,
+        cm=None,
+        e_ve=None,
+        e_va=None,
+        d=None,
+        y=None,
     ):
         w_a = np.log((self.n_individuals + 1.0) / 2.0) - np.log(
             np.arange(self.n_individuals) + 1.0
@@ -79,8 +91,8 @@ class CMAES(ES):
         self._mu_eff = np.square(np.sum(w_a[: self.n_parents])) / np.sum(
             np.square(w_a[: self.n_parents])
         )
-        self._mu_eff_minus = np.square(np.sum(w_a[self.n_parents:])) / np.sum(
-            np.square(w_a[self.n_parents:])
+        self._mu_eff_minus = np.square(np.sum(w_a[self.n_parents :])) / np.sum(
+            np.square(w_a[self.n_parents :])
         )
         self.c_s = self.options.get(
             "c_s", (self._mu_eff + 2.0) / (self.ndim_problem + self._mu_eff + 5.0)
@@ -138,7 +150,7 @@ class CMAES(ES):
         return x, mean, p_s, p_c, cm, e_ve, e_va, y, d
 
     def iterate(
-            self, x=None, mean=None, e_ve=None, e_va=None, y=None, d=None, args=None
+        self, x=None, mean=None, e_ve=None, e_va=None, y=None, d=None, args=None
     ):
         for k in range(self.n_individuals):  # to sample offspring population
             if self._check_terminations():
@@ -149,11 +161,11 @@ class CMAES(ES):
             )  # Gaussian noise for mutation
             d[k] = np.dot(e_ve @ np.diag(e_va), z)
             x[k] = mean + self.sigma * d[k]  # offspring individual
-            y[k] = self._evaluate_fitness(x[k], args)  # fitness
+            y[k] = self._evaluate_fitness(x[k], args, d=d[k], e_ve=e_ve, e_va=e_va)
         return x, y, d
 
     def update_distribution(
-            self, x=None, p_s=None, p_c=None, cm=None, e_ve=None, e_va=None, y=None, d=None
+        self, x=None, p_s=None, p_c=None, cm=None, e_ve=None, e_va=None, y=None, d=None
     ):
         order = np.argsort(y)  # to rank all offspring individuals
         wd = np.dot(self._w[: self.n_parents], d[order[: self.n_parents]])
@@ -170,8 +182,8 @@ class CMAES(ES):
         h_s = (
             1.0
             if np.linalg.norm(p_s)
-               / np.sqrt(1.0 - np.power(1.0 - self.c_s, 2 * (self._n_generations + 1)))
-               < (1.4 + 2.0 / (self.ndim_problem + 1.0)) * self._e_chi
+            / np.sqrt(1.0 - np.power(1.0 - self.c_s, 2 * (self._n_generations + 1)))
+            < (1.4 + 2.0 / (self.ndim_problem + 1.0)) * self._e_chi
             else 0.0
         )
         p_c = self._p_c_1 * p_c + h_s * self._p_c_2 * wd
@@ -182,13 +194,13 @@ class CMAES(ES):
             / (np.square(np.linalg.norm(cm_minus_half @ d.T, axis=0)) + 1e-8),
         )
         cm = (
-                     1.0
-                     + self.c_1 * (1.0 - h_s) * self.c_c * (2.0 - self.c_c)
-                     - self.c_1
-                     - self.c_w * np.sum(self._w)
-             ) * cm + self.c_1 * np.outer(p_c, p_c)  # rank-one update
+            1.0
+            + self.c_1 * (1.0 - h_s) * self.c_c * (2.0 - self.c_c)
+            - self.c_1
+            - self.c_w * np.sum(self._w)
+        ) * cm + self.c_1 * np.outer(p_c, p_c)  # rank-one update
         for i in range(
-                self.n_individuals
+            self.n_individuals
         ):  # rank-μ update (to estimate variances of sampled *steps*)
             cm += self.c_w * w_o[i] * np.outer(d[order[i]], d[order[i]])
         # do eigen-decomposition and return both eigenvalues and eigenvectors
@@ -201,28 +213,28 @@ class CMAES(ES):
         # e_va: squared root of eigenvalues -> interpreted as individual step-sizes and its diagonal entries are
         #       standard deviations of different components (from Nikolaus Hansen, 2023)
         cm = (
-                e_ve @ np.diag(np.square(e_va)) @ np.transpose(e_ve)
+            e_ve @ np.diag(np.square(e_va)) @ np.transpose(e_ve)
         )  # to recover covariance matrix
         return mean, p_s, p_c, cm, e_ve, e_va
 
     def restart_reinitialize(
-            self,
-            x=None,
-            mean=None,
-            p_s=None,
-            p_c=None,
-            cm=None,
-            e_ve=None,
-            e_va=None,
-            y=None,
-            d=None,
+        self,
+        x=None,
+        mean=None,
+        p_s=None,
+        p_c=None,
+        cm=None,
+        e_ve=None,
+        e_va=None,
+        y=None,
+        d=None,
     ):
         if ES.restart_reinitialize(self, y):
             x, mean, p_s, p_c, cm, e_ve, e_va, y, d = self.initialize(True)
         return x, mean, p_s, p_c, cm, e_ve, e_va, y, d
 
     def optimize(
-            self, fitness_function=None, args=None
+        self, fitness_function=None, args=None
     ):  # for all generations (iterations)
         fitness = ES.optimize(self, fitness_function)
 
@@ -322,31 +334,47 @@ class CMAES(ES):
         return results
 
     def set_data(
-            self,
-            x=None,
-            y=None,
-            mean=None,
-            p_c=None,
-            s=None,
-            vm=None,
-            pm=None,
-            b=None,
-            d=None,
-            *args,
-            **kwargs,
+        self,
+        x=None,
+        y=None,
+        mean=None,
+        p_c=None,
+        p_s=None,
+        cm=None,
+        d=None,
+        e_ve=None,
+        e_va=None,
+        *args,
+        **kwargs,
     ):
         if x is None or y is None:
             self.start_conditions = {"x": None, "y": None, "mean": None}
         elif not isinstance(y, np.ndarray):
             loc = locals()
             self.start_conditions = {
-                i: loc.get(i, None) for i in ("cf", "best_so_far_y", "p_s", "p_c")
+                i: loc.get(i, None)
+                for i in [
+                    "yp_c",
+                    "p_s",
+                    "cm",
+                    "e_ve",
+                    "e_va",
+                    "d",
+                ]
             }
         else:
             indices = np.argsort(y)[: self.n_individuals]
             loc = locals()
             start_conditions = {
-                i: loc.get(i, None) for i in ("p_c", "s", "vm", "pm", "b", "d")
+                i: loc.get(i, None)
+                for i in [
+                    "yp_c",
+                    "p_s",
+                    "cm",
+                    "e_ve",
+                    "e_va",
+                    "d",
+                ]
             }
             mean = x[indices].mean(axis=0)
             stds = np.std(x[indices], axis=0)
@@ -356,5 +384,9 @@ class CMAES(ES):
                 {"x": x[indices], "y": y[indices], "mean": mean, "sigma": sigma}
             )
             self.start_conditions = start_conditions
+        if self.start_conditions.get("d") is not None:
+            self.start_conditions["d"] = self.start_conditions["d"][
+                : self.n_individuals
+            ]
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
