@@ -98,7 +98,7 @@ class Actor(nn.Module):
             nn.ReLU(),
             nn.Dropout(p=dropout_p),
             layer_init(nn.Linear(HIDDEN_SIZE, n_actions), std=0.0),
-            nn.Softmax(dim=-1)
+            nn.Softmax(dim=-1),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

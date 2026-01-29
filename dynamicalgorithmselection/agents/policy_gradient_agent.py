@@ -35,7 +35,7 @@ class PolicyGradientAgent(Agent):
         self.best_50_mean = float("inf")
 
         self.tau = self.options.get("critic_target_tau", 0.05)
-        self.target_kl = 0.02
+        self.target_kl = 0.03
 
         # Initialize history dict
         self.iterations_history = {"x": None, "y": None}
@@ -59,7 +59,7 @@ class PolicyGradientAgent(Agent):
         elif mean_kl < self.target_kl / 1.5:
             current_lr *= 1.5
 
-        current_lr = np.clip(current_lr, 5e-7, 3e-5)
+        current_lr = np.clip(current_lr, 3e-6, 1e-4)
 
         for param_group in self.actor_optimizer.param_groups:
             param_group["lr"] = current_lr

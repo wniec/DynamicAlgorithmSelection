@@ -96,14 +96,12 @@ class OPOA2015(ES):
         z = self.rng_optimization.standard_normal((self.ndim_problem,))
         cf_z = np.dot(cf, z)
         x = mean + self.sigma * cf_z
-        y = (
-            self._evaluate_fitness(
-                x=x,
-                args=args,
-                cf=cf,
-                p_s=p_s,
-                p_c=p_c,
-            )
+        y = self._evaluate_fitness(
+            x=x,
+            args=args,
+            cf=cf,
+            p_s=p_s,
+            p_c=p_c,
         )
         if y <= best_so_far_y:
             self._ancestors.append(y)
