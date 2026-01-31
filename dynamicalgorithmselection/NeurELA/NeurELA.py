@@ -22,7 +22,6 @@ def vector2nn(x, net):
 
 
 def load_data(path):
-    print(os.getcwd())
     with open(path, "rb") as f:
         data = pickle.load(f)
     return data
@@ -30,7 +29,8 @@ def load_data(path):
 
 seed = 0
 
-load_path = "NeurELA.pkl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_path = os.path.join(BASE_DIR, "NeurELA.pkl")
 
 feature_extractor_weights = load_data(load_path)
 

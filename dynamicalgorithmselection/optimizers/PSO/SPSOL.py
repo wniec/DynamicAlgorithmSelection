@@ -33,7 +33,9 @@ class SPSOL(PSO):
             x[i] += v[i]  # position update
             if self.is_bound:
                 x[i] = np.clip(x[i], self.lower_boundary, self.upper_boundary)
-            y[i] = self._evaluate_fitness(x[i], args)  # fitness evaluation
+            y[i] = self._evaluate_fitness(
+                x[i], args, v=v[i], p_x=p_x[i], p_y=p_y[i], n_x=n_x[i]
+            )
             if y[i] < p_y[i]:  # online update
                 p_x[i], p_y[i] = x[i], y[i]
         self._n_generations += 1

@@ -52,7 +52,17 @@ class OPOA2015(ES):
         is_restart=False,
     ):
         mean = self._initialize_mean(is_restart) if mean is None else mean
-        y = self._evaluate_fitness(mean, args) if y is None else y
+        y = (
+            self._evaluate_fitness(
+                x=mean,
+                args=args,
+                cf=cf,
+                p_s=p_s,
+                p_c=p_c,
+            )
+            if y is None
+            else y
+        )
         cf = (
             np.diag(
                 np.ones(
@@ -86,7 +96,13 @@ class OPOA2015(ES):
         z = self.rng_optimization.standard_normal((self.ndim_problem,))
         cf_z = np.dot(cf, z)
         x = mean + self.sigma * cf_z
-        y = self._evaluate_fitness(x, args)
+        y = self._evaluate_fitness(
+            x=x,
+            args=args,
+            cf=cf,
+            p_s=p_s,
+            p_c=p_c,
+        )
         if y <= best_so_far_y:
             self._ancestors.append(y)
             mean, best_so_far_y = x, y
