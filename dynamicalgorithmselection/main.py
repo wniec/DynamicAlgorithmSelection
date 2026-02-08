@@ -8,6 +8,7 @@ import neat
 import torch
 import wandb
 
+from dynamicalgorithmselection.agents.RLDAS_agent import RLDASAgent
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
@@ -19,6 +20,7 @@ AGENTS_DICT = {
     "random": RandomAgent,
     "neuroevolution": NeuroevolutionAgent,
     "policy-gradient": PolicyGradientAgent,
+    "RL-DAS": RLDASAgent,
 }
 
 
@@ -97,7 +99,7 @@ def parse_arguments():
         "--agent",
         type=str,
         default="policy-gradient",
-        choices=["random", "neuroevolution", "policy-gradient"],
+        choices=list(AGENTS_DICT.keys()),
         help="specify which agent to use",
     )
 
@@ -260,10 +262,15 @@ def run_baselines(args, action_space):
     for optimizer in action_space:
         if os.path.exists(os.path.join("exdata", optimizer.__name__)):
             shutil.rmtree(os.path.join("exdata", optimizer.__name__))
+
+        print(f"--- Running Baseline: {optimizer.__name__} ---")
+
+        # 2. Run experiment for ONLY this optimizer
+        # NOTICE: We pass `[optimizer]` instead of `action_space` here.
         coco_bbob_experiment(
             None,
             {
-                "optimizer_portfolio": action_space,
+                "optimizer_portfolio": [optimizer],  # <--- FIXED: List of 1
                 "n_individuals": args.population_size,
                 "baselines": True,
                 "n_checkpoints": args.n_checkpoints,

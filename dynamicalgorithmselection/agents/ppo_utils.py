@@ -1,12 +1,27 @@
 import torch
 from torch import nn
 import torch.nn.init as init
+import numpy as np
 
-
-GAMMA = 0.9
+GAMMA = 0.8
 HIDDEN_SIZE = 144
 LAMBDA = 0.5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    """
+    Initializes a layer.
+    - If std is 0, we force weights to be exactly 0 (Hard Zero Init).
+    - Otherwise, we use Orthogonal Init with the given gain/std.
+    """
+    if std == 0.0:
+        init.constant_(layer.weight, 0.0)
+    else:
+        init.orthogonal_(layer.weight, std)
+
+    init.constant_(layer.bias, bias_const)
+    return layer
 
 
 class RolloutBuffer:
@@ -70,31 +85,25 @@ def compute_gae(rewards, dones, values, last_value):
 class Actor(nn.Module):
     def __init__(self, n_actions: int, input_size: int, dropout_p: float = 0.35):
         super().__init__()
-        # Replace LSTM with a standard MLP feature extractor
         self.feature_extractor = nn.Sequential(
-            nn.Linear(input_size, HIDDEN_SIZE),
-            nn.LayerNorm(HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p),  # Optional: Added dropout to feature extraction
-        )
-
-        self.head = nn.Sequential(
-            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+            layer_init(nn.Linear(input_size, HIDDEN_SIZE)),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),
-            nn.Linear(HIDDEN_SIZE, n_actions),
+        )
+
+        self.head = nn.Sequential(
+            layer_init(nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)),
+            nn.LayerNorm(HIDDEN_SIZE),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p),
+            layer_init(nn.Linear(HIDDEN_SIZE, n_actions), std=0.0),
             nn.Softmax(dim=-1),
         )
-        orthogonal_init(self)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Handle input shapes that might come with a sequence dimension (B, Seq, Feat)
-        # or just (B, Feat). We flatten sequence dim if present because this is now an MLP.
         if x.dim() == 3:
             x = x.squeeze(1)
-
-        x = x.to(next(self.parameters()).device)
         features = self.feature_extractor(x)
         return self.head(features)
 
@@ -103,26 +112,23 @@ class Critic(nn.Module):
     def __init__(self, input_size: int, dropout_p: float = 0.35):
         super().__init__()
         self.feature_extractor = nn.Sequential(
-            nn.Linear(input_size, HIDDEN_SIZE),
+            layer_init(nn.Linear(input_size, HIDDEN_SIZE)),  # std=sqrt(2)
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),
         )
 
         self.head = nn.Sequential(
-            nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
+            layer_init(nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),
-            nn.Linear(HIDDEN_SIZE, 1),
+            layer_init(nn.Linear(HIDDEN_SIZE, 1), std=1.0),
         )
-        orthogonal_init(self)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 3:
             x = x.squeeze(1)
-
-        x = x.to(next(self.parameters()).device)
         features = self.feature_extractor(x)
         return self.head(features)
 
@@ -135,13 +141,49 @@ class ActorLoss(nn.Module):
         return -advantage * log_prob
 
 
-def orthogonal_init(module):
-    for name, param in module.named_parameters():
-        if "weight_ih" in name:  # LSTM input -> hidden
-            init.orthogonal_(param.data)
-        elif "weight_hh" in name:  # LSTM hidden -> hidden
-            init.orthogonal_(param.data)
-        elif "weight" in name and param.dim() >= 2:
-            init.orthogonal_(param.data)  # Linear layers
-        elif "bias" in name:
-            param.data.zero_()
+class RLDASNetwork(nn.Module):
+    def __init__(self, d_dim, num_algorithms, la_dim=9):
+        super(RLDASNetwork, self).__init__()
+        self.L = num_algorithms
+        self.D = d_dim
+        self.la_dim = la_dim
+
+        self.ah_input_flat_dim = self.L * 2 * self.D
+
+        self.ah_embed = nn.Sequential(
+            nn.Linear(self.ah_input_flat_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2 * self.L),  # Output size aligned with paper description
+            nn.ReLU(),
+        )
+        self.fusion_input_dim = self.la_dim + (2 * self.L)
+
+        self.dv_layer = nn.Sequential(nn.Linear(self.fusion_input_dim, 64), nn.Tanh())
+
+        self.actor_head = nn.Sequential(
+            nn.Linear(64, 16), nn.Tanh(), nn.Linear(16, self.L), nn.Softmax(dim=-1)
+        )
+
+        self.critic_head = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),  # Scalar Value
+        )
+
+    def forward(self, la_state, ah_state):
+        if ah_state.dim() > 2:
+            batch_size = ah_state.size(0)
+            ah_flat = ah_state.view(batch_size, -1)
+        else:
+            ah_flat = ah_state
+
+        v_ah = self.ah_embed(ah_flat)
+
+        combined = torch.cat([la_state, v_ah], dim=1)
+
+        dv = self.dv_layer(combined)
+
+        probs = self.actor_head(dv)
+        value = self.critic_head(dv)
+
+        return probs, value

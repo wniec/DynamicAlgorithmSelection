@@ -19,7 +19,7 @@ def run_testing(
     problem_ids: list[str],
     observer: cocoex.Observer,
 ):
-    for problem_id in tqdm(problem_ids):
+    for problem_id in tqdm(problem_ids, smoothing=0.0):
         problem_instance = problems_suite.get_problem(problem_id)
         problem_instance.observe_with(observer)
         max_fe = evaluations_multiplier * problem_instance.dimension
@@ -47,7 +47,7 @@ def run_training(
     problem_ids: list[str],
 ):
     agent_state = {}
-    for problem_id in tqdm(np.random.permutation(problem_ids)):
+    for problem_id in tqdm(np.random.permutation(problem_ids), smoothing=0.0):
         problem_instance = problems_suite.get_problem(problem_id)
         max_fe = evaluations_multiplier * problem_instance.dimension
         options["max_function_evaluations"] = max_fe
@@ -57,5 +57,7 @@ def run_training(
         results, agent_state = coco_bbob_single_function(
             optimizer, problem_instance, options
         )
+        options["state_normalizer"] = agent_state["state_normalizer"]
+        options["reward_normalizer"] = agent_state["reward_normalizer"]
         options["buffer"] = agent_state["buffer"]
         problem_instance.free()

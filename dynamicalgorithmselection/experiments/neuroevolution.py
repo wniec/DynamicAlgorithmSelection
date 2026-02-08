@@ -84,7 +84,10 @@ class ParallelEvaluator:
                 jobs.append(self.pool.apply_async(self.eval_function, (genome, config)))
 
         for job, (ignored_genome_id, genome) in tqdm(
-            zip(jobs, genomes), total=len(jobs), desc="Evaluating Genomes"
+            zip(jobs, genomes),
+            total=len(jobs),
+            desc="Evaluating Genomes",
+            smoothing=0.0,
         ):
             # Result is now a tuple: (fitness, log_dict)
             fitness, log_data = job.get(timeout=self.timeout)
@@ -175,9 +178,9 @@ def _coco_bbob_neuroevolution_train(
     batch_size = 30
     input_dim = None
     if options.get("state_representation") == "ELA":
-        input_dim = 41
+        input_dim = 80
     elif options.get("state_representation") == "NeurELA":
-        input_dim = 18
+        input_dim = 34
     elif options.get("state_representation") == "custom":
         input_dim = BASE_STATE_SIZE + 2 * len(options.get("action_space")) + 2
 
