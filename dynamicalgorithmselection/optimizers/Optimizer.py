@@ -4,10 +4,10 @@ from typing import Optional
 import numpy as np
 from pypop7.optimizers.core import Optimizer as BaseOptimizer
 
-ALL_START_CONDITONS_PARAMETERS = ["v", "x", "y", "p_x", "p_y", "n_x", ""]
-
 
 class Optimizer(BaseOptimizer):
+    start_condition_parameters = ["x", "y"]
+
     def __init__(self, problem, options):
         BaseOptimizer.__init__(self, problem, options)
         self.fitness_history = []
@@ -18,8 +18,11 @@ class Optimizer(BaseOptimizer):
             None,
         )
         self.x_history, self.y_history = [], []
+        # [Added] Dictionary to store histories of generic parameters
+        self.parameter_history = {}
 
-    def _evaluate_fitness(self, x, args=None):
+    # [Modified] Accept generic kwargs for history tracking
+    def _evaluate_fitness(self, x, args=None, **kwargs):
         self.start_function_evaluations = time.time()
         if args is None:
             y = self.fitness_function(x)
@@ -38,8 +41,20 @@ class Optimizer(BaseOptimizer):
             self._counter_early_stopping += 1
         else:
             self._counter_early_stopping, self._base_early_stopping = 0, y
+
         self.x_history.append(np.copy(x))
         self.y_history.append(float(y))
+
+        # [Added] Generic storage for any extra parameters passed
+        for key, val in kwargs.items():
+            if key not in self.parameter_history:
+                self.parameter_history[key] = []
+
+            # Store copy if it's an array to prevent reference issues
+            if isinstance(val, np.ndarray):
+                self.parameter_history[key].append(np.copy(val))
+            else:
+                self.parameter_history[key].append(val)
 
         return float(y)
 
@@ -76,6 +91,11 @@ class Optimizer(BaseOptimizer):
                 "y_history": np.array(self.y_history, dtype=np.float32),
             }
         )
+
+        # [Added] Inject generic parameter histories into result
+        # Keys will be named like 'v_history', 'p_x_history' automatically
+        for key, history in self.parameter_history.items():
+            result[f"{key}_history"] = np.array(history, dtype=np.float32)
         return result
 
     def set_data(self, x=None, y=None, best_x=None, best_y=None, *args, **kwargs):

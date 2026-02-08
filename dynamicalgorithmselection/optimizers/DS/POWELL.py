@@ -120,13 +120,13 @@ class POWELL(DS):
         x = (
             self._initialize_x(is_restart) if x is None else x
         )  # initial (starting) search point
-        y = self._evaluate_fitness(x, args) if y is None else y  # fitness
+        y = self._evaluate_fitness(x, args, u=u) if y is None else y  # fitness
         u = np.identity(self.ndim_problem) if u is None else u
         self.y_history.append(y)
         self.x_history.append(x)
 
         def _wrapper(xx):
-            return self._evaluate_fitness(xx, args)
+            return self._evaluate_fitness(xx, args, u=u)
 
         self._func = _wrapper
         return x, y, u, y
@@ -222,7 +222,6 @@ class POWELL(DS):
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
 
     def get_data(self, n_individuals: Optional[int] = None):
-        pop_data = ["x", "y"]
         best_indices = sorted(
             [i for i in range(len(self.y_history))],
             key=lambda x: self.y_history[x],
