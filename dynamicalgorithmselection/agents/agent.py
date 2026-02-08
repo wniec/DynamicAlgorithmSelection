@@ -196,7 +196,7 @@ class Agent(Optimizer):
                 1 if self.choices_history[i] == action_id else 0
             )
             for i, (action_id, action) in product(
-                range(self.n_checkpoints), enumerate(self.actions)
+                range(len(self.choices_history)), enumerate(self.actions)
             )
         }
         self.run.log(checkpoint_choices)
