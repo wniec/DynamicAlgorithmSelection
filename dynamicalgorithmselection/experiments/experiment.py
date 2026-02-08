@@ -190,7 +190,7 @@ def run_comparison(
     # We use the problem_ids from the first suite to iterate
     _, problem_ids = get_suite("all", False)
 
-    for problem_id in tqdm(problem_ids, desc="Evaluating Problems"):
+    for problem_id in tqdm(problem_ids, desc="Evaluating Problems", smoothing=0.0):
         stats = {}
         max_fe = None
 

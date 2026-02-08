@@ -139,3 +139,51 @@ class ActorLoss(nn.Module):
 
     def forward(self, advantage, log_prob):
         return -advantage * log_prob
+
+
+class RLDASNetwork(nn.Module):
+    def __init__(self, d_dim, num_algorithms, la_dim=9):
+        super(RLDASNetwork, self).__init__()
+        self.L = num_algorithms
+        self.D = d_dim
+        self.la_dim = la_dim
+
+        self.ah_input_flat_dim = self.L * 2 * self.D
+
+        self.ah_embed = nn.Sequential(
+            nn.Linear(self.ah_input_flat_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2 * self.L),  # Output size aligned with paper description
+            nn.ReLU(),
+        )
+        self.fusion_input_dim = self.la_dim + (2 * self.L)
+
+        self.dv_layer = nn.Sequential(nn.Linear(self.fusion_input_dim, 64), nn.Tanh())
+
+        self.actor_head = nn.Sequential(
+            nn.Linear(64, 16), nn.Tanh(), nn.Linear(16, self.L), nn.Softmax(dim=-1)
+        )
+
+        self.critic_head = nn.Sequential(
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),  # Scalar Value
+        )
+
+    def forward(self, la_state, ah_state):
+        if ah_state.dim() > 2:
+            batch_size = ah_state.size(0)
+            ah_flat = ah_state.view(batch_size, -1)
+        else:
+            ah_flat = ah_state
+
+        v_ah = self.ah_embed(ah_flat)
+
+        combined = torch.cat([la_state, v_ah], dim=1)
+
+        dv = self.dv_layer(combined)
+
+        probs = self.actor_head(dv)
+        value = self.critic_head(dv)
+
+        return probs, value

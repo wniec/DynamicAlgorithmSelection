@@ -314,19 +314,6 @@ class CMAES(ES):
                 "mean": mean,
             }
         )
-        self.results.update(
-            {
-                "p_c": p_c,
-                "p_s": p_s,
-                "cm": cm,
-                "e_va": e_va,
-                "e_ve": e_ve,
-                "d": d,
-                "x": x,
-                "y": y,
-                "mean": mean,
-            }
-        )
         results = self._collect(fitness, y, mean)
         # by default do *NOT* save eigenvalues and eigenvectors (with *quadratic* space complexity)
         if self._save_eig:

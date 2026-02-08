@@ -11,6 +11,8 @@ from pflacco.classical_ela_features import (
     calculate_information_content,
     calculate_ela_distribution,  # Information Content
 )
+from scipy.spatial.distance import pdist
+from scipy.stats import spearmanr
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
@@ -340,20 +342,127 @@ class StateNormalizer:
             update (bool): Whether to update the running statistics.
                            Usually True during training, False during testing.
         """
-        # Ensure state is an array
         state = np.asarray(state)
 
-        # If training, update the statistics
         if update:
-            # RunningMeanStd expects a batch, so we add a dimension if needed
             if len(state.shape) == 1:
                 self.rms.update(state.reshape(1, -1))
             else:
                 self.rms.update(state)
 
-        # Calculate standard deviation
         std = np.sqrt(self.rms.var) + 1e-8
 
-        # Normalize and Clip to prevent extreme outliers (e.g., -5 to 5)
         normalized_state = (state - self.rms.mean) / std
         return np.clip(normalized_state, -5.0, 5.0)
+
+
+def get_la_features(agent, pop_x, pop_y):
+    """
+    Extracts 9 Landscape Analysis features described in Reinforcement Learning Dynamic Algorithm Selection.
+    Includes sampling-based features (f5-f8) which consume function evaluations.
+    """
+    sorted_idx = np.argsort(pop_y)
+    pop_x = pop_x[sorted_idx]
+    pop_y = pop_y[sorted_idx]
+
+    best_y = pop_y[0]
+    best_x = pop_x[0]
+    n = len(pop_x)
+
+    norm_factor = (
+        agent.initial_cost
+        if agent.initial_cost and abs(agent.initial_cost) > 1e-9
+        else 1.0
+    )
+    f1 = best_y / norm_factor
+
+    dists_to_best = np.linalg.norm(pop_x - best_x, axis=1)
+    if np.std(pop_y) < 1e-9 or np.std(dists_to_best) < 1e-9:
+        f2 = 0.0
+    else:
+        fdc, _ = spearmanr(pop_y, dists_to_best)
+        f2 = fdc if not np.isnan(fdc) else 0.0
+
+    n_top = max(2, int(0.1 * n))
+
+    if n > 1:
+        dist_matrix_all = pdist(pop_x)
+        disp_all = np.mean(dist_matrix_all) if len(dist_matrix_all) > 0 else 0.0
+
+        dist_matrix_top = pdist(pop_x[:n_top])
+        disp_top = np.mean(dist_matrix_top) if len(dist_matrix_top) > 0 else 0.0
+
+        f3 = disp_all - disp_top
+        f4 = np.max(dist_matrix_all) if len(dist_matrix_all) > 0 else 0.0
+    else:
+        f3, f4 = 0.0, 0.0
+
+    remaining_fes = agent.max_function_evaluations - agent.n_function_evaluations
+    cost_per_sample = n  # 1 generation of size N
+
+    sampled_pops_y = []
+
+    if remaining_fes >= (2 * cost_per_sample):
+        sample_indices = np.random.choice(len(agent.actions), 2, replace=False)
+
+        for idx in sample_indices:
+            alg_class = agent.actions[idx]
+
+            sub_opt = alg_class(agent.problem, agent.options)
+
+            sub_opt.population = pop_x.copy()
+            sub_opt.fitness = pop_y.copy()
+
+            sub_opt.n_function_evaluations = 0
+            sub_opt.max_function_evaluations = cost_per_sample
+
+            sub_opt.optimize()
+
+            sampled_pops_y.append(sub_opt.fitness)
+            agent.n_function_evaluations += sub_opt.n_function_evaluations
+
+    f5, f6, f7, f8 = 0.0, 0.0, 0.0, 0.0
+
+    if len(sampled_pops_y) > 0:
+        sorted_current = np.sort(pop_y)
+        sorted_samples = [np.sort(sy) for sy in sampled_pops_y]
+        avg_sample_y = np.mean(sorted_samples, axis=0)
+
+        # Slopes: (y_{i+1} - y_i)
+        diff_current = np.diff(sorted_current)
+        diff_sample = np.diff(avg_sample_y)
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratios = diff_current / diff_sample
+            ratios[diff_sample == 0] = 0.0
+            ratios[np.isnan(ratios)] = 0.0
+
+        f5 = min(np.sum(ratios), 0.0)
+
+        S = len(sampled_pops_y)
+        eps = 1e-8
+
+        neutral_count = 0
+        no_improve_counts = np.zeros(n)  # For f7
+        all_worse_counts = np.zeros(n)  # For f8
+
+        for sy in sampled_pops_y:
+            neutral_count += np.sum(np.abs(pop_y - sy) < eps)
+
+            improved = sy < pop_y
+            no_improve_counts += improved.astype(int)  # Add 1 if improved
+
+            worse = sy > pop_y
+            all_worse_counts += worse.astype(int)
+
+        f6 = neutral_count / (n * S)
+
+        alphas = (no_improve_counts == 0).astype(float)
+        f7 = np.mean(alphas)
+
+        betas = (all_worse_counts == S).astype(float)
+        f8 = np.mean(betas)
+
+    f9 = agent.n_function_evaluations / agent.max_function_evaluations
+
+    return np.array([f1, f2, f3, f4, f5, f6, f7, f8, f9])

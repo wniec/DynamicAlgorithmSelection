@@ -8,6 +8,7 @@ import neat
 import torch
 import wandb
 
+from dynamicalgorithmselection.agents.RLDAS_agent import RLDASAgent
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
@@ -19,6 +20,7 @@ AGENTS_DICT = {
     "random": RandomAgent,
     "neuroevolution": NeuroevolutionAgent,
     "policy-gradient": PolicyGradientAgent,
+    "RL-DAS": RLDASAgent,
 }
 
 
@@ -97,7 +99,7 @@ def parse_arguments():
         "--agent",
         type=str,
         default="policy-gradient",
-        choices=["random", "neuroevolution", "policy-gradient"],
+        choices=list(AGENTS_DICT.keys()),
         help="specify which agent to use",
     )
 

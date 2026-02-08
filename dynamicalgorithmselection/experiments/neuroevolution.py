@@ -84,7 +84,10 @@ class ParallelEvaluator:
                 jobs.append(self.pool.apply_async(self.eval_function, (genome, config)))
 
         for job, (ignored_genome_id, genome) in tqdm(
-            zip(jobs, genomes), total=len(jobs), desc="Evaluating Genomes"
+            zip(jobs, genomes),
+            total=len(jobs),
+            desc="Evaluating Genomes",
+            smoothing=0.0,
         ):
             # Result is now a tuple: (fitness, log_dict)
             fitness, log_data = job.get(timeout=self.timeout)
