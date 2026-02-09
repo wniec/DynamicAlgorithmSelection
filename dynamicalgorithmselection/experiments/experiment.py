@@ -2,8 +2,6 @@ import json
 import os
 from typing import Type, Optional
 
-import cocopp
-
 from dynamicalgorithmselection.experiments.core import run_testing, run_training
 from dynamicalgorithmselection.experiments.cross_validation import run_cross_validation
 from dynamicalgorithmselection.experiments.neuroevolution import (

@@ -8,6 +8,7 @@ from dynamicalgorithmselection.agents.agent_state import (
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
+    MAX_DIM,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
@@ -72,11 +73,15 @@ class Agent(Optimizer):
         )
 
         if x is None or y is None:
-            state_representation = self.state_representation(
-                np.zeros((50, self.ndim_problem)),
-                np.zeros((50,)),
-                sr_additional_params,
-            )
+            if self.options.get("state_representation") != "ELA":
+                state_representation = self.state_representation(
+                    np.zeros((50, self.ndim_problem)),
+                    np.zeros((50,)),
+                    sr_additional_params,
+                )
+            else:
+                state_representation = (np.zeros((43,)),)
+
             return np.append(state_representation, (0, 0) if optimization_state else ())
         used_fe = self.n_function_evaluations / self.max_function_evaluations
         stagnation_coef = self.stagnation_count / self.max_function_evaluations
@@ -106,7 +111,14 @@ class Agent(Optimizer):
             optimization_state = self.get_partial_state(x, y, True).flatten()
             state = np.concatenate((landscape_state, optimization_state))
         else:
-            state = self.get_partial_state(x_history, y_history, True).flatten()
+            partial_state = self.get_partial_state(x_history, y_history, True).flatten()
+            state = np.append(
+                partial_state,
+                (
+                    self.ndim_problem / MAX_DIM,
+                    self.n_function_evaluations / self.max_function_evaluations,
+                ),
+            )
         return self.state_normalizer.normalize(state, update)
 
     def _print_verbose_info(self, fitness, y):

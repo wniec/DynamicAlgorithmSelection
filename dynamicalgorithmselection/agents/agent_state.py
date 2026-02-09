@@ -34,9 +34,7 @@ def get_state_representation(
             x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
         )[0].mean(axis=0), 34
     elif name == "ELA":
-        return lambda x, y, *args: ela_state_representation(
-            x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
-        ), 45
+        return lambda x, y, *args: ela_state_representation(x, y), 47
     elif name == "custom":
         return lambda x, y, args: AgentState(
             x, y, n_actions, *args
@@ -48,20 +46,39 @@ def get_state_representation(
 def ela_state_representation(x, y, *args):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        x_norm, y_norm = (
-            (x - x.mean()) / (x.std() + 1e-8),
-            (y - y.mean()) / (y.std() + 1e-8),
+
+        _, unique_indices = np.unique(x, axis=0, return_index=True)
+        unique_indices = np.sort(unique_indices)
+        x_deduplicated = x[unique_indices][-MAX_CONSIDERED_POPSIZE:]
+        y_deduplicated = y[unique_indices][-MAX_CONSIDERED_POPSIZE:]
+
+        x_raw = np.ascontiguousarray(x_deduplicated - x_deduplicated.mean()) / (
+            x_deduplicated.std() + 1e-8
         )
+        y_raw = np.ascontiguousarray(y_deduplicated - y_deduplicated.mean()) / (
+            y_deduplicated.std() + 1e-8
+        )
+
+        x_norm = pd.DataFrame(x_raw).reset_index(drop=True)
+        x_norm.columns = [f"x_{i}" for i in range(x_norm.shape[1])]
+        y_norm = pd.Series(y_raw).reset_index(drop=True)
+
+        is_unique = ~x_norm.duplicated()
+
+        # If we lost data, re-slice to ensure alignment
+        if not is_unique.all():
+            x_norm = x_norm[is_unique].reset_index(drop=True)
+            y_norm = y_norm[is_unique].reset_index(drop=True)
+
         meta_feats = calculate_ela_meta(x_norm, y_norm)
         ela_distr = (
             calculate_ela_distribution(x_norm, y_norm)
-            if (y**2).sum() > 0
+            if ((y**2).sum() > 0 and np.var(y_norm) > 1e-8)
             else {str(i): 0 for i in range(4)}
         )
         nbc_feats = calculate_nbc(x_norm, y_norm)
         disp_feats = calculate_dispersion(x_norm, y_norm)
-        df_temp = pd.DataFrame(x_norm)
-        df_temp.columns = [f"x_{i}" for i in range(df_temp.shape[1])]
+
         ic_feats = calculate_information_content(x_norm, y_norm)
 
         all_features = {
