@@ -129,6 +129,10 @@ class RLDASAgent(Agent):
             dist = torch.distributions.Categorical(probs)
             action = dist.sample()
             log_prob = dist.log_prob(action)
+            probs = probs.detach().cpu().numpy()
+            if self.run is not None:
+                entropy = -np.sum(probs * np.log(probs + 1e-12)) / np.log(len(probs))
+                self.run.log({"normalized entropy": entropy})
 
         return action.item(), log_prob, value
 
@@ -156,6 +160,14 @@ class RLDASAgent(Agent):
         best_y_global = population_y[best_idx]
         best_x_global = population_x[best_idx].copy()
 
+        self.best_so_far_y = best_y_global
+        self.best_so_far_x = best_x_global
+
+        self.history.append(self.best_so_far_y)
+        self.fitness_history.append(self.best_so_far_y)
+        if self.saving_fitness:
+            fitness.append(self.best_so_far_y)
+
         self.initial_cost = best_y_global if abs(best_y_global) > 1e-8 else 1.0
 
         self.ah_vectors.fill(0.0)
@@ -169,6 +181,8 @@ class RLDASAgent(Agent):
             state = self.get_state(population_x, population_y)
 
             action_idx, log_prob, value = self._select_action(state)
+            self.choices_history.append(action_idx)
+
             selected_alg_class = self.actions[action_idx]
             alg_name = self.alg_names[action_idx]
 
@@ -208,6 +222,8 @@ class RLDASAgent(Agent):
             )
 
             adc = (cost_old - cost_new) / self.initial_cost
+            if self.run:
+                self.run.log({"adc": adc})
 
             done = self.n_function_evaluations >= self.max_function_evaluations
 
@@ -223,6 +239,19 @@ class RLDASAgent(Agent):
             )
 
             best_y_global = min(best_y_global, cost_new)
+
+            # Update Agent Best State and History
+            if cost_new < self.best_so_far_y:
+                self.best_so_far_y = cost_new
+                self.best_so_far_x = x_best_new
+
+            self.history.append(self.best_so_far_y)
+            self.fitness_history.append(self.best_so_far_y)
+            if self.saving_fitness:
+                fitness.append(self.best_so_far_y)
+
+            self._n_generations += 1
+            self._print_verbose_info(fitness, self.best_so_far_y)
 
         fes_end = self.n_function_evaluations
         speed_factor = self.max_function_evaluations / fes_end
