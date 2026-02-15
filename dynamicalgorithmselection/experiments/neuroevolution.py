@@ -174,7 +174,8 @@ def _coco_bbob_neuroevolution_train(
     mode: str = "easy",
 ):
     cocoex.utilities.MiniPrint()
-    _, problem_ids = get_suite(mode, True)
+    _, problem_ids = get_suite(mode, True, options.get("dimensionality"))
+    options["n_problems"] = len(problem_ids)
     batch_size = 30
     input_dim = None
     if options.get("state_representation") == "ELA":
@@ -184,9 +185,12 @@ def _coco_bbob_neuroevolution_train(
     elif options.get("state_representation") == "custom":
         input_dim = BASE_STATE_SIZE + 2 * len(options.get("action_space")) + 2
 
+    action_space = options.get("action_space")
+    if not action_space:
+        raise Exception("No action space")
     adjust_config(
         input_dim,
-        len(options.get("action_space")),
+        len(action_space),
     )
 
     config = neat.Config(

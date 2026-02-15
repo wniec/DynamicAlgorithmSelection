@@ -14,7 +14,7 @@ from dynamicalgorithmselection.experiments.utils import (
 )
 
 import cocoex
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore
 
 from dynamicalgorithmselection.agents.agent_utils import (
     get_extreme_stats,
@@ -109,7 +109,8 @@ def _coco_bbob_policy_gradient_train(
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(mode, True)
+    problems_suite, problem_ids = get_suite(mode, True, options.get("dimensionality"))
+    options["n_problems"] = len(problem_ids)
     run_training(
         optimizer, options, evaluations_multiplier, problems_suite, problem_ids
     )
@@ -125,8 +126,9 @@ def _coco_bbob_test(
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite(mode, False)
-    observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
+    problems_suite, problem_ids = get_suite(mode, False, options.get("dimensionality"))
+    options["n_problems"] = len(problem_ids)
+    observer = cocoex.Observer("bbob", "result_folder: " + options["name"])
     run_testing(
         optimizer,
         options,
@@ -143,7 +145,10 @@ def _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode):
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, problem_ids = get_suite("baselines", False)
+    problems_suite, problem_ids = get_suite(
+        "baselines", False, options.get("dimensionality")
+    )
+    options["n_problems"] = len(problem_ids)
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
     run_testing(
         optimizer,
@@ -176,7 +181,9 @@ def run_comparison(
         observers[optimizer_name] = observer
         results_folders.append("exdata/" + optimizer_name)  # Adjust path if needed
 
-        suites[optimizer_name] = get_suite("all", False)[0]
+        suites[optimizer_name] = get_suite("all", False, options.get("dimensionality"))[
+            0
+        ]
 
     # Create directories for best/worst JSON stats
     portfolio_name = "_".join(i.__name__ for i in optimizer_portfolio)
@@ -186,7 +193,8 @@ def run_comparison(
     cocoex.utilities.MiniPrint()
 
     # We use the problem_ids from the first suite to iterate
-    _, problem_ids = get_suite("all", False)
+    _, problem_ids = get_suite("all", False, options.get("dimensionality"))
+    options["n_problems"] = len(problem_ids)
 
     for problem_id in tqdm(problem_ids, desc="Evaluating Problems", smoothing=0.0):
         stats = {}

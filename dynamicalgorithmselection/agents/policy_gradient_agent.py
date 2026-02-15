@@ -17,8 +17,14 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 class PolicyGradientAgent(Agent):
     def __init__(self, problem, options):
         Agent.__init__(self, problem, options)
+        buffer_len = int(
+            options.get("n_problems")
+            * self.n_checkpoints
+            * 0.17
+            * options.get("n_epochs")
+        )
         self.buffer = options.get("buffer") or RolloutBuffer(
-            capacity=options.get("ppo_batch_size", 2_500), device=DEVICE
+            capacity=buffer_len, device=DEVICE
         )
         self.actor = Actor(n_actions=len(self.actions), input_size=self.state_dim).to(
             DEVICE
@@ -34,7 +40,6 @@ class PolicyGradientAgent(Agent):
         self.mean_rewards = options.get("mean_rewards", [])
         self.best_50_mean = float("inf")
 
-        self.tau = self.options.get("critic_target_tau", 0.05)
         self.target_kl = 0.03
 
         # Initialize history dict
@@ -59,7 +64,7 @@ class PolicyGradientAgent(Agent):
         elif mean_kl < self.target_kl / 1.5:
             current_lr *= 1.5
 
-        current_lr = np.clip(current_lr, 3e-6, 1e-4)
+        current_lr = np.clip(current_lr, 3e-6, 3e-4)
 
         for param_group in self.actor_optimizer.param_groups:
             param_group["lr"] = current_lr
@@ -245,13 +250,14 @@ class PolicyGradientAgent(Agent):
     def _execute_action(self, action_idx, iteration_result):
         """Instantiates and runs the selected optimizer."""
         action_options = {k: v for k, v in self.options.items()}
-        action_options["max_function_evaluations"] = min(
-            self.checkpoints[self._n_generations],
-            self.max_function_evaluations,
-        )
+        action_options["max_function_evaluations"] = self.max_function_evaluations
         action_options["verbose"] = False
 
         optimizer = self.actions[action_idx](self.problem, action_options)
+        optimizer.target_FE = min(
+            self.checkpoints[self._n_generations],
+            self.max_function_evaluations,
+        )
         optimizer.n_function_evaluations = self.n_function_evaluations
         optimizer._n_generations = 0
 
@@ -342,7 +348,10 @@ class PolicyGradientAgent(Agent):
 
             # Store in Buffer
             self.n_function_evaluations = optimizer.n_function_evaluations
-            is_done = self.n_function_evaluations >= self.max_function_evaluations
+            is_done = (
+                self.n_function_evaluations >= self.max_function_evaluations
+                or idx == self.n_checkpoints - 1
+            )
             self.buffer.add(
                 state.squeeze(0).to(DEVICE),
                 action,

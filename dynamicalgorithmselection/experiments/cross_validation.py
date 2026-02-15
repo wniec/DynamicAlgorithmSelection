@@ -1,6 +1,6 @@
 import os
 from itertools import product
-from typing import Type
+from typing import Type, Optional
 
 import cocoex
 import numpy as np
@@ -24,7 +24,7 @@ def run_cross_validation(
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, cv_folds = _get_cv_folds(4, is_loio)
+    problems_suite, cv_folds = _get_cv_folds(4, is_loio, options.get("dimensionality"))
     observer = cocoex.Observer("bbob", "result_folder: " + options.get("name"))
     for i, (train_set, test_set) in enumerate(cv_folds):
         print(f"Running cross validation training, fold {i + 1}")
@@ -53,10 +53,11 @@ def run_cross_validation(
     return observer.result_folder
 
 
-def _get_cv_folds(n: int, is_loio: bool):
+def _get_cv_folds(n: int, is_loio: bool, dim: Optional[int]):
     """
     :param n:  number of cross validation folds
     :param is_loio: boolean to indicate how train and test sets should be split (leave-instance-out/leave-problem-out).
+    :param dim: dimensionality of the problems. None indicates all of them.
     :return suite, list of (train set, test set) pairs:
     """
     np.random.seed(1234)
@@ -64,7 +65,9 @@ def _get_cv_folds(n: int, is_loio: bool):
     problems_suite = cocoex.Suite("bbob", "", "")
     all_problem_ids = [
         f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
+        for i_id, f_id, dim in product(
+            INSTANCE_IDS, ALL_FUNCTIONS, (DIMENSIONS if dim is None else [dim])
+        )
     ]
     remaining_problem_ids = set(all_problem_ids)
     remaining_function_ids = {i for i in ALL_FUNCTIONS}

@@ -12,7 +12,7 @@ from pflacco.classical_ela_features import (
     calculate_ela_distribution,  # Information Content
 )
 from scipy.spatial.distance import pdist
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr  # type: ignore
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
@@ -162,7 +162,7 @@ class AgentState:
         numerator = min((weights * norms_squared**exponent).sum(), 1e8)
         inertia_denom_w = np.linalg.norm(weights)
         inertia_denom_n = np.linalg.norm(norms_squared**exponent)
-        return numerator / max(1e-5, inertia_denom_w * max(1e-5, inertia_denom_n))
+        return numerator / max(1e-5, inertia_denom_w * inertia_denom_n)
 
     def normalized_distance(self, x0: np.ndarray, x1: np.ndarray) -> float:
         return min(np.linalg.norm(x0 - x1) / self.max_distance, 1.0)

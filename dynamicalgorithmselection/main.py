@@ -3,8 +3,8 @@ import os
 import pickle
 import shutil
 from typing import List, Type, Optional
-import cocopp
-import neat
+import cocopp  # type: ignore
+import neat  # type: ignore
 import torch
 import wandb
 
@@ -14,6 +14,7 @@ from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradien
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
 from dynamicalgorithmselection.experiments.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
+from dynamicalgorithmselection.experiments.utils import DIMENSIONS
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 AGENTS_DICT = {
@@ -42,7 +43,7 @@ def parse_arguments():
     parser.add_argument(
         "-m",
         "--population_size",
-        type=Optional[int],
+        type=int,
         default=None,
         help="Population size (default: 20)",
     )
@@ -136,6 +137,24 @@ def parse_arguments():
         default=False,
         help="Enable selection of forcibly restarting optimizers",
     )
+
+    parser.add_argument(
+        "-D",
+        "--dimensionality",
+        type=int,
+        choices=DIMENSIONS,
+        default=None,
+        help="dimensionality of problems",
+    )
+
+    parser.add_argument(
+        "-E",
+        "--n_epochs",
+        type=int,
+        default=1,
+        help="number of training epochs",
+    )
+
     return parser.parse_args()
 
 
@@ -157,6 +176,8 @@ def print_info(args):
     print("Exponential checkpoint division base: ", args.cdb)
     print("State representation variant: ", args.state_representation)
     print("Forcing restarts: ", args.force_restarts)
+    print("Dimensionality of problems: ", args.dimensionality)
+    print("Number of training epochs: ", args.n_epochs)
 
 
 def test(args, action_space):
@@ -170,6 +191,8 @@ def test(args, action_space):
         "cdb": args.cdb,
         "state_representation": args.state_representation,
         "force_restarts": args.force_restarts,
+        "dimensionality": args.dimensionality,
+        "n_epochs": args.n_epochs,
     }
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
@@ -224,6 +247,8 @@ def run_training(args, action_space):
             "cdb": args.cdb,
             "state_representation": args.state_representation,
             "force_restarts": args.force_restarts,
+            "dimensionality": args.dimensionality,
+            "n_epochs": args.n_epochs,
         },
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -248,6 +273,8 @@ def run_CV(args, action_space):
             "cdb": args.cdb,
             "state_representation": args.state_representation,
             "force_restarts": args.force_restarts,
+            "dimensionality": args.dimensionality,
+            "n_epochs": args.n_epochs,
         },
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
@@ -265,8 +292,6 @@ def run_baselines(args, action_space):
 
         print(f"--- Running Baseline: {optimizer.__name__} ---")
 
-        # 2. Run experiment for ONLY this optimizer
-        # NOTICE: We pass `[optimizer]` instead of `action_space` here.
         coco_bbob_experiment(
             None,
             {
@@ -277,6 +302,8 @@ def run_baselines(args, action_space):
                 "cdb": args.cdb,
                 "state_representation": args.state_representation,
                 "force_restarts": args.force_restarts,
+                "dimensionality": args.dimensionality,
+                "n_epochs": args.n_epochs,
             },
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,

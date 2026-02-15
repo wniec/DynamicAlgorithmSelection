@@ -57,4 +57,5 @@ class DE(Optimizer):
         self._print_verbose_info(fitness, y)
         results = Optimizer._collect(self, fitness)
         results["_n_generations"] = self._n_generations
+        results.update(self.results)
         return results

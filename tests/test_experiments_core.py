@@ -13,6 +13,7 @@ class TestCore(unittest.TestCase):
             "n_checkpoints": 5,
             "n_individuals": 10,
             "cdb": 0.5,
+            "n_epochs": 1,
         }
         self.eval_multiplier = 10
         self.problem_ids = ["p1", "p2"]

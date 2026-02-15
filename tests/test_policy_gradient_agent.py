@@ -24,6 +24,8 @@ class TestPolicyGradientAgent:
             "reward_normalizer": MagicMock(),
             "state_normalizer": MagicMock(),
             "buffer": MagicMock(),
+            "n_problems": 1000,
+            "n_epochs": 1,
         }
 
     @pytest.fixture
@@ -158,6 +160,8 @@ class TestPolicyGradientAgent:
     def test_buffer_add(self, mock_problem, ppo_options):
         mock_buffer = MagicMock()
         ppo_options["buffer"] = mock_buffer
+        ppo_options["n_problems"] = 1000
+        ppo_options["n_epochs"] = 1
 
         with patch(
             "dynamicalgorithmselection.agents.agent.get_state_representation",

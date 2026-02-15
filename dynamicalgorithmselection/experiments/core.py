@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Any
 
 import cocoex
 import numpy as np
@@ -46,8 +46,11 @@ def run_training(
     problems_suite: cocoex.Suite,
     problem_ids: list[str],
 ):
-    agent_state = {}
-    for problem_id in tqdm(np.random.permutation(problem_ids), smoothing=0.0):
+    agent_state: dict[str, Any] = {}
+    n_epochs = options["n_epochs"]
+    for problem_id in tqdm(
+        np.random.permutation(problem_ids).tolist() * n_epochs, smoothing=0.0
+    ):
         problem_instance = problems_suite.get_problem(problem_id)
         max_fe = evaluations_multiplier * problem_instance.dimension
         options["max_function_evaluations"] = max_fe

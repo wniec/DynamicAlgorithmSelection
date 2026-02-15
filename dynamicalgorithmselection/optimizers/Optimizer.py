@@ -2,7 +2,7 @@ import time
 from typing import Optional
 
 import numpy as np
-from pypop7.optimizers.core import Optimizer as BaseOptimizer
+from pypop7.optimizers.core import Optimizer as BaseOptimizer, Terminations  # type: ignore
 
 
 class Optimizer(BaseOptimizer):
@@ -20,6 +20,7 @@ class Optimizer(BaseOptimizer):
         self.x_history, self.y_history = [], []
         # [Added] Dictionary to store histories of generic parameters
         self.parameter_history = {}
+        self.target_FE: int | float = float("inf")
 
     # [Modified] Accept generic kwargs for history tracking
     def _evaluate_fitness(self, x, args=None, **kwargs):
@@ -117,3 +118,10 @@ class Optimizer(BaseOptimizer):
             self.fitness_function = fitness_function
         fitness = []  # to store all fitness generated during evolution/optimization
         return fitness
+
+    def _check_terminations(self):
+        termination_signal = super()._check_terminations()
+        if not termination_signal:
+            termination_signal = self.n_function_evaluations >= self.target_FE
+            self.termination_signal = Terminations.MAX_FUNCTION_EVALUATIONS
+        return termination_signal

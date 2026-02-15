@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 
 MAX_DIM = 40
@@ -7,7 +9,7 @@ def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
     checkpoints: np.ndarray,
-) -> dict[str, float | list[float]]:
+) -> dict[str, float | list[Optional[float]]]:
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
     :param function_evaluations: max number of function evaluations during run.
@@ -21,7 +23,10 @@ def get_runtime_stats(
     checkpoints_fitness = []
     for i, fitness in fitness_history:
         area_under_optimization_curve += fitness * (i - last_i)
-        while last_i <= checkpoints[checkpoint_idx] < i:
+        while (
+            checkpoint_idx < len(checkpoints)
+            and last_i <= checkpoints[checkpoint_idx] < i
+        ):
             checkpoints_fitness.append(last_fitness)
             checkpoint_idx += 1
         last_i = i
@@ -72,17 +77,17 @@ def get_extreme_stats(
         key=lambda x: (x[0], -x[2])
     )  # sort fe - increasing and by fitness - decreasing
 
-    current_fitness = {
+    current_fitnesses = {
         alg: float("inf") for alg in fitness_histories
     }  # current best fitness for each algorithm
     current_worst_fitness = float("inf")  # worst performance so far for each algorithm
 
     worst_history = []
     for fe, algorithm, fitness in all_improvements:
-        if fitness < current_fitness[algorithm]:
-            current_fitness[algorithm] = fitness
+        if fitness < current_fitnesses[algorithm]:
+            current_fitnesses[algorithm] = fitness
             new_worst_fitness = max(
-                i for i in current_fitness.values() if i != float("inf")
+                i for i in current_fitnesses.values() if i != float("inf")
             )
             if new_worst_fitness < current_worst_fitness:
                 worst_history.append((fe, fitness))

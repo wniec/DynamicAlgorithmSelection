@@ -21,14 +21,15 @@ class RLDASAgent(Agent):
 
         self.alg_names = [alg.__name__ for alg in self.actions]
         self.n_algorithms = len(self.actions)
-        self.dim = self.ndim_problem
 
         self.network = RLDASNetwork(
-            d_dim=self.dim, num_algorithms=self.n_algorithms
+            num_algorithms=self.n_algorithms, d_dim=self.ndim_problem
         ).to(DEVICE)
 
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=3e-5)
-        self.ah_vectors = np.zeros((self.n_algorithms, 2, self.dim))
+
+        self._load_parameters(options)
+        self.ah_vectors = np.zeros((self.n_algorithms, 2, self.ndim_problem))
         self.alg_usage_counts = np.zeros(self.n_algorithms)
         self.context_memory = {name: {} for name in self.alg_names}
         self.context_memory["Common"] = {}
@@ -41,7 +42,7 @@ class RLDASAgent(Agent):
         expected_trajectory_length = int(
             np.ceil(self.max_function_evaluations / self.schedule_interval)
         )
-        buffer_capacity = expected_trajectory_length + 10  # Safety margin
+        buffer_capacity = expected_trajectory_length * 10  # Safety margin
         self.buffer = RolloutBuffer(capacity=buffer_capacity, device=DEVICE)
 
     def _load_parameters(self, options):
@@ -129,7 +130,8 @@ class RLDASAgent(Agent):
             dist = torch.distributions.Categorical(probs)
             action = dist.sample()
             log_prob = dist.log_prob(action)
-            probs = probs.detach().cpu().numpy()
+            probs = probs.detach().cpu().numpy()[0]
+
             if self.run is not None:
                 entropy = -np.sum(probs * np.log(probs + 1e-12)) / np.log(len(probs))
                 self.run.log({"normalized entropy": entropy})
@@ -194,20 +196,24 @@ class RLDASAgent(Agent):
 
             x_best_old = population_x[np.argmin(population_y)].copy()
             x_worst_old = population_x[np.argmax(population_y)].copy()
-            cost_old = np.min(population_y)
+            cost_old = np.copy(np.min(population_y))
 
             target_fes = min(
                 self.n_function_evaluations + self.schedule_interval,
                 self.max_function_evaluations,
             )
-            sub_opt.max_function_evaluations = target_fes
-
-            sub_opt.population = population_x
-            sub_opt.fitness = population_y
+            sub_opt.target_FE = target_fes
+            sub_opt.set_data(
+                x=population_x,
+                y=population_y,
+                best_x=self.best_so_far_x,
+                best_y=self.best_so_far_y,
+            )
 
             res = sub_opt.optimize()
-            population_x = sub_opt.population
-            population_y = sub_opt.fitness
+
+            population_x = res["x"]
+            population_y = res["y"]
 
             self.n_function_evaluations = sub_opt.n_function_evaluations
 
@@ -339,7 +345,7 @@ class RLDASAgent(Agent):
         surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * mb_advantages
         actor_loss = -torch.min(surr1, surr2).mean()
 
-        loss = actor_loss + value_coef * value_loss - entropy_coef * entropy
+        loss = actor_loss + value_coef * value_loss  # - entropy_coef * entropy
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -410,8 +416,8 @@ class RLDASAgent(Agent):
 
         advantages = []
         last_gae_lam = 0
-        gamma = 0.99
-        lam = 0.95
+        gamma = 0.90
+        lam = 0.5
 
         for step in reversed(range(len(rewards))):
             next_non_terminal = 1.0 - dones[step]
