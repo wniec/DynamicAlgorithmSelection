@@ -9,6 +9,7 @@ from dynamicalgorithmselection.agents.ppo_utils import (
     DEVICE,
     RolloutBuffer,
     RLDASNetwork,
+    GAMMA,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -166,7 +167,6 @@ class RLDASAgent(Agent):
         self.best_so_far_x = best_x_global
 
         self.history.append(self.best_so_far_y)
-        self.fitness_history.append(self.best_so_far_y)
         if self.saving_fitness:
             fitness.append(self.best_so_far_y)
 
@@ -252,7 +252,6 @@ class RLDASAgent(Agent):
                 self.best_so_far_x = x_best_new
 
             self.history.append(self.best_so_far_y)
-            self.fitness_history.append(self.best_so_far_y)
             if self.saving_fitness:
                 fitness.append(self.best_so_far_y)
 
@@ -318,123 +317,77 @@ class RLDASAgent(Agent):
 
         return results, agent_state
 
-    def _update_on_minibatch(
-        self,
-        mb_la,
-        mb_ah,
-        mb_actions,
-        mb_old_log_probs,
-        mb_returns,
-        mb_advantages,
-        clip_eps,
-        value_coef,
-        entropy_coef,
-    ):
-        policy_probs, values_pred = self.network(mb_la, mb_ah)
-
-        dist = torch.distributions.Categorical(policy_probs)
-        dist_log_probs = dist.log_prob(mb_actions)
-        entropy = dist.entropy().mean()
-
-        ratio = torch.exp(dist_log_probs - mb_old_log_probs)
-
-        values_pred = values_pred.squeeze(1)
-        value_loss = torch.nn.functional.mse_loss(values_pred, mb_returns)
-
-        surr1 = ratio * mb_advantages
-        surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * mb_advantages
-        actor_loss = -torch.min(surr1, surr2).mean()
-
-        loss = actor_loss + value_coef * value_loss  # - entropy_coef * entropy
-
-        self.optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
-        self.optimizer.step()
-
-        return actor_loss.detach().item(), value_loss.detach().item()
-
     def ppo_update(
         self,
         buffer,
         epochs=4,
-        minibatch_size=256,
+        minibatch_size=None,
         clip_eps=0.2,
         value_coef=0.5,
         entropy_coef=0.01,
     ):
-        la_states, ah_states, actions, old_log_probs, returns, advantages = (
-            self._compute_advantages(buffer)
-        )
-        dataset_size = la_states.shape[0]
-
-        n_batches = 0
-
-        actual_minibatch_size = min(minibatch_size, dataset_size)
-
-        for epoch in range(epochs):
-            indices = np.arange(dataset_size)
-            np.random.shuffle(indices)
-
-            for start in range(0, dataset_size, actual_minibatch_size):
-                idx = indices[start : start + actual_minibatch_size]
-
-                self._update_on_minibatch(
-                    la_states[idx],
-                    ah_states[idx],  # Pass both
-                    actions[idx],
-                    old_log_probs[idx],
-                    returns[idx],
-                    advantages[idx],
-                    clip_eps,
-                    value_coef,
-                    entropy_coef,
-                )
-                n_batches += 1
-
-    def _compute_advantages(self, buffer):
-        """
-        Computes GAE handling split (LA, AH) state inputs.
-        """
         la_list, ah_list = zip(*buffer.states)
 
         la_states = torch.stack(la_list).to(DEVICE)
         ah_states = torch.stack(ah_list).to(DEVICE)
 
-        rewards = torch.tensor(buffer.rewards, dtype=torch.float32).to(DEVICE)
-        dones = torch.tensor(buffer.dones, dtype=torch.float32).to(DEVICE)
-        values = torch.stack(buffer.values).squeeze().to(DEVICE)
+        actions = torch.tensor(buffer.actions).to(DEVICE)
+        rewards = buffer.rewards
+        dones = buffer.dones
 
-        with torch.no_grad():
-            if buffer.dones[-1]:
-                next_value = 0.0
-            else:
-                _, last_val_tens = self.network(
-                    la_states[-1].unsqueeze(0), ah_states[-1].unsqueeze(0)
+        old_logprobs = torch.stack(buffer.log_probs).detach().to(DEVICE).view(-1)
+
+        old_values = torch.stack(buffer.values).detach().to(DEVICE).view(-1)
+
+        for _ in range(epochs):
+            policy_probs, current_values = self.network(la_states, ah_states)
+
+            dist = torch.distributions.Categorical(policy_probs)
+            logprobs = dist.log_prob(actions)
+
+            current_values = current_values.squeeze()
+
+            with torch.no_grad():
+                if dones[-1]:
+                    R = 0.0
+                else:
+                    R = current_values[-1].item() if not dones[-1] else 0.0
+
+            Returns = []
+            for r in reversed(rewards):
+                R = R * GAMMA + r
+                Returns.insert(0, R)
+
+            Returns = torch.tensor(Returns).to(DEVICE).float()
+            advantages = Returns - current_values.detach()
+            ratios = torch.exp(logprobs - old_logprobs)
+
+            # Actor Loss (Reinforce Loss with Clipping)
+            surr1 = ratios * advantages
+            surr2 = torch.clamp(ratios, 1 - clip_eps, 1 + clip_eps) * advantages
+            actor_loss = -torch.min(surr1, surr2).mean()
+
+            vpredclipped = old_values + torch.clamp(
+                current_values - old_values, -clip_eps, clip_eps
+            )
+
+            v_max = torch.max(
+                ((current_values - Returns) ** 2), ((vpredclipped - Returns) ** 2)
+            )
+            critic_loss = v_max.mean()
+
+            loss = critic_loss + actor_loss
+
+            if self.run is not None:
+                self.run.log(
+                    {
+                        "Returns": Returns.mean().item(),
+                        "actor_loss": actor_loss.item(),
+                        "critic_loss": critic_loss.item(),
+                    }
                 )
-                next_value = last_val_tens.item()
 
-        advantages = []
-        last_gae_lam = 0
-        gamma = 0.90
-        lam = 0.5
-
-        for step in reversed(range(len(rewards))):
-            next_non_terminal = 1.0 - dones[step]
-            next_val = next_value if step == len(rewards) - 1 else values[step + 1]
-
-            delta = rewards[step] + gamma * next_val * next_non_terminal - values[step]
-            last_gae_lam = delta + gamma * lam * next_non_terminal * last_gae_lam
-            advantages.insert(0, last_gae_lam)
-
-        advantages = torch.tensor(advantages, dtype=torch.float32).to(DEVICE)
-        returns = advantages + values
-
-        return (
-            la_states,
-            ah_states,
-            torch.tensor(buffer.actions).to(DEVICE),
-            torch.stack(buffer.log_probs).to(DEVICE),
-            returns,
-            advantages,
-        )
+            self.optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
+            self.optimizer.step()
