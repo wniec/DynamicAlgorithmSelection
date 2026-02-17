@@ -3,7 +3,7 @@ from operator import itemgetter
 from typing import Tuple, Callable, Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore
 from pflacco.classical_ela_features import (
     calculate_ela_meta,  # Meta-Model (Linear/Quadratic fit)
     calculate_nbc,  # Nearest Better Clustering
@@ -11,7 +11,7 @@ from pflacco.classical_ela_features import (
     calculate_information_content,
     calculate_ela_distribution,  # Information Content
 )
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist  # type: ignore
 from scipy.stats import spearmanr  # type: ignore
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder

@@ -19,8 +19,8 @@ def get_runtime_stats(
     area_under_optimization_curve = 0.0
     last_i = 0
     checkpoint_idx = 0
-    last_fitness = None
-    checkpoints_fitness = []
+    last_fitness = float("inf")
+    checkpoints_fitness: list[float] = []
     for i, fitness in fitness_history:
         area_under_optimization_curve += fitness * (i - last_i)
         while (

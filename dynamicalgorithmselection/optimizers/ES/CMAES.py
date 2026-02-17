@@ -365,7 +365,7 @@ class CMAES(ES):
             }
             mean = x[indices].mean(axis=0)
             stds = np.std(x[indices], axis=0)
-            sigma = np.max(stds)
+            sigma: float = np.max(stds)
             sigma = max(sigma, 1e-8)
             start_conditions.update(
                 {"x": x[indices], "y": y[indices], "mean": mean, "sigma": sigma}

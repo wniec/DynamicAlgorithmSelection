@@ -63,7 +63,7 @@ class Agent(Optimizer):
         x: Optional[np.ndarray],
         y: Optional[np.ndarray],
         optimization_state: bool = False,
-    ) -> np.array:
+    ) -> np.ndarray:
         sr_additional_params = (
             self.lower_boundary,
             self.upper_boundary,

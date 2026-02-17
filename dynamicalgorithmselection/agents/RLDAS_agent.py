@@ -219,9 +219,9 @@ class RLDASAgent(Agent):
 
             self._save_context(sub_opt, alg_name)
 
-            x_best_new = population_x[np.argmin(population_y)].copy()
-            x_worst_new = population_x[np.argmax(population_y)].copy()
-            cost_new = np.min(population_y)
+            x_best_new: float = population_x[np.argmin(population_y)].copy()
+            x_worst_new: float = population_x[np.argmax(population_y)].copy()
+            cost_new: float = np.min(population_y)
 
             self._update_ah_history(
                 action_idx, x_best_old, x_best_new, x_worst_old, x_worst_new

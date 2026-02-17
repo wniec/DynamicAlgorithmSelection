@@ -1,7 +1,7 @@
 from typing import Optional
 
 import numpy as np
-import numba as nb
+import numba as nb  # type: ignore
 
 from dynamicalgorithmselection.optimizers.ES.ES import ES
 

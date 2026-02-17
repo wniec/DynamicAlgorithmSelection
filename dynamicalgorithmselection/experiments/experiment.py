@@ -13,7 +13,7 @@ from dynamicalgorithmselection.experiments.utils import (
     dump_stats,
 )
 
-import cocoex
+import cocoex  # type: ignore
 from tqdm import tqdm  # type: ignore
 
 from dynamicalgorithmselection.agents.agent_utils import (
@@ -66,7 +66,7 @@ def dump_extreme_stats(
 
 
 def coco_bbob_experiment(
-    optimizer: Type[Optimizer],
+    optimizer: Optional[Type[Optimizer]],
     options: dict,
     name: str,
     evaluations_multiplier: int = 1_000,
@@ -85,7 +85,7 @@ def coco_bbob_experiment(
     elif options.get("baselines"):
         # running only baselines
         return run_comparison(
-            options.get("optimizer_portfolio"), options, evaluations_multiplier
+            options["optimizer_portfolio"], options, evaluations_multiplier
         )
     elif not train:
         return _coco_bbob_test(optimizer, options, evaluations_multiplier, mode)
