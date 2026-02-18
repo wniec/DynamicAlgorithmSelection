@@ -3,7 +3,7 @@ import os
 from itertools import islice, product
 from typing import Type, Optional
 
-import cocoex  # type: ignore
+import cocoex
 import numpy as np
 
 from dynamicalgorithmselection.agents.agent_utils import (

@@ -13,8 +13,8 @@ from dynamicalgorithmselection.experiments.utils import (
     dump_stats,
 )
 
-import cocoex  # type: ignore
-from tqdm import tqdm  # type: ignore
+import cocoex
+from tqdm import tqdm
 
 from dynamicalgorithmselection.agents.agent_utils import (
     get_extreme_stats,

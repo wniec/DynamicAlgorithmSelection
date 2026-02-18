@@ -1,17 +1,22 @@
 import unittest
 from unittest.mock import MagicMock, patch, mock_open
-import os
+from typing import Any, cast, Type  # Added imports
 
 from dynamicalgorithmselection.experiments.experiment import (
     coco_bbob_experiment,
     run_comparison,
     dump_extreme_stats,
 )
+from dynamicalgorithmselection.optimizers.Optimizer import (
+    Optimizer,
+)  # Import the base class
 
 
 class TestExperiment(unittest.TestCase):
     def setUp(self):
-        self.optimizer_mock = MagicMock()
+        self.optimizer_mock = MagicMock(
+            spec=Type[Optimizer]
+        )  # Use spec for better type safety
         self.optimizer_mock.__name__ = "MockOpt"
         self.options = {
             "name": "experiment_test",
@@ -87,7 +92,7 @@ class TestExperiment(unittest.TestCase):
         opt1.__name__ = "Opt1"
         opt2 = MagicMock()
         opt2.__name__ = "Opt2"
-        portfolio = [opt1, opt2]
+        portfolio = cast(list[Type[Optimizer]], [opt1, opt2])
 
         # Mock Suite
         mock_suite_obj = MagicMock()
@@ -95,11 +100,8 @@ class TestExperiment(unittest.TestCase):
         mock_problem.dimension = 2
         mock_suite_obj.get_problem.return_value = mock_problem
 
-        # get_suite returns (suite, problem_ids)
         mock_get_suite.return_value = (mock_suite_obj, ["p1"])
 
-        # FIXED: Return a dictionary, NOT a tuple.
-        # run_comparison treats results as a dictionary directly in one of the lines.
         mock_single_func.return_value = {"fitness_history": [1, 2]}
 
         # Execute
@@ -118,8 +120,12 @@ class TestExperiment(unittest.TestCase):
     def test_dump_extreme_stats(
         self, mock_json_dump, mock_file, mock_get_extreme, mock_get_checkpoints
     ):
-        stats = {"Opt1": [], "Opt2": []}
-        portfolio = [MagicMock(__name__="Opt1"), MagicMock(__name__="Opt2")]
+        stats: dict[str, list[Any]] = {"Opt1": [], "Opt2": []}
+        portfolio = cast(
+            list[Type[Optimizer]],
+            [MagicMock(__name__="Opt1"), MagicMock(__name__="Opt2")],
+        )
+
         mock_get_extreme.return_value = ({"best": 1}, {"worst": 0})
 
         dump_extreme_stats(portfolio, stats, "p1", 100, 5, 10, 0.5)

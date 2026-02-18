@@ -1,8 +1,8 @@
 from typing import Type, Any
 
-import cocoex  # type: ignore
+import cocoex
 import numpy as np
-from tqdm import tqdm  # type: ignore
+from tqdm import tqdm
 
 from dynamicalgorithmselection.experiments.utils import (
     coco_bbob_single_function,

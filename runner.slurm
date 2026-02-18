@@ -9,6 +9,8 @@
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --array=0-15           # 0-6 (LOIO), 7-13 (LOPO), 14-15 (Random and baselines)
 
+CDB_VAL=${1:-1.5}
+
 # CONFIGURATION
 ENV_PATH="$SCRATCH/DynamicAlgorithmSelection/.venv/bin/activate"
 source "$ENV_PATH"
@@ -31,30 +33,30 @@ if [ $TASK_ID -le 5 ]; then
     DIM=${DIMS[$TASK_ID]}
     echo "Running Mode: $MODE | Dimension: $DIM"
 
-    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RLDAS \
+    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RLDAS_${MODE}_${DIM} \
       -p 'JDE21' 'MADDE' 'NL_SHADE_RSP' --wandb_project RL-DAS --wandb_entity niecwladek-agh \
       --mode $MODE --dimensionality $DIM --n_epochs 40 --agent RL-DAS
 
-    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG \
+    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_${MODE}_${DIM} \
       -p 'JDE21' 'MADDE' 'NL_SHADE_RSP' --wandb_project RL-DAS --wandb_entity niecwladek-agh \
-      -r custom --mode $MODE --dimensionality $DIM --cdb 1.5 --n_epochs 3 --agent policy-gradient
+      -r custom --mode $MODE --dimensionality $DIM --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
 elif [ $TASK_ID -eq 6 ]; then
     # --- MULTIDIMENSIONAL ---
     echo "Running Mode: $MODE | Multidimensional PG"
-    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_MULTIDIMENSIONAL \
+    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_MULTIDIMENSIONAL_$MODE \
       -p 'JDE21' 'MADDE' 'NL_SHADE_RSP' --wandb_project RL-DAS --wandb_entity niecwladek-agh \
-      -r custom --mode $MODE --cdb 1.5 --agent policy-gradient
+      -r custom --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 
 elif [ $TASK_ID -eq 14 ]; then
     # --- RANDOM AGENT ---
     echo "Running Mode: Random Agent"
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RANDOM \
-      -p 'JDE21' 'MADDE' 'NL_SHADE_RSP' --cdb 1.5 --agent random
+      -p 'JDE21' 'MADDE' 'NL_SHADE_RSP' --cdb $CDB_VAL --agent random
 
 elif [ $TASK_ID -eq 15 ]; then
     # --- BASELINES ---
     echo "Running Mode: Baselines"
-    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RANDOM \
+    python3 dynamicalgorithmselection/main.py BASELINES \
       -p 'JDE21' 'MADDE' 'NL_SHADE_RSP' --agent random --mode baselines
 fi

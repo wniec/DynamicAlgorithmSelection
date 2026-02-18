@@ -3,7 +3,7 @@ from operator import itemgetter
 from typing import Tuple, Callable, Any
 
 import numpy as np
-import pandas as pd  # type: ignore
+import pandas as pd
 from pflacco.classical_ela_features import (
     calculate_ela_meta,  # Meta-Model (Linear/Quadratic fit)
     calculate_nbc,  # Nearest Better Clustering
@@ -11,8 +11,8 @@ from pflacco.classical_ela_features import (
     calculate_information_content,
     calculate_ela_distribution,  # Information Content
 )
-from scipy.spatial.distance import pdist  # type: ignore
-from scipy.stats import spearmanr  # type: ignore
+from scipy.spatial.distance import pdist
+from scipy.stats import spearmanr
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
@@ -165,7 +165,7 @@ class AgentState:
         return numerator / max(1e-5, inertia_denom_w * inertia_denom_n)
 
     def normalized_distance(self, x0: np.ndarray, x1: np.ndarray) -> float:
-        return min(np.linalg.norm(x0 - x1) / self.max_distance, 1.0)
+        return float(min(np.linalg.norm(x0 - x1) / self.max_distance, 1.0))
 
     def get_fitness_weights(self) -> np.ndarray:
         weights = (
@@ -175,9 +175,9 @@ class AgentState:
         )
         return weights / weights.sum()
 
-    def population_relative_radius(self) -> np.ndarray:
+    def population_relative_radius(self) -> float:
         population_radius = np.linalg.norm(self.x.max(axis=0) - self.x.min(axis=0))
-        return population_radius / self.max_distance
+        return float(population_radius / self.max_distance)
 
     def slopes_stats(self) -> tuple:
         return get_list_stats(
@@ -330,7 +330,7 @@ class AgentState:
 
 
 def distance(x0: np.ndarray, x1: np.ndarray) -> float:
-    return np.linalg.norm(x0 - x1)
+    return float(np.linalg.norm(x0 - x1))
 
 
 def inverse_scaling(x):

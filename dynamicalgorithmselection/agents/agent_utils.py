@@ -9,7 +9,9 @@ def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
     checkpoints: np.ndarray,
-) -> dict[str, float | list[Optional[float]]]:
+) -> dict[
+    str, float | list[float]
+]:  # Changed from list[Optional[float]] to list[float]
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
     :param function_evaluations: max number of function evaluations during run.
@@ -21,6 +23,7 @@ def get_runtime_stats(
     checkpoint_idx = 0
     last_fitness = float("inf")
     checkpoints_fitness: list[float] = []
+
     for i, fitness in fitness_history:
         area_under_optimization_curve += fitness * (i - last_i)
         while (
@@ -31,13 +34,16 @@ def get_runtime_stats(
             checkpoint_idx += 1
         last_i = i
         last_fitness = fitness
+
     area_under_optimization_curve += fitness_history[-1][1] * (
         function_evaluations - fitness_history[-1][0]
     )
     final_fitness = fitness_history[-1][1]
+
     if function_evaluations == checkpoints[-1]:
         while len(checkpoints_fitness) < len(checkpoints):
             checkpoints_fitness.append(final_fitness)
+
     return {
         "area_under_optimization_curve": area_under_optimization_curve
         / function_evaluations,
@@ -93,6 +99,7 @@ def get_extreme_stats(
                 worst_history.append((fe, fitness))
                 current_worst_fitness = new_worst_fitness
 
+    # These now match the expected return type of tuple[dict[str, float | list[float]], ...]
     return (
         get_runtime_stats(best_history, function_evaluations, checkpoints),
         get_runtime_stats(worst_history, function_evaluations, checkpoints),

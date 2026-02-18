@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import copy
 import os
+from typing import Any, Dict, List, Optional, Tuple
 
 from dynamicalgorithmselection.agents.agent import Agent
 from dynamicalgorithmselection.agents.agent_state import get_la_features
@@ -32,7 +33,9 @@ class RLDASAgent(Agent):
         self._load_parameters(options)
         self.ah_vectors = np.zeros((self.n_algorithms, 2, self.ndim_problem))
         self.alg_usage_counts = np.zeros(self.n_algorithms)
-        self.context_memory = {name: {} for name in self.alg_names}
+        self.context_memory: Dict[str, Dict[str, Any]] = {
+            name: {} for name in self.alg_names
+        }
         self.context_memory["Common"] = {}
         self.mean_rewards = options.get("mean_rewards", [])
         self.best_50_mean = float("inf")
@@ -52,8 +55,15 @@ class RLDASAgent(Agent):
         if p := options.get("optimizer", None):
             self.optimizer.load_state_dict(p)
 
-    def get_state(self, pop_x, pop_y):
-        la = get_la_features(self, pop_x, pop_y)
+    def get_state(
+        self,
+        x: Optional[np.ndarray] = None,
+        y: Optional[np.ndarray] = None,
+        x_history: Optional[np.ndarray] = None,
+        y_history: Optional[np.ndarray] = None,
+        update: bool = True,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        la = get_la_features(self, x, y)
         ah = self.ah_vectors.copy()
 
         return la, ah
@@ -167,8 +177,7 @@ class RLDASAgent(Agent):
         self.best_so_far_x = best_x_global
 
         self.history.append(self.best_so_far_y)
-        if self.saving_fitness:
-            fitness.append(self.best_so_far_y)
+        fitness.append(float(self.best_so_far_y))
 
         self.initial_cost = best_y_global if abs(best_y_global) > 1e-8 else 1.0
 
@@ -177,7 +186,7 @@ class RLDASAgent(Agent):
         self.context_memory = {name: {} for name in self.alg_names}
         self.context_memory["Common"] = {}
 
-        trajectory = []  # To store (s, a, r_raw, log_prob, val, done)
+        trajectory = []
 
         while self.n_function_evaluations < self.max_function_evaluations:
             state = self.get_state(population_x, population_y)
@@ -219,8 +228,8 @@ class RLDASAgent(Agent):
 
             self._save_context(sub_opt, alg_name)
 
-            x_best_new: float = population_x[np.argmin(population_y)].copy()
-            x_worst_new: float = population_x[np.argmax(population_y)].copy()
+            x_best_new: np.ndarray = population_x[np.argmin(population_y)].copy()
+            x_worst_new: np.ndarray = population_x[np.argmax(population_y)].copy()
             cost_new: float = np.min(population_y)
 
             self._update_ah_history(
@@ -252,8 +261,7 @@ class RLDASAgent(Agent):
                 self.best_so_far_x = x_best_new
 
             self.history.append(self.best_so_far_y)
-            if self.saving_fitness:
-                fitness.append(self.best_so_far_y)
+            fitness.append(float(self.best_so_far_y))
 
             self._n_generations += 1
             self._print_verbose_info(fitness, self.best_so_far_y)
@@ -349,17 +357,18 @@ class RLDASAgent(Agent):
 
             with torch.no_grad():
                 if dones[-1]:
-                    R = 0.0
+                    return_value = 0.0
                 else:
-                    R = current_values[-1].item() if not dones[-1] else 0.0
+                    return_value = current_values[-1].item() if not dones[-1] else 0.0
 
-            Returns = []
+            returns_list: List[float] = []
             for r in reversed(rewards):
-                R = R * GAMMA + r
-                Returns.insert(0, R)
+                return_value = return_value * GAMMA + r
+                returns_list.insert(0, return_value)
 
-            Returns = torch.tensor(Returns).to(DEVICE).float()
-            advantages = Returns - current_values.detach()
+            returns_tensor: torch.Tensor = torch.tensor(returns_list).to(DEVICE).float()
+            advantages = returns_tensor - current_values.detach()
+
             ratios = torch.exp(logprobs - old_logprobs)
 
             # Actor Loss (Reinforce Loss with Clipping)
@@ -372,7 +381,8 @@ class RLDASAgent(Agent):
             )
 
             v_max = torch.max(
-                ((current_values - Returns) ** 2), ((vpredclipped - Returns) ** 2)
+                ((current_values - returns_tensor) ** 2),
+                ((vpredclipped - returns_tensor) ** 2),
             )
             critic_loss = v_max.mean()
 
@@ -381,7 +391,7 @@ class RLDASAgent(Agent):
             if self.run is not None:
                 self.run.log(
                     {
-                        "Returns": Returns.mean().item(),
+                        "Returns": returns_tensor.mean().item(),
                         "actor_loss": actor_loss.item(),
                         "critic_loss": critic_loss.item(),
                     }

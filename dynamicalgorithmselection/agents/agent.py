@@ -1,5 +1,5 @@
 from itertools import product
-from typing import List, Type, Optional
+from typing import List, Type, Optional, Dict, Any
 import numpy as np
 from dynamicalgorithmselection.agents.agent_state import (
     get_state_representation,
@@ -163,7 +163,13 @@ class Agent(Optimizer):
 
         self._check_early_stopping(best_y)
 
-    def iterate(self, optimizer_input_data=None, optimizer=None):
+    def iterate(
+        self,
+        optimizer_input_data: Optional[Dict] = None,
+        optimizer: Optional[Optimizer] = None,
+    ):
+        if optimizer_input_data is None or optimizer is None:
+            raise ValueError("Inputs to iterate cannot be None")
         optimizer_input_data["best_x"] = self.best_so_far_x
         optimizer_input_data["best_y"] = self.best_so_far_y
         optimizer.set_data(**optimizer_input_data)
@@ -172,7 +178,7 @@ class Agent(Optimizer):
             return optimizer.get_data()
 
         self._n_generations += 1
-        results = optimizer.optimize()
+        results: Dict[str, Any] = optimizer.optimize()
         self.fitness_history.extend(results["fitness_history"])
 
         self._save_fitness(

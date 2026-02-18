@@ -2,7 +2,7 @@ import os
 from itertools import product
 from typing import Type, Optional
 
-import cocoex  # type: ignore
+import cocoex
 import numpy as np
 
 from dynamicalgorithmselection.experiments.core import run_testing, run_training
@@ -25,6 +25,7 @@ def run_cross_validation(
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, cv_folds = _get_cv_folds(4, is_loio, options.get("dimensionality"))
+    options["n_problems"] = len(cv_folds[0])
     observer = cocoex.Observer("bbob", "result_folder: " + options["name"])
     for i, (train_set, test_set) in enumerate(cv_folds):
         print(f"Running cross validation training, fold {i + 1}")

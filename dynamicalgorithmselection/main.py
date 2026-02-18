@@ -3,8 +3,8 @@ import os
 import pickle
 import shutil
 from typing import List, Type, Optional
-import cocopp  # type: ignore
-import neat  # type: ignore
+import cocopp
+import neat
 import torch
 import wandb
 
