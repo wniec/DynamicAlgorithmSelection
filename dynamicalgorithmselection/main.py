@@ -2,7 +2,7 @@ import argparse
 import os
 import pickle
 import shutil
-from typing import List, Type, Optional
+from typing import List, Type, Dict, Any
 import cocopp
 import neat
 import torch
@@ -108,7 +108,7 @@ def parse_arguments():
         "-l",
         "--mode",
         type=str,
-        default="easy",
+        default="LOIO",
         choices=["LOIO", "hard", "easy", "CV-LOIO", "CV-LOPO", "baselines"],
         help="specify which agent to use",
     )
@@ -155,6 +155,14 @@ def parse_arguments():
         help="number of training epochs",
     )
 
+    parser.add_argument(
+        "-O",
+        "--reward-option",
+        type=int,
+        default=1,
+        help="id of method used to compute reward",
+    )
+
     return parser.parse_args()
 
 
@@ -178,6 +186,21 @@ def print_info(args):
     print("Forcing restarts: ", args.force_restarts)
     print("Dimensionality of problems: ", args.dimensionality)
     print("Number of training epochs: ", args.n_epochs)
+    print("Rewarding option: ", args.reward_option)
+
+
+def common_options(args) -> Dict[str, Any]:
+    options = {
+        "n_checkpoints": args.n_checkpoints,
+        "n_individuals": args.population_size,
+        "cdb": args.cdb,
+        "state_representation": args.state_representation,
+        "force_restarts": args.force_restarts,
+        "dimensionality": args.dimensionality,
+        "n_epochs": args.n_epochs,
+        "reward_option": args.reward_option,
+    }
+    return options
 
 
 def test(args, action_space):
@@ -185,15 +208,8 @@ def test(args, action_space):
         shutil.rmtree(os.path.join("exdata", f"DAS_{args.name}"))
 
     options = {
-        "n_checkpoints": args.n_checkpoints,
-        "n_individuals": args.population_size,
         "action_space": action_space,
-        "cdb": args.cdb,
-        "state_representation": args.state_representation,
-        "force_restarts": args.force_restarts,
-        "dimensionality": args.dimensionality,
-        "n_epochs": args.n_epochs,
-    }
+    } | common_options(args)
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
         config = neat.Config(
@@ -240,16 +256,10 @@ def run_training(args, action_space):
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
-            "n_checkpoints": args.n_checkpoints,
-            "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,
-            "cdb": args.cdb,
-            "state_representation": args.state_representation,
-            "force_restarts": args.force_restarts,
-            "dimensionality": args.dimensionality,
-            "n_epochs": args.n_epochs,
-        },
+        }
+        | common_options(args),
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
@@ -266,16 +276,10 @@ def run_CV(args, action_space):
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
-            "n_checkpoints": args.n_checkpoints,
-            "n_individuals": args.population_size,
             "run": None,
             "action_space": action_space,
-            "cdb": args.cdb,
-            "state_representation": args.state_representation,
-            "force_restarts": args.force_restarts,
-            "dimensionality": args.dimensionality,
-            "n_epochs": args.n_epochs,
-        },
+        }
+        | common_options(args),
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
@@ -295,16 +299,10 @@ def run_baselines(args, action_space):
         coco_bbob_experiment(
             None,
             {
-                "optimizer_portfolio": [optimizer],  # <--- FIXED: List of 1
-                "n_individuals": args.population_size,
+                "optimizer_portfolio": [optimizer],
                 "baselines": True,
-                "n_checkpoints": args.n_checkpoints,
-                "cdb": args.cdb,
-                "state_representation": args.state_representation,
-                "force_restarts": args.force_restarts,
-                "dimensionality": args.dimensionality,
-                "n_epochs": args.n_epochs,
-            },
+            }
+            | common_options(args),
             name=optimizer.__name__,
             evaluations_multiplier=args.fe_multiplier,
             train=False,

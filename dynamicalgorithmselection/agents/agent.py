@@ -1,6 +1,8 @@
 from itertools import product
 from typing import List, Type, Optional, Dict, Any, Tuple
 import numpy as np
+
+from dynamicalgorithmselection.agents.agent_reward import AgentReward
 from dynamicalgorithmselection.agents.agent_state import (
     get_state_representation,
     StateNormalizer,
@@ -57,6 +59,7 @@ class Agent(Optimizer):
             "state_normalizer", StateNormalizer(input_shape=(self.state_dim,))
         )
         self.initial_value_range: Tuple[Optional[float], Optional[float]] = (None, None)
+        self.reward_method = AgentReward(self.options.get("reward_option", 1))
 
     def get_partial_state(
         self,
@@ -234,13 +237,9 @@ class Agent(Optimizer):
     def optimize(self, fitness_function=None, args=None):
         raise NotImplementedError
 
-    def get_reward(self, new_best_y, old_best_y):
-        if old_best_y == float("inf"):
-            return 0.0
-
-        improvement = old_best_y - new_best_y
-
-        reward = improvement / (
-            self.initial_value_range[1] - self.initial_value_range[0]
+    def get_reward(
+        self, new_best_y: float, old_best_y: float, is_final_checkpoint: bool = False
+    ):
+        return self.reward_method(
+            new_best_y, old_best_y, self.initial_value_range, is_final_checkpoint
         )
-        return np.log(np.clip(reward, 0.0, 1.0) + 1e-5)

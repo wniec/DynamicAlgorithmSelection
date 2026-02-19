@@ -61,17 +61,21 @@ uv run das <name> [options]
 |------------------------------------|-------------|-----------------------------|------------------------------------------------------------------------------------------------------------------|
 | `name`                             | `str`       | —                           | **Required.** Name tag for the run or experiment.                                                                |
 | `-p`, `--portfolio`                | `list[str]` | `['SPSO', 'IPSO', 'SPSOL']` | Portfolio of sub-optimizers to include.                                                                          |
-| `-m`, `--population_size`          | `int`       | `20`                        | Population size for all fixed-population optimizers.                                                             |
+| `-m`, `--population_size`          | `int`       | `None`                      | Population size for all fixed-population optimizers. None means no fixed population size.                        |
 | `-f`, `--fe_multiplier`            | `int`       | `10_000`                    | Function evaluation multiplier.                                                                                  |
 | `-s`, `--n_checkpoints`            | `int`       | `10`                        | Number of checkpoints for sub-optimizer selection.                                                               |
 | `-t`, `--test` / `--no-test`       | `bool`      | `True`                      | Whether to execute in test mode.                                                                                 |
 | `-c`, `--compare` / `--no-compare` | `bool`      | `False`                     | Whether to compare results against standalone optimizers.                                                        |
 | `-e`, `--wandb_entity`             | `str`       | `None`                      | Weights and Biases (WandB) entity name.                                                                          |
 | `-w`, `--wandb_project`            | `str`       | `None`                      | Weights and Biases (WandB) project name.                                                                         |
-| `-a`, `--agent`                    | `str`       | `policy-gradient`           | Agent type. Options: `neuroevolution`, `policy-gradient`, `random`.                                              |
+| `-a`, `--agent`                    | `str`       | `policy-gradient`           | Agent type. Options: `neuroevolution`, `policy-gradient`, `random`, `RL-DAS`.                                    |
 | `-l`, `--mode`                     | `str`       | `LOIO`                      | Train/Test split mode (see [Split Strategies](https://www.google.com/search?q=%23-train-test-split-strategies)). |
 | `-x`, `--cdb`                      | `float`     | `1.0`                       | **Checkpoint Division Exponent**; determines how quickly checkpoint length increases.                            |
 | `-r`, `--state-representation`     | `str`       | `ELA`                       | Method used to extract features from the algorithm population.                                                   |
+| `-d`, `--force-restarts`           | `bool`      | `False`                     | Enable selection of forcibly restarting optimizers.                                                              |
+| `-D`, `--dimensionality`           | `int`       | `None`                      | Dimensionality of problems.                                                                                      |
+| `-E`, `--n_epochs`                 | `int`       | `1`                         | Number of training epochs.                                                                                       |
+| `-O`, `--reward-option`            | `int`       | `1`                         | ID of method used to compute reward.                                                                             |
 
 ---
 
@@ -79,8 +83,7 @@ uv run das <name> [options]
 
 The `-l` / `--mode` argument determines how the dataset is divided:
 
-* **`LOIO` (Leave One Instance Out):** Uses `LOLO_train_set.json`, a randomly generated subset containing mixed problem
-  types.
+* **`LOIO` (Leave One Instance Out):** Uses  a randomly generated subset containing mixed problem types.
 * **`hard` (Leave One Problem Out):** Splits the dataset by grouping identical problem instances. Contains **twice as
   many** training functions as test functions.
 * **`easy` (Leave One Problem Out):** Similar to `hard`, but with **inverted** train-test proportions (more test
@@ -116,6 +119,22 @@ Below is a comparison of how the checkpoint lengths correspond to different `cdb
     When the base is **greater than 1.0**, the checkpoints start very short and grow exponentially longer.
     * **Early Stages (Short):** Allows the agent to make rapid decisions and switch algorithms frequently during the initial exploration phase.
     * **Later Stages (Long):** Provides longer uninterrupted periods for algorithms to converge (exploitation) without being disrupted by frequent agent switching.
+
+## 🏆 Reward Options
+
+The `-O` or `--reward-option` argument determines how the agent calculates the reward after each checkpoint. All options compute an `improvement` metric based on the change in the best objective value (`y`), scaled against the initial value range (`initial_value_range[1] - initial_value_range[0]`).
+
+Here are the available reward strategies:
+
+* **Option 1 (`1`): Logarithmic Scaled Improvement**
+Calculates the improvement between the current checkpoint and the previous one (`old_best_y - new_best_y`), scales it, clips the value between 0.0 and 1.0, and applies a logarithmic transformation (`np.log(reward + 1e-5)`). Useful for smoothing out large variance in improvements.
+* **Option 2 (`2`): Linear Clipped Improvement**
+Calculates the scaled improvement between the current checkpoint and the previous one (`old_best_y - new_best_y`), and simply clips the result between 0.0 and 1.0 without any logarithmic scaling (`np.clip(reward, 0.0, 1.0)`).
+* **Option 3 (`3`): Sparse Total Improvement (Final Checkpoint Only)**
+Provides a sparse reward. It returns `0.0` for all intermediate checkpoints. At the final checkpoint, it calculates the *total* improvement from the very start of the optimization run (`initial_value_range[0] - new_best_y`), scales it, and applies a logarithmic transformation.
+* **Option 4 (`4`): Binary Threshold Reward**
+Calculates the scaled improvement between checkpoints and provides a binary outcome: it returns `1.0` if the scaled improvement is greater than or equal to a minimum threshold (`1e-3`), and `0.0` otherwise.
+
 
 ## 🧠 State Representation
 
