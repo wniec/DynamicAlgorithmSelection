@@ -80,10 +80,8 @@ def coco_bbob_experiment(
             optimizer, options, evaluations_multiplier, is_loio=mode.endswith("LOIO")
         )
     elif agent == "random":
-        # running random baseline
         return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)
     elif options.get("baselines"):
-        # running only baselines
         return run_comparison(
             options["optimizer_portfolio"], options, evaluations_multiplier
         )

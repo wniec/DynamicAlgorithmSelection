@@ -81,6 +81,8 @@ class JDE21(DE):
     def iterate(self, x=None, y=None, args=None):
         bNP = x.shape[0] - self.sNP
         # Evolution of big population
+        if x is None or y is None:
+            raise ValueError("x and y must be provided for iteration.")
         x, y = self._mutate_cross_select(x, y, np.arange(bNP), args)
 
         # Evolution of small population (repeated)

@@ -1,5 +1,5 @@
 from itertools import product
-from typing import List, Type, Optional, Dict, Any
+from typing import List, Type, Optional, Dict, Any, Tuple
 import numpy as np
 from dynamicalgorithmselection.agents.agent_state import (
     get_state_representation,
@@ -56,7 +56,7 @@ class Agent(Optimizer):
         self.state_normalizer = self.options.get(
             "state_normalizer", StateNormalizer(input_shape=(self.state_dim,))
         )
-        self.initial_value_range = None
+        self.initial_value_range: Tuple[Optional[float], Optional[float]] = (None, None)
 
     def get_partial_state(
         self,
@@ -150,8 +150,8 @@ class Agent(Optimizer):
             self._counter_early_stopping, self._base_early_stopping = 0, best_y
 
     def _save_fitness(self, best_x, best_y, worst_x, worst_y):
-        if self.initial_value_range is None:
-            self.initial_value_range = max(worst_y - best_y, 1e-5)
+        if self.initial_value_range[0] is None:
+            self.initial_value_range = best_y, max(worst_y, best_y + 1e-5)
 
         self.best_parent = best_y
         self.history.append(best_y)
@@ -240,6 +240,7 @@ class Agent(Optimizer):
 
         improvement = old_best_y - new_best_y
 
-        # return float(improvement > 1e-3)
-        reward = improvement / self.initial_value_range
+        reward = improvement / (
+            self.initial_value_range[1] - self.initial_value_range[0]
+        )
         return np.log(np.clip(reward, 0.0, 1.0) + 1e-5)

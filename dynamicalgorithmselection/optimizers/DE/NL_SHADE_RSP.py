@@ -63,7 +63,9 @@ class NL_SHADE_RSP(DE):
             self.MCr[self.k_idx] = np.sum(w * SCr)
             self.k_idx = (self.k_idx + 1) % self.memory_size
 
-    def iterate(self, x, y, args=None):
+    def iterate(self, x=None, y=None, args=None):
+        if x is None or y is None:
+            raise ValueError("x and y must be provided for iteration.")
         NP = x.shape[0]
         Cr, F = self._choose_F_Cr(NP)
 

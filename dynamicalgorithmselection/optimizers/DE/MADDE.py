@@ -82,7 +82,9 @@ class MADDE(DE):
 
         return v
 
-    def iterate(self, x, y, args=None):
+    def iterate(self, x=None, y=None, args=None):
+        if x is None or y is None:
+            raise ValueError("x and y must be provided for iteration.")
         NP = x.shape[0]
         dim = self.ndim_problem
         FEs, MaxFEs = self.n_function_evaluations, self.max_function_evaluations
