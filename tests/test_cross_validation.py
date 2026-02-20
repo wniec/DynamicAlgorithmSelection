@@ -24,7 +24,7 @@ class TestCrossValidation(unittest.TestCase):
         # so we check if it returns lists of correct length/structure.
 
         n_folds = 4
-        suite, folds = _get_cv_folds(n_folds, is_loio=True)
+        suite, folds = _get_cv_folds(n_folds, is_loio=True, dim=10)
 
         self.assertIsInstance(suite, MagicMock)  # Should return the mocked suite
         self.assertEqual(len(folds), n_folds)

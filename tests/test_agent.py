@@ -50,7 +50,7 @@ class TestAgent:
             return_value=(MagicMock(), 5),
         ):
             agent = Agent(mock_problem, basic_options)
-            agent.initial_value_range = 10.0
+            agent.initial_value_range = (10.0, 20.0)
 
             reward_good = agent.get_reward(new_best_y=15.0, old_best_y=20.0)
             # 5.0 / 10.0 = 0.5 -> log(0.5)

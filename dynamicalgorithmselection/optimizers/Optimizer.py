@@ -1,8 +1,8 @@
 import time
-from typing import Optional
+from typing import Optional, Any, Dict, List, Tuple
 
 import numpy as np
-from pypop7.optimizers.core import Optimizer as BaseOptimizer
+from pypop7.optimizers.core import Optimizer as BaseOptimizer, Terminations
 
 
 class Optimizer(BaseOptimizer):
@@ -10,55 +10,64 @@ class Optimizer(BaseOptimizer):
 
     def __init__(self, problem, options):
         BaseOptimizer.__init__(self, problem, options)
-        self.fitness_history = []
-        self.start_conditions = dict()
-        self.results = dict()
-        self.worst_so_far_y, self.worst_so_far_x = (
-            options.get("worst_so_far_y", -np.inf),
-            None,
+        self.best_so_far_y: float = options.get("best_so_far_y", float("inf"))
+        self.best_so_far_x: Optional[np.ndarray] = None
+        self._base_early_stopping: float = self.best_so_far_y
+        self._counter_early_stopping: int = 0
+        self.early_stopping_threshold: float = options.get(
+            "early_stopping_threshold", 1e-10
         )
-        self.x_history, self.y_history = [], []
-        # [Added] Dictionary to store histories of generic parameters
-        self.parameter_history = {}
+        self.fitness_history: List[Tuple[int, float]] = []
 
-    # [Modified] Accept generic kwargs for history tracking
+        self.start_conditions: Dict[str, Any] = dict()
+        self.results: Dict[str, Any] = dict()
+
+        self.worst_so_far_y: float = options.get("worst_so_far_y", -np.inf)
+        self.worst_so_far_x: Optional[np.ndarray] = None
+        self.x_history: List[np.ndarray] = []
+        self.y_history: List[float] = []
+        self.parameter_history: Dict[str, List[Any]] = {}
+        self.target_FE: int | float = float("inf")
+
     def _evaluate_fitness(self, x, args=None, **kwargs):
         self.start_function_evaluations = time.time()
         if args is None:
             y = self.fitness_function(x)
         else:
             y = self.fitness_function(x, args=args)
+
+        y_val = float(y)
         self.time_function_evaluations += time.time() - self.start_function_evaluations
         self.n_function_evaluations += 1
-        # update best-so-far solution (x) and fitness (y)
-        if y < self.best_so_far_y:
-            self.best_so_far_x, self.best_so_far_y = np.copy(x), y
-            self.fitness_history.append((self.n_function_evaluations, float(y)))
-        if y > self.worst_so_far_y:
-            self.worst_so_far_x, self.worst_so_far_y = np.copy(x), y
+
+        # update best-so-far solution
+        if y_val < self.best_so_far_y:
+            self.best_so_far_x, self.best_so_far_y = np.copy(x), y_val
+            self.fitness_history.append((self.n_function_evaluations, y_val))
+
+        if y_val > self.worst_so_far_y:
+            self.worst_so_far_x, self.worst_so_far_y = np.copy(x), y_val
+
         # update all settings related to early stopping
-        if (self._base_early_stopping - y) <= self.early_stopping_threshold:
+        if (self._base_early_stopping - y_val) <= self.early_stopping_threshold:
             self._counter_early_stopping += 1
         else:
-            self._counter_early_stopping, self._base_early_stopping = 0, y
+            self._counter_early_stopping, self._base_early_stopping = 0, y_val
 
         self.x_history.append(np.copy(x))
-        self.y_history.append(float(y))
+        self.y_history.append(y_val)
 
-        # [Added] Generic storage for any extra parameters passed
         for key, val in kwargs.items():
             if key not in self.parameter_history:
                 self.parameter_history[key] = []
-
-            # Store copy if it's an array to prevent reference issues
             if isinstance(val, np.ndarray):
                 self.parameter_history[key].append(np.copy(val))
             else:
                 self.parameter_history[key].append(val)
 
-        return float(y)
+        return y_val
 
-    def _check_success(self):
+    def _check_success(self) -> bool:
         if (
             (self.upper_boundary is not None)
             and (self.lower_boundary is not None)
@@ -78,7 +87,7 @@ class Optimizer(BaseOptimizer):
             return False
         return True
 
-    def _collect(self, fitness):
+    def _collect(self, fitness: List[float]) -> Dict[str, Any]:  # Added type hints
         result = BaseOptimizer._collect(self, fitness)
         result.update(
             {
@@ -92,28 +101,35 @@ class Optimizer(BaseOptimizer):
             }
         )
 
-        # [Added] Inject generic parameter histories into result
-        # Keys will be named like 'v_history', 'p_x_history' automatically
         for key, history in self.parameter_history.items():
             result[f"{key}_history"] = np.array(history, dtype=np.float32)
         return result
 
     def set_data(self, x=None, y=None, best_x=None, best_y=None, *args, **kwargs):
+        n_ind = getattr(self, "n_individuals", 0)
         self.start_conditions = {
-            "x": x[: self.n_individuals] if x is not None else x,
-            "y": (y[: self.n_individuals] if isinstance(y, np.ndarray) else None),
+            "x": x[:n_ind] if x is not None else x,
+            "y": (y[:n_ind] if isinstance(y, np.ndarray) else None),
             "best_x": best_x,
             "best_y": best_y,
         }
         self.best_so_far_x = best_x
-        self.best_so_far_y = best_y
+        self.best_so_far_y = float(best_y) if best_y is not None else float("inf")
 
-    def get_data(self, n_individuals: Optional[int] = None):
+    def get_data(self, n_individuals: Optional[int] = None) -> Dict[str, Any]:
         return self.results or self.start_conditions
 
-    def optimize(self, fitness_function=None):
+    def optimize(self, fitness_function=None) -> List[float]:
         self.start_time = time.time()
         if fitness_function is not None:
             self.fitness_function = fitness_function
-        fitness = []  # to store all fitness generated during evolution/optimization
+        fitness: List[float] = []
         return fitness
+
+    def _check_terminations(self) -> bool:
+        termination_signal = super()._check_terminations()
+        if not termination_signal:
+            termination_signal = bool(self.n_function_evaluations >= self.target_FE)
+            if termination_signal:
+                self.termination_signal = Terminations.MAX_FUNCTION_EVALUATIONS
+        return termination_signal

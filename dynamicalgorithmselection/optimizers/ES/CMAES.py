@@ -314,19 +314,6 @@ class CMAES(ES):
                 "mean": mean,
             }
         )
-        self.results.update(
-            {
-                "p_c": p_c,
-                "p_s": p_s,
-                "cm": cm,
-                "e_va": e_va,
-                "e_ve": e_ve,
-                "d": d,
-                "x": x,
-                "y": y,
-                "mean": mean,
-            }
-        )
         results = self._collect(fitness, y, mean)
         # by default do *NOT* save eigenvalues and eigenvectors (with *quadratic* space complexity)
         if self._save_eig:
@@ -378,7 +365,7 @@ class CMAES(ES):
             }
             mean = x[indices].mean(axis=0)
             stds = np.std(x[indices], axis=0)
-            sigma = np.max(stds)
+            sigma: float = np.max(stds)
             sigma = max(sigma, 1e-8)
             start_conditions.update(
                 {"x": x[indices], "y": y[indices], "mean": mean, "sigma": sigma}

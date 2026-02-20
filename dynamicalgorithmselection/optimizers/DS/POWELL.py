@@ -147,6 +147,8 @@ class POWELL(DS):
         return y, x + d, d, yy
 
     def iterate(self, x=None, y=None, u=None, args=None):
+        if x is None or y is None:
+            raise ValueError("x and y must be provided for iteration.")
         xx, yy = np.copy(x), np.copy(y)
         big_ind, delta, ys = 0, 0.0, []
         for i in range(self.ndim_problem):

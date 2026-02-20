@@ -24,6 +24,8 @@ class TestPolicyGradientAgent:
             "reward_normalizer": MagicMock(),
             "state_normalizer": MagicMock(),
             "buffer": MagicMock(),
+            "n_problems": 1000,
+            "n_epochs": 1,
         }
 
     @pytest.fixture
@@ -49,19 +51,7 @@ class TestPolicyGradientAgent:
             return_value=(MagicMock(), 10),
         ):
             agent = PolicyGradientAgent(mock_problem, ppo_options)
-
-            # Przygotuj dummy state (tensor)
-            state = torch.randn(1, 10).to(torch.float32)  # Zakładamy wymiar stanu 10
-
-            # Wymuszamy, żeby sieci zwracały poprawne kształty (jeśli nie używamy prawdziwych wag)
-            # Ale PolicyGradientAgent tworzy prawdziwe sieci w __init__, więc powinny działać "z pudełka"
-            # o ile ppo_utils.Actor/Critic są poprawne.
-
-            # Jeśli ppo_utils wymaga GPU, a testujesz na CPU, upewnij się że DEVICE w ppo_utils.py to 'cpu'
-            # lub nadpisz go w teście.
-
-            # Testujemy metodę
-            # full_buffer=False -> exploration mode (losowe lub uniform)
+            state = torch.randn(1, 10).to(torch.float32)
             action, log_prob, value = agent._select_action(state, full_buffer=True)
 
             assert isinstance(action, (int, np.integer))
@@ -112,7 +102,6 @@ class TestPolicyGradientAgent:
         mock_optimizer_instance = MagicMock()
         MockOptimizerClass.return_value = mock_optimizer_instance
 
-        # Konfigurujemy instancję
         mock_optimizer_instance.n_function_evaluations = 100
         mock_optimizer_instance.best_so_far_y = 5.0
         # iterate zwraca słownik wyników
@@ -125,12 +114,8 @@ class TestPolicyGradientAgent:
             return_value=(MagicMock(), 10),
         ):
             agent = PolicyGradientAgent(mock_problem, ppo_options)
-            agent.actions = [
-                MockOptimizerClass
-            ]  # Podmieniamy akcje na naszą klasę mocka
-            agent.iterate = MagicMock(
-                return_value={"result": "ok"}
-            )  # Mockujemy wywołanie iterate
+            agent.actions = [MockOptimizerClass]
+            agent.iterate = MagicMock(return_value={"result": "ok"})
 
             iteration_result = {"x": None, "y": None}
             result, optimizer = agent._execute_action(0, iteration_result)
@@ -175,6 +160,8 @@ class TestPolicyGradientAgent:
     def test_buffer_add(self, mock_problem, ppo_options):
         mock_buffer = MagicMock()
         ppo_options["buffer"] = mock_buffer
+        ppo_options["n_problems"] = 1000
+        ppo_options["n_epochs"] = 1
 
         with patch(
             "dynamicalgorithmselection.agents.agent.get_state_representation",
