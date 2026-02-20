@@ -2,6 +2,8 @@ import json
 import os
 from typing import Type, Optional
 
+import numpy as np
+
 from dynamicalgorithmselection.experiments.core import run_testing, run_training
 from dynamicalgorithmselection.experiments.cross_validation import run_cross_validation
 from dynamicalgorithmselection.experiments.neuroevolution import (
@@ -24,7 +26,7 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 def dump_extreme_stats(
-    optimizer_portfolio: list[Type[Optimizer]],
+    name: str,
     stats,
     problem_instance,
     max_function_evaluations,
@@ -38,11 +40,10 @@ def dump_extreme_stats(
     best_case, worst_case = get_extreme_stats(
         stats, max_function_evaluations, checkpoints
     )
-    portfolio_name = "_".join(i.__name__ for i in optimizer_portfolio)
     with open(
         os.path.join(
             "results",
-            f"{portfolio_name}_best",
+            f"{name}_best",
             f"{problem_instance}.json",
         ),
         "w",
@@ -54,7 +55,7 @@ def dump_extreme_stats(
     with open(
         os.path.join(
             "results",
-            f"{portfolio_name}_worst",
+            f"{name}_worst",
             f"{problem_instance}.json",
         ),
         "w",
@@ -79,7 +80,7 @@ def coco_bbob_experiment(
         return run_cross_validation(
             optimizer, options, evaluations_multiplier, is_loio=mode.endswith("LOIO")
         )
-    elif agent == "random":
+    elif agent in ["random", "RL-DAS-random"]:
         return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)
     elif options.get("baselines"):
         return run_comparison(
@@ -171,22 +172,22 @@ def run_comparison(
     print("Initializing Observers...")
     for optimizer in optimizer_portfolio:
         optimizer_name = optimizer.__name__
+        case_name = f"{options['name']}_{optimizer_name}"
 
-        results_dir = os.path.join("results", f"{optimizer_name}")
+        results_dir = os.path.join("results", case_name)
         os.makedirs(results_dir, exist_ok=True)
 
-        observer = cocoex.Observer("bbob", "result_folder: " + optimizer_name)
+        observer = cocoex.Observer("bbob", "result_folder: " + case_name)
         observers[optimizer_name] = observer
-        results_folders.append("exdata/" + optimizer_name)  # Adjust path if needed
+        results_folders.append("exdata/" + case_name)  # Adjust path if needed
 
         suites[optimizer_name] = get_suite("all", False, options.get("dimensionality"))[
             0
         ]
 
     # Create directories for best/worst JSON stats
-    portfolio_name = "_".join(i.__name__ for i in optimizer_portfolio)
     for ext in ["best", "worst"]:
-        os.makedirs(os.path.join("results", f"{portfolio_name}_{ext}"), exist_ok=True)
+        os.makedirs(os.path.join("results", f"{options['name']}_{ext}"), exist_ok=True)
 
     cocoex.utilities.MiniPrint()
 
@@ -200,6 +201,7 @@ def run_comparison(
 
         for optimizer in optimizer_portfolio:
             optimizer_name = optimizer.__name__
+            result_folder_name = f"{options['name']}_{optimizer_name}"
 
             problem_instance = suites[optimizer_name].get_problem(problem_id)
             problem_instance.observe_with(observers[optimizer_name])
@@ -215,7 +217,7 @@ def run_comparison(
             stats[optimizer_name] = results["fitness_history"]
             dump_stats(
                 results[0] if isinstance(results, tuple) else results,
-                optimizer_name,
+                result_folder_name,
                 problem_id,
                 max_fe,
                 options.get("n_checkpoints"),
@@ -224,7 +226,7 @@ def run_comparison(
             )
 
         dump_extreme_stats(
-            optimizer_portfolio,
+            options.get("name"),
             stats,
             problem_id,
             max_fe,

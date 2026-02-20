@@ -61,7 +61,6 @@ def _get_cv_folds(n: int, is_loio: bool, dim: Optional[int]):
     :param dim: dimensionality of the problems. None indicates all of them.
     :return suite, list of (train set, test set) pairs:
     """
-    np.random.seed(1234)
     cocoex.utilities.MiniPrint()
     problems_suite = cocoex.Suite("bbob", "", "")
     all_problem_ids = [

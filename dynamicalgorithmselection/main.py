@@ -2,13 +2,16 @@ import argparse
 import os
 import pickle
 import shutil
+from random import seed as set_random_seed
 from typing import List, Type, Dict, Any
 import cocopp
 import neat
+import numpy as np
 import torch
 import wandb
 
 from dynamicalgorithmselection.agents.RLDAS_agent import RLDASAgent
+from dynamicalgorithmselection.agents.RLDAS_random_agent import RLDASRandomAgent
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
@@ -22,6 +25,7 @@ AGENTS_DICT = {
     "neuroevolution": NeuroevolutionAgent,
     "policy-gradient": PolicyGradientAgent,
     "RL-DAS": RLDASAgent,
+    "RL-DAS-random": RLDASRandomAgent,
 }
 
 
@@ -163,6 +167,13 @@ def parse_arguments():
         help="id of method used to compute reward",
     )
 
+    parser.add_argument(
+        "-S",
+        "--seed",
+        type=int,
+        default=42,
+        help="seed",
+    )
     return parser.parse_args()
 
 
@@ -199,6 +210,7 @@ def common_options(args) -> Dict[str, Any]:
         "dimensionality": args.dimensionality,
         "n_epochs": args.n_epochs,
         "reward_option": args.reward_option,
+        "seed": args.seed,
     }
     return options
 
@@ -291,28 +303,45 @@ def run_CV(args, action_space):
 
 def run_baselines(args, action_space):
     for optimizer in action_space:
-        if os.path.exists(os.path.join("exdata", optimizer.__name__)):
-            shutil.rmtree(os.path.join("exdata", optimizer.__name__))
+        if os.path.exists(
+            os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
+        ):
+            shutil.rmtree(
+                os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
+            )
 
-        print(f"--- Running Baseline: {optimizer.__name__} ---")
-
-        coco_bbob_experiment(
-            None,
-            {
-                "optimizer_portfolio": [optimizer],
-                "baselines": True,
-            }
-            | common_options(args),
-            name=optimizer.__name__,
-            evaluations_multiplier=args.fe_multiplier,
-            train=False,
-            agent=None,
+    coco_bbob_experiment(
+        None,
+        {
+            "optimizer_portfolio": action_space,
+            "baselines": True,
+        }
+        | common_options(args),
+        name=f"{args.name}_baselines",
+        evaluations_multiplier=args.fe_multiplier,
+        train=False,
+        agent=None,
+    )
+    for optimizer in action_space:
+        cocopp.main(
+            os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
         )
-        cocopp.main(os.path.join("exdata", optimizer.__name__))
+
+
+def set_seed(seed):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    # Torch RNG
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # Python RNG
+    np.random.seed(seed)
+    set_random_seed(seed)
 
 
 def main():
     args = parse_arguments()
+    set_seed(args.seed)
     print_info(args)
     available_optimizers = optimizers.available_optimizers
     action_space: List[Type[Optimizer]] = []
@@ -321,14 +350,12 @@ def main():
             raise ValueError(f'Unknown optimizer "{optimizer}"')
         else:
             action_space.append(available_optimizers[optimizer])
-    if not os.path.exists("models"):
-        os.mkdir("models")
-    if not os.path.exists("results"):
-        os.mkdir("results")
+    os.makedirs("models", exist_ok=True)
+    os.makedirs("results", exist_ok=True)
     if args.mode.startswith("CV"):
         run_CV(args, action_space)
     else:
-        if args.agent != "random" and args.mode != "baselines":
+        if args.agent not in ["random", "RL-DAS-random"] and args.mode != "baselines":
             run_training(args, action_space)
         if args.test and args.mode != "baselines":
             test(args, action_space)

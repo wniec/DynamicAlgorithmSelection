@@ -121,18 +121,15 @@ class TestExperiment(unittest.TestCase):
         self, mock_json_dump, mock_file, mock_get_extreme, mock_get_checkpoints
     ):
         stats: dict[str, list[Any]] = {"Opt1": [], "Opt2": []}
-        portfolio = cast(
-            list[Type[Optimizer]],
-            [MagicMock(__name__="Opt1"), MagicMock(__name__="Opt2")],
-        )
 
         mock_get_extreme.return_value = ({"best": 1}, {"worst": 0})
+        case_name = "OPT1_OPT2_OPT3"
 
-        dump_extreme_stats(portfolio, stats, "p1", 100, 5, 10, 0.5)
+        dump_extreme_stats(case_name, stats, "p1", 100, 5, 10, 0.5)
 
         self.assertEqual(mock_file.call_count, 2)
         self.assertEqual(mock_json_dump.call_count, 2)
 
         args_list = mock_file.call_args_list
-        self.assertIn("Opt1_Opt2_best", args_list[0][0][0])
-        self.assertIn("Opt1_Opt2_worst", args_list[1][0][0])
+        self.assertIn(f"{case_name}_best", args_list[0][0][0])
+        self.assertIn(f"{case_name}_worst", args_list[1][0][0])

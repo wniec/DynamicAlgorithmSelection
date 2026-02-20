@@ -79,7 +79,6 @@ def get_suite(mode: str, train: bool, dim: Optional[int]):
         ]
 
     elif mode == "LOIO":
-        np.random.seed(1234)
         train_problem_ids = np.random.choice(
             all_problem_ids, size=2 * len(all_problem_ids) // 3, replace=False
         )
