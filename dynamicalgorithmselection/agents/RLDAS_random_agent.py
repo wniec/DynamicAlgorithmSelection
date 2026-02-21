@@ -46,7 +46,7 @@ class RLDASRandomAgent(Agent):
         self.alg_usage_counts[alg_idx] += 1
 
     def _save_context(self, optimizer, alg_name):
-        common_attrs = ["memory_f", "memory_cr", "archive", "archive_fitness"]
+        common_attrs = ["MF", "MCr", "archive"]
         for attr in common_attrs:
             if hasattr(optimizer, attr):
                 self.context_memory["Common"][attr] = getattr(optimizer, attr)
@@ -59,13 +59,11 @@ class RLDASRandomAgent(Agent):
                 "ageLmt",
                 "eps",
                 "myEqs",
-                "successful_f",
-                "successful_cr",
             ]
         elif "MadDE" in alg_name:
-            specific_attrs = ["pm", "pbest", "pqBX"]
+            specific_attrs = ["pm", "pbest", "PqBX"]
         elif "NL_SHADE" in alg_name:
-            specific_attrs = ["nA", "pA"]
+            specific_attrs = ["NA", "pa"]
 
         for attr in specific_attrs:
             if hasattr(optimizer, attr):

@@ -7,8 +7,10 @@ class MADDE(DE):
 
     def __init__(self, problem, options):
         super().__init__(problem, options)
+        D = self.ndim_problem
         # Constants from MadDE paper/original code
-        self.Nmax = self.n_individuals if self.n_individuals else 170
+        self.Nmax = int(np.round(2 * (D**2)))
+        # self.Nmax = self.n_individuals if self.n_individuals else 170
         self.Nmin = options.get("Nmin", 4)
         self.p = 0.18
         self.PqBX = 0.01
@@ -17,11 +19,12 @@ class MADDE(DE):
         self.pm = np.ones(3) / 3
 
         # Archive and Memory
-        self.NA = int(self.Nmax * 2.1)
+        self.A_rate = 2.30
+        self.NA = int(np.round(self.A_rate * self.Nmax))
         self.archive = np.empty((0, self.ndim_problem))
 
         # Memory for F and Cr
-        self.memory_size = 20  # Standard for SHADE-based
+        self.memory_size = 10 * D
         self.MF = np.ones(self.memory_size) * 0.2
         self.MCr = np.ones(self.memory_size) * 0.2
         self.k_idx = 0
@@ -39,7 +42,14 @@ class MADDE(DE):
 
     def _choose_F_Cr(self, NP):
         indices = self.rng_optimization.integers(0, self.memory_size, size=NP)
-        Cr = self.rng_optimization.normal(loc=self.MCr[indices], scale=0.1, size=NP)
+
+        Cr = np.zeros(NP)
+        for i, idx in enumerate(indices):
+            if self.MCr[idx] == -1.0:  # Check for terminal state
+                Cr[i] = 0.0
+            else:
+                Cr[i] = self.rng_optimization.normal(loc=self.MCr[idx], scale=0.1)
+
         Cr = np.clip(Cr, 0, 1)
 
         # Cauchy-like sampling for F
@@ -93,11 +103,11 @@ class MADDE(DE):
         q = 2 * self.p - self.p * FEs / MaxFEs
         Fa = 0.5 + 0.5 * FEs / MaxFEs
 
-        # 1. Parameter sampling
+        # Parameter sampling
         Cr, F = self._choose_F_Cr(NP)
         mu = self.rng_optimization.choice(3, size=NP, p=self.pm)
 
-        # 2. Mutation
+        # Mutation
         v = self._mutate(x, y, F, mu, q, Fa)
 
         # Boundary handling (MadDE specific)
@@ -105,7 +115,7 @@ class MADDE(DE):
         v = np.where(v < low, (x + low) / 2, v)
         v = np.where(v > high, (x + high) / 2, v)
 
-        # 3. Crossover (Binomial + qBX)
+        # Crossover (Binomial + qBX)
         u = np.zeros_like(x)
         rvs = self.rng_optimization.random(NP)
 
@@ -130,7 +140,7 @@ class MADDE(DE):
             ]
             u[qu_idx] = self._binomial(cross_qbest, v[qu_idx], Cr[qu_idx])
 
-        # 4. Evaluation and Selection
+        # Evaluation and Selection
         new_y = np.array([self._evaluate_fitness(ui, args) for ui in u])
         optim = new_y < y
 
@@ -151,8 +161,7 @@ class MADDE(DE):
 
             x[optim], y[optim] = u[optim], new_y[optim]
 
-        # 5. NLPSR
-        x, y = self._nlpsr(x, y)
+        x, y = self._lpsr(x, y)
 
         self._n_generations += 1
         return x, y
@@ -171,19 +180,35 @@ class MADDE(DE):
         else:
             self.pm = np.ones(3) / 3
 
-    def _nlpsr(self, x, y):
+    def _lpsr(self, x, y):
         FEs, MaxFEs = self.n_function_evaluations, self.max_function_evaluations
-        new_NP = int(
-            np.round(
-                self.Nmax
-                + (self.Nmin - self.Nmax) * np.power(FEs / MaxFEs, 1 - FEs / MaxFEs)
-            )
-        )
+
+        # Prevent the ratio from exceeding 1.0 if FEs overshoots MaxFEs
+        ratio = min(1.0, FEs / MaxFEs)
+
+        # LPSR formula: N_G = round(N_max - (N_max - N_min) * ratio)
+        new_NP = int(np.round(self.Nmax - (self.Nmax - self.Nmin) * ratio))
+
+        # Clamp to ensure population never drops below Nmin
+        new_NP = max(self.Nmin, new_NP)
+
         if new_NP < x.shape[0]:
             idx = np.argsort(y)[:new_NP]
             x, y = x[idx], y[idx]
             self.n_individuals = new_NP
-            self.NA = int(max(new_NP * 2.1, self.Nmin))
+
+            # Dynamically prune the archive size based on the new population
+            self.NA = int(np.round(self.A_rate * new_NP))
+
+            # Ensure NA doesn't go negative (redundant with the max clamp above, but safe)
+            self.NA = max(0, self.NA)
+
+            if len(self.archive) > self.NA:
+                self.archive = self.archive[
+                    self.rng_optimization.choice(
+                        len(self.archive), self.NA, replace=False
+                    )
+                ]
         return x, y
 
     # Helper mutation methods (Vectorized)
@@ -222,9 +247,22 @@ class MADDE(DE):
     def _update_memory(self, SF, SCr, df):
         if len(SF) > 0:
             w = df / (np.sum(df) + 1e-15)
+
+            # Weighted Lehmer mean for F
             self.MF[self.k_idx] = np.sum(w * (SF**2)) / (np.sum(w * SF) + 1e-15)
-            self.MCr[self.k_idx] = np.sum(w * SCr)
+
+            # Terminal condition check for Cr
+            if self.MCr[self.k_idx] == -1.0 or np.max(SCr) == 0:
+                self.MCr[self.k_idx] = -1.0  # Terminal state \perp
+            else:
+                # Weighted Lehmer mean for Cr
+                self.MCr[self.k_idx] = np.sum(w * (SCr**2)) / (np.sum(w * SCr) + 1e-15)
+
             self.k_idx = (self.k_idx + 1) % self.memory_size
+        else:
+            # Memory reset rule if no successful trials
+            self.MF[self.k_idx] = 0.5
+            self.MCr[self.k_idx] = 0.5
 
     def optimize(self, fitness_function=None, args=None):
         fitness = super().optimize(fitness_function)
