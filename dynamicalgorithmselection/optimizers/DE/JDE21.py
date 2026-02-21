@@ -43,7 +43,8 @@ class JDE21(DE):
         # Shared Upper Bound for F
         self.Fu = 1.1
 
-        self.F, self.Cr = None, None
+        self.F = np.full(self.n_individuals, self.Finit)
+        self.Cr = np.full(self.n_individuals, self.CRinit)
 
     def initialize(self, args=None, x=None, y=None):
         if x is None:
@@ -57,11 +58,12 @@ class JDE21(DE):
             self.sNP = min(10, max(1, self.n_individuals // 4))
             self.bNP = self.n_individuals - self.sNP
         if y is None:
-            y = np.array([self._evaluate_fitness(xi, args) for xi in x])
-        self.F = np.full(self.n_individuals, self.Finit) if self.F is None else self.F
-        self.Cr = (
-            np.full(self.n_individuals, self.CRinit) if self.Cr is None else self.Cr
-        )
+            y = np.array(
+                [
+                    self._evaluate_fitness(xi, args, F=self.F[i], Cr=self.Cr[i])
+                    for i, xi in enumerate(x)
+                ]
+            )
         return x, y
 
     def _reflect_bounds(self, v):
@@ -221,7 +223,7 @@ class JDE21(DE):
                 u[mask] = v[mask]
 
             # Evaluate
-            new_y = self._evaluate_fitness(u, args)
+            new_y = self._evaluate_fitness(u, args, F=self.F[i], Cr=self.Cr[i])
 
             # Crowding & Selection
             if is_big:
@@ -259,7 +261,10 @@ class JDE21(DE):
                     (self.bNP, self.ndim_problem),
                 )
                 y[: self.bNP] = np.array(
-                    [self._evaluate_fitness(xi, args) for xi in x[: self.bNP]]
+                    [
+                        self._evaluate_fitness(xi, args, F=self.F[i], Cr=self.Cr[i])
+                        for i, xi in enumerate(x[: self.bNP])
+                    ]
                 )
                 self.F[: self.bNP] = self.Finit
                 self.Cr[: self.bNP] = self.CRinit
@@ -281,7 +286,10 @@ class JDE21(DE):
                     (self.sNP, self.ndim_problem),
                 )
                 y[self.bNP :] = np.array(
-                    [self._evaluate_fitness(xi, args) for xi in x[self.bNP :]]
+                    [
+                        self._evaluate_fitness(xi, args, F=self.F[i], Cr=self.Cr[i])
+                        for i, xi in enumerate(x[self.bNP :])
+                    ]
                 )
                 self.F[self.bNP :] = self.Finit
                 self.Cr[self.bNP :] = self.CRinit
@@ -326,7 +334,7 @@ class JDE21(DE):
         while True:
             old_evals = self.n_function_evaluations
             x, y = self.iterate(x, y, args)
-            self.results.update({"x": x, "y": y})
+            self.results.update({"x": x, "y": y, "Cr": self.Cr[:], "F": self.F[:]})
             if self._check_terminations() or self.n_function_evaluations == old_evals:
                 break
 
@@ -340,10 +348,10 @@ class JDE21(DE):
         else:
             indices = np.argsort(y)[: self.n_individuals]
             self.start_conditions = {"x": x[indices], "y": y[indices]}
-            self.Cr = kwargs.get("Cr")
+            self.Cr = kwargs.get("Cr", self.Cr)
             if self.Cr is not None:
                 self.Cr = self.Cr[indices]
-            self.F = kwargs.get("F")
+            self.F = kwargs.get("F", self.F)
             if self.F is not None:
                 self.F = self.F[indices]
         self.best_so_far_x = kwargs.get("best_x", None)

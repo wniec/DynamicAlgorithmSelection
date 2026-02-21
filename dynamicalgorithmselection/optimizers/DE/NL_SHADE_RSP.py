@@ -31,7 +31,19 @@ class NL_SHADE_RSP(DE):
                 (self.n_individuals, self.ndim_problem),
             )
         if y is None:
-            y = np.array([self._evaluate_fitness(xi, args) for xi in x])
+            y = np.array(
+                [
+                    self._evaluate_fitness(
+                        xi,
+                        args,
+                        MF=self.MF[:],
+                        MCr=self.MCr[:],
+                        k_idx=self.k_idx,
+                        pa=self.pa,
+                    )
+                    for xi in x
+                ]
+            )
         self.memory_size = len(self.MF)
         return x, y
 
@@ -157,7 +169,20 @@ class NL_SHADE_RSP(DE):
                     us[i, idx] = vs[i, idx]
 
         # Selection
-        new_y = np.array([self._evaluate_fitness(ui, args) for ui in us])
+
+        new_y = np.array(
+            [
+                self._evaluate_fitness(
+                    ui,
+                    args,
+                    MF=self.MF[:],
+                    MCr=self.MCr[:],
+                    k_idx=self.k_idx,
+                    pa=self.pa,
+                )
+                for ui in us
+            ]
+        )
         better_idx = np.where(new_y < y)[0]
 
         if len(better_idx) > 0:
@@ -232,6 +257,11 @@ class NL_SHADE_RSP(DE):
                 {
                     "x": x,
                     "y": y,
+                    "archive": self.archive[:],
+                    "MF": self.MF[:],
+                    "MCr": self.MCr[:],
+                    "k_idx": self.k_idx,
+                    "pa": self.pa,
                 }
             )
             if self._check_terminations() or self.n_function_evaluations == old_evals:
@@ -255,5 +285,8 @@ class NL_SHADE_RSP(DE):
             start_conditions = {}
             start_conditions.update({"x": x[indices], "y": y[indices]})
             self.start_conditions = start_conditions
+            for var in ["archive", "MF", "MCr", "k_idx", "pa"]:
+                if var in kwargs:
+                    setattr(self, var, kwargs[var])
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))

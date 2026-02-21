@@ -37,7 +37,19 @@ class MADDE(DE):
                 (self.n_individuals, self.ndim_problem),
             )
         if y is None:
-            y = np.array([self._evaluate_fitness(xi, args) for xi in x])
+            y = np.array(
+                [
+                    self._evaluate_fitness(
+                        xi,
+                        args,
+                        MF=self.MF[:],
+                        MCr=self.MCr[:],
+                        k_idx=self.k_idx,
+                        pm=self.pm,
+                    )
+                    for xi in x
+                ]
+            )
         return x, y
 
     def _choose_F_Cr(self, NP):
@@ -141,7 +153,19 @@ class MADDE(DE):
             u[qu_idx] = self._binomial(cross_qbest, v[qu_idx], Cr[qu_idx])
 
         # Evaluation and Selection
-        new_y = np.array([self._evaluate_fitness(ui, args) for ui in u])
+        new_y = np.array(
+            [
+                self._evaluate_fitness(
+                    ui,
+                    args,
+                    MF=self.MF[:],
+                    MCr=self.MCr[:],
+                    k_idx=self.k_idx,
+                    pm=self.pm,
+                )
+                for ui in u
+            ]
+        )
         optim = new_y < y
 
         if np.any(optim):
@@ -276,8 +300,35 @@ class MADDE(DE):
                 {
                     "x": x,
                     "y": y,
+                    "archive": self.archive,
+                    "MF": self.MF,
+                    "MCr": self.MCr,
+                    "k_idx": self.k_idx,
+                    "pm": self.pm,
                 }
             )
             if self._check_terminations():
                 break
         return self._collect(fitness, y)
+
+    def set_data(
+        self,
+        x=None,
+        y=None,
+        *args,
+        **kwargs,
+    ):
+        if x is None or y is None:
+            self.start_conditions = {"x": None, "y": None}
+        elif not isinstance(y, np.ndarray):
+            self.start_conditions = {}
+        else:
+            indices = np.argsort(y)[: self.n_individuals]
+            start_conditions = {}
+            start_conditions.update({"x": x[indices], "y": y[indices]})
+            self.start_conditions = start_conditions
+            for var in ["archive", "MF", "MCr", "k_idx", "pm"]:
+                if var in kwargs:
+                    setattr(self, var, kwargs[var])
+        self.best_so_far_x = kwargs.get("best_x", None)
+        self.best_so_far_y = kwargs.get("best_y", float("inf"))
