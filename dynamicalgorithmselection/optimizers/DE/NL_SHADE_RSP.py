@@ -32,6 +32,7 @@ class NL_SHADE_RSP(DE):
             )
         if y is None:
             y = np.array([self._evaluate_fitness(xi, args) for xi in x])
+        self.memory_size = len(self.MF)
         return x, y
 
     def _sample_cauchy(self, loc, scale, size):
