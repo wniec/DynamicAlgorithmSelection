@@ -153,10 +153,19 @@ class RLDASRandomAgent(Agent):
                 best_y=self.best_so_far_y,
             )
 
-            res = sub_opt.optimize()
+            result = sub_opt.optimize()
 
-            population_x = res["x"]
-            population_y = res["y"]
+            self.fitness_history.extend(result["fitness_history"])
+
+            self._save_fitness(
+                result["best_so_far_x"],
+                result["best_so_far_y"],
+                result["worst_so_far_x"],
+                result["worst_so_far_y"],
+            )
+
+            population_x = result["x"]
+            population_y = result["y"]
 
             self.n_function_evaluations = sub_opt.n_function_evaluations
 

@@ -113,19 +113,16 @@ class TestExperiment(unittest.TestCase):
         self.assertEqual(mock_dump_stats.call_count, 2)
         mock_dump_extreme.assert_called_once()
 
-    @patch("dynamicalgorithmselection.experiments.experiment.get_checkpoints")
     @patch("dynamicalgorithmselection.experiments.experiment.get_extreme_stats")
     @patch("builtins.open", new_callable=mock_open)
     @patch("json.dump")
-    def test_dump_extreme_stats(
-        self, mock_json_dump, mock_file, mock_get_extreme, mock_get_checkpoints
-    ):
+    def test_dump_extreme_stats(self, mock_json_dump, mock_file, mock_get_extreme):
         stats: dict[str, list[Any]] = {"Opt1": [], "Opt2": []}
 
         mock_get_extreme.return_value = ({"best": 1}, {"worst": 0})
         case_name = "OPT1_OPT2_OPT3"
 
-        dump_extreme_stats(case_name, stats, "p1", 100, 5, 10, 0.5)
+        dump_extreme_stats(case_name, stats, "p1", 100)
 
         self.assertEqual(mock_file.call_count, 2)
         self.assertEqual(mock_json_dump.call_count, 2)

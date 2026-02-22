@@ -98,13 +98,7 @@ def dump_stats(
     name,
     problem_instance,
     max_function_evaluations,
-    n_checkpoints,
-    n_individuals,
-    cdb,
 ):
-    checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals or 100, cdb
-    )
     with open(
         os.path.join(
             "results",
@@ -118,7 +112,6 @@ def dump_stats(
                 problem_instance: get_runtime_stats(
                     results["fitness_history"],
                     max_function_evaluations,
-                    checkpoints,
                 )
             },
             f,

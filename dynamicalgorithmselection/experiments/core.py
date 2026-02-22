@@ -33,9 +33,6 @@ def run_testing(
             options.get("name"),
             problem_id,
             max_fe,
-            options.get("n_checkpoints"),
-            options.get("n_individuals"),
-            options.get("cdb"),
         )
 
 

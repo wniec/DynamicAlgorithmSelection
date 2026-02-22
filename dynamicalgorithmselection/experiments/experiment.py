@@ -2,8 +2,6 @@ import json
 import os
 from typing import Type, Optional
 
-import numpy as np
-
 from dynamicalgorithmselection.experiments.core import run_testing, run_training
 from dynamicalgorithmselection.experiments.cross_validation import run_cross_validation
 from dynamicalgorithmselection.experiments.neuroevolution import (
@@ -20,7 +18,6 @@ from tqdm import tqdm
 
 from dynamicalgorithmselection.agents.agent_utils import (
     get_extreme_stats,
-    get_checkpoints,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -30,16 +27,8 @@ def dump_extreme_stats(
     stats,
     problem_instance,
     max_function_evaluations,
-    n_checkpoints,
-    n_individuals,
-    cdb,
 ):
-    checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals or 100, cdb
-    )
-    best_case, worst_case = get_extreme_stats(
-        stats, max_function_evaluations, checkpoints
-    )
+    best_case, worst_case = get_extreme_stats(stats, max_function_evaluations)
     with open(
         os.path.join(
             "results",
@@ -220,9 +209,6 @@ def run_comparison(
                 result_folder_name,
                 problem_id,
                 max_fe,
-                options.get("n_checkpoints"),
-                options.get("n_individuals"),
-                options.get("cdb"),
             )
 
         dump_extreme_stats(
@@ -230,7 +216,4 @@ def run_comparison(
             stats,
             problem_id,
             max_fe,
-            options.get("n_checkpoints"),
-            options.get("n_individuals"),
-            options.get("cdb"),
         )

@@ -8,7 +8,6 @@ MAX_DIM = 40
 def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
-    checkpoints: np.ndarray,
 ) -> dict[
     str, float | list[float]
 ]:  # Changed from list[Optional[float]] to list[float]
@@ -20,42 +19,26 @@ def get_runtime_stats(
     """
     area_under_optimization_curve = 0.0
     last_i = 0
-    checkpoint_idx = 0
-    last_fitness = float("inf")
-    checkpoints_fitness: list[float] = []
 
     for i, fitness in fitness_history:
         area_under_optimization_curve += fitness * (i - last_i)
-        while (
-            checkpoint_idx < len(checkpoints)
-            and last_i <= checkpoints[checkpoint_idx] < i
-        ):
-            checkpoints_fitness.append(last_fitness)
-            checkpoint_idx += 1
         last_i = i
-        last_fitness = fitness
 
     area_under_optimization_curve += fitness_history[-1][1] * (
         function_evaluations - fitness_history[-1][0]
     )
     final_fitness = fitness_history[-1][1]
 
-    if function_evaluations == checkpoints[-1]:
-        while len(checkpoints_fitness) < len(checkpoints):
-            checkpoints_fitness.append(final_fitness)
-
     return {
         "area_under_optimization_curve": area_under_optimization_curve
         / function_evaluations,
         "final_fitness": final_fitness,
-        "checkpoints_fitness": checkpoints_fitness,
     }
 
 
 def get_extreme_stats(
     fitness_histories: dict[str, list[tuple[int, float]]],
     function_evaluations: int,
-    checkpoints: np.ndarray,
 ) -> tuple[dict[str, float | list[float]], dict[str, float | list[float]]]:
     """
     :param fitness_histories: list of lists of tuples [fe, fitness] with only points where best so far fitness improved for each algorithm
@@ -101,8 +84,8 @@ def get_extreme_stats(
 
     # These now match the expected return type of tuple[dict[str, float | list[float]], ...]
     return (
-        get_runtime_stats(best_history, function_evaluations, checkpoints),
-        get_runtime_stats(worst_history, function_evaluations, checkpoints),
+        get_runtime_stats(best_history, function_evaluations),
+        get_runtime_stats(worst_history, function_evaluations),
     )
 
 
