@@ -375,111 +375,86 @@ class StateNormalizer:
 
 def get_la_features(agent, pop_x, pop_y):
     """
-    Extracts 9 Landscape Analysis features described in Reinforcement Learning Dynamic Algorithm Selection.
-    Includes sampling-based features (f5-f8) which consume function evaluations.
+    Extracts 9 Landscape Analysis features based on the logic in Population.py.
+    Uses a single-step random walk for sampling-based features (f5-f8) to
+    save function evaluations.
     """
-    sorted_idx = np.argsort(pop_y)
-    pop_x = pop_x[sorted_idx]
-    pop_y = pop_y[sorted_idx]
-
-    best_y = pop_y[0]
-    best_x = pop_x[0]
     n = len(pop_x)
 
+    best_y = np.min(pop_y)
+    best_x = pop_x[np.argmin(pop_y)]
     norm_factor = (
         agent.initial_cost
-        if agent.initial_cost and abs(agent.initial_cost) > 1e-9
+        if hasattr(agent, "initial_cost")
+        and agent.initial_cost
+        and abs(agent.initial_cost) > 1e-9
         else 1.0
     )
-    f1 = best_y / norm_factor
+    f1_gbc = best_y / norm_factor
 
     dists_to_best = np.linalg.norm(pop_x - best_x, axis=1)
     if np.std(pop_y) < 1e-9 or np.std(dists_to_best) < 1e-9:
-        f2 = 0.0
+        f2_fdc = 0.0
     else:
         fdc, _ = spearmanr(pop_y, dists_to_best)
-        f2 = fdc if not np.isnan(fdc) else 0.0
+        f2_fdc = fdc if not np.isnan(fdc) else 0.0
 
     n_top = max(2, int(0.1 * n))
-
     if n > 1:
         dist_matrix_all = pdist(pop_x)
         disp_all = np.mean(dist_matrix_all) if len(dist_matrix_all) > 0 else 0.0
 
-        dist_matrix_top = pdist(pop_x[:n_top])
+        # Get distances for the top 10% individuals
+        top_idx = np.argsort(pop_y)[:n_top]
+        dist_matrix_top = pdist(pop_x[top_idx])
         disp_top = np.mean(dist_matrix_top) if len(dist_matrix_top) > 0 else 0.0
 
-        f3 = disp_all - disp_top
-        f4 = np.max(dist_matrix_all) if len(dist_matrix_all) > 0 else 0.0
+        f3_disp = disp_all - disp_top
+        f4_disp_ratio = disp_top / disp_all if disp_all > 1e-9 else 0.0
     else:
-        f3, f4 = 0.0, 0.0
+        f3_disp, f4_disp_ratio = 0.0, 0.0
 
-    remaining_fes = agent.max_function_evaluations - agent.n_function_evaluations
-    cost_per_sample = n  # 1 generation of size N
+    # Adjust step size based on your search space bounds if available
+    step_scale = 0.01
+    if hasattr(agent, "Xmax") and hasattr(agent, "Xmin"):
+        step_size = step_scale * (agent.Xmax - agent.Xmin)
+    else:
+        step_size = step_scale
 
-    sampled_pops_y = []
+    random_walk_samples = pop_x + np.random.normal(0, step_size, size=pop_x.shape)
 
-    if remaining_fes >= (2 * cost_per_sample):
-        sample_indices = np.random.choice(len(agent.actions), 2, replace=False)
+    # Evaluate the random walk samples
+    sample_costs = [agent.fitness_function(i) for i in random_walk_samples]
+    agent.n_function_evaluations += n  # Increment evaluations by population size
 
-        for idx in sample_indices:
-            alg_class = agent.actions[idx]
+    # Calculate differences between the walk and the current population
+    diffs = np.array(sample_costs) - pop_y
 
-            sub_opt = alg_class(agent.problem, agent.options)
+    # --- Feature 5: Negative Slope Coefficient (nsc) ---
+    # Proportion of steps that resulted in an improvement
+    f5_nsc = np.sum(diffs < 0) / n
 
-            sub_opt.population = pop_x.copy()
-            sub_opt.fitness = pop_y.copy()
+    # --- Feature 6: Average Neutral Ratio (anr) ---
+    # Proportion of steps that resulted in practically zero change
+    eps = 1e-8
+    f6_anr = np.sum(np.abs(diffs) < eps) / n
 
-            sub_opt.n_function_evaluations = 0
-            sub_opt.max_function_evaluations = cost_per_sample
+    f7_ni = np.sum(diffs >= 0) / n  # Ratio of individuals that failed to improve
+    f8_nw = np.sum(diffs <= 0) / n  # Ratio of individuals that failed to worsen
 
-            sub_opt.optimize()
+    # --- Feature 9: Progress ---
+    f9_progress = agent.n_function_evaluations / agent.max_function_evaluations
 
-            sampled_pops_y.append(sub_opt.fitness)
-            agent.n_function_evaluations += sub_opt.n_function_evaluations
-
-    f5, f6, f7, f8 = 0.0, 0.0, 0.0, 0.0
-
-    if len(sampled_pops_y) > 0:
-        sorted_current = np.sort(pop_y)
-        sorted_samples = [np.sort(sy) for sy in sampled_pops_y]
-        avg_sample_y = np.mean(sorted_samples, axis=0)
-
-        # Slopes: (y_{i+1} - y_i)
-        diff_current = np.diff(sorted_current)
-        diff_sample = np.diff(avg_sample_y)
-
-        with np.errstate(divide="ignore", invalid="ignore"):
-            ratios = diff_current / diff_sample
-            ratios[diff_sample == 0] = 0.0
-            ratios[np.isnan(ratios)] = 0.0
-
-        f5 = min(np.sum(ratios), 0.0)
-
-        S = len(sampled_pops_y)
-        eps = 1e-8
-
-        neutral_count = 0
-        no_improve_counts = np.zeros(n)  # For f7
-        all_worse_counts = np.zeros(n)  # For f8
-
-        for sy in sampled_pops_y:
-            neutral_count += np.sum(np.abs(pop_y - sy) < eps)
-
-            improved = sy < pop_y
-            no_improve_counts += improved.astype(int)  # Add 1 if improved
-
-            worse = sy > pop_y
-            all_worse_counts += worse.astype(int)
-
-        f6 = neutral_count / (n * S)
-
-        alphas = (no_improve_counts == 0).astype(float)
-        f7 = np.mean(alphas)
-
-        betas = (all_worse_counts == S).astype(float)
-        f8 = np.mean(betas)
-
-    f9 = agent.n_function_evaluations / agent.max_function_evaluations
-
-    return np.array([f1, f2, f3, f4, f5, f6, f7, f8, f9])
+    return np.array(
+        [
+            f1_gbc,
+            f2_fdc,
+            f3_disp,
+            f4_disp_ratio,
+            f5_nsc,
+            f6_anr,
+            f7_ni,
+            f8_nw,
+            f9_progress,
+        ]
+    )
