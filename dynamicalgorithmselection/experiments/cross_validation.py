@@ -1,6 +1,6 @@
 import os
 from itertools import product
-from typing import Type, Optional
+from typing import Type, List
 
 import cocoex
 import numpy as np
@@ -18,13 +18,15 @@ def run_cross_validation(
     optimizer: Type[Optimizer],
     options: dict,
     evaluations_multiplier: int = 1_000,
-    is_loio: bool = True,
+    leaving_mode: str = "LOIO",
 ):
     results_dir = os.path.join("results", f"{options.get('name')}")
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
-    problems_suite, cv_folds = _get_cv_folds(4, is_loio, options.get("dimensionality"))
+    problems_suite, cv_folds = _get_cv_folds(
+        4 if leaving_mode != "LODO" else 3, leaving_mode, options.get("dimensionality")
+    )
     options["n_problems"] = len(cv_folds[0])
     observer = cocoex.Observer("bbob", "result_folder: " + options["name"])
     for i, (train_set, test_set) in enumerate(cv_folds):
@@ -54,7 +56,7 @@ def run_cross_validation(
     return observer.result_folder
 
 
-def _get_cv_folds(n: int, is_loio: bool, dim: Optional[int]):
+def _get_cv_folds(n: int, leaving_mode: str, dim: List[int]):
     """
     :param n:  number of cross validation folds
     :param is_loio: boolean to indicate how train and test sets should be split (leave-instance-out/leave-problem-out).
@@ -65,22 +67,21 @@ def _get_cv_folds(n: int, is_loio: bool, dim: Optional[int]):
     problems_suite = cocoex.Suite("bbob", "", "")
     all_problem_ids = [
         f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-        for i_id, f_id, dim in product(
-            INSTANCE_IDS, ALL_FUNCTIONS, (DIMENSIONS if dim is None else [dim])
-        )
+        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, dim)
     ]
     remaining_problem_ids = set(all_problem_ids)
+    remaining_dimensions = set(DIMENSIONS)
     remaining_function_ids = {i for i in ALL_FUNCTIONS}
     test_sets = []
     for i in range(n):
-        if is_loio:
+        if leaving_mode == "LOIO":
             selected = np.random.choice(
                 list(remaining_problem_ids),
                 size=len(all_problem_ids) // n,
                 replace=False,
             ).tolist()
             remaining_problem_ids = remaining_problem_ids.difference(selected)
-        else:
+        elif leaving_mode == "LOPO":
             selected_functions = np.random.choice(
                 list(remaining_function_ids),
                 size=len(ALL_FUNCTIONS) // n,
@@ -94,9 +95,25 @@ def _get_cv_folds(n: int, is_loio: bool, dim: Optional[int]):
             remaining_function_ids = remaining_function_ids.difference(
                 selected_functions
             )
+        else:
+            selected_dimensionalities = np.random.choice(
+                list(remaining_dimensions),
+                size=len(DIMENSIONS) // n,
+                replace=False,
+            ).tolist()
+            selected = [
+                i
+                for i in all_problem_ids
+                if any(i.endswith(f"d{dim:02d}") for dim in selected_dimensionalities)
+            ]
+            remaining_dimensions = remaining_function_ids.difference(
+                selected_dimensionalities
+            )
         test_sets.append(selected)
-
-    return problems_suite, [
+    folds = [
         (list(set(all_problem_ids).difference(test_set)), test_set)
         for test_set in test_sets
     ]
+    for fold in folds:
+        np.random.shuffle(fold[0])
+    return problems_suite, folds

@@ -113,20 +113,16 @@ class POWELL(DS):
     def __init__(self, problem, options):
         DS.__init__(self, problem, options)
         self._func = None  # only for inner line searcher
-        self.y_history = []
-        self.x_history = []
 
     def initialize(self, x=None, y=None, u=None, args=None, is_restart=False):
         x = (
             self._initialize_x(is_restart) if x is None else x
         )  # initial (starting) search point
-        y = self._evaluate_fitness(x, args, u=u) if y is None else y  # fitness
+        y = self._evaluate_fitness(x, args) if y is None else y  # fitness
         u = np.identity(self.ndim_problem) if u is None else u
-        self.y_history.append(y)
-        self.x_history.append(x)
 
         def _wrapper(xx):
-            return self._evaluate_fitness(xx, args, u=u)
+            return self._evaluate_fitness(xx, args)
 
         self._func = _wrapper
         return x, y, u, y
@@ -156,8 +152,6 @@ class POWELL(DS):
                 return x, y, u, ys
             d, diff = u[i], y
             y, x, d, fitness = self._line_search(x, d)
-            self.y_history.append(y)
-            self.x_history.append(x)
             ys.extend(fitness)
             diff -= y
             if diff > delta:
@@ -165,9 +159,7 @@ class POWELL(DS):
         d = x - xx  # extrapolated point
         _, ratio_e = _line_for_search(x, d, self.lower_boundary, self.upper_boundary)
         xxx = x + min(ratio_e, 1.0) * d
-        yyy = self.fitness_function(xxx)
-        self.y_history.append(yyy)
-        self.x_history.append(xxx)
+        yyy = self._evaluate_fitness(xxx, args=args)
         if yy > yyy:
             t, temp = 2.0 * (yy + yyy - 2.0 * y), yy - y - delta
             t *= np.square(temp)
@@ -175,8 +167,6 @@ class POWELL(DS):
             t -= delta * np.square(temp)
             if t < 0.0:
                 y, x, d, fitness = self._line_search(x, d)
-                self.y_history.append(y)
-                self.x_history.append(x)
                 ys.extend(fitness)
                 if np.any(d):
                     u[big_ind] = u[-1]
@@ -217,26 +207,21 @@ class POWELL(DS):
             u = None
         self.start_conditions = {
             "x": x,
-            "Y": y,
+            "y": y,
             "u": u,
         }
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
 
     def get_data(self, n_individuals: Optional[int] = None):
-        best_indices = sorted(
-            [i for i in range(len(self.y_history))],
-            key=lambda x: self.y_history[x],
-        )[:n_individuals]
-        x = np.array(self.x_history)[best_indices]
-        y = np.array(self.y_history)[best_indices]
+        indices = np.argsort(self.y_history)[: min(len(self.y_history), 200)]
+        x = np.array(self.x_history)[indices]
+        y = np.array(self.y_history)[indices]
         return (
             self.results
             | {
-                {
-                    "x": x,
-                    "Y": y,
-                }
+                "x": x,
+                "y": y,
             }
             or self.start_conditions
         )

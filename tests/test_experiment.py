@@ -32,7 +32,7 @@ class TestExperiment(unittest.TestCase):
             self.optimizer_mock, self.options, "test_exp", mode="CV_LOIO"
         )
         mock_cv.assert_called_once()
-        self.assertTrue(mock_cv.call_args[1]["is_loio"])
+        self.assertTrue(mock_cv.call_args[1]["leaving_mode"])
 
     @patch("dynamicalgorithmselection.experiments.experiment._coco_bbob_test_all")
     def test_coco_bbob_experiment_dispatch_random(self, mock_test_all):

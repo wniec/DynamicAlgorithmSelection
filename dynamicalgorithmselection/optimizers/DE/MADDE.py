@@ -42,10 +42,6 @@ class MADDE(DE):
                     self._evaluate_fitness(
                         xi,
                         args,
-                        MF=self.MF[:],
-                        MCr=self.MCr[:],
-                        k_idx=self.k_idx,
-                        pm=self.pm,
                     )
                     for xi in x
                 ]
@@ -158,10 +154,6 @@ class MADDE(DE):
                 self._evaluate_fitness(
                     ui,
                     args,
-                    MF=self.MF[:],
-                    MCr=self.MCr[:],
-                    k_idx=self.k_idx,
-                    pm=self.pm,
                 )
                 for ui in u
             ]

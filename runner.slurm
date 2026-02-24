@@ -17,11 +17,8 @@ fi
 
 # Store the remaining arguments as an array called PORTFOLIO.
 # If no additional arguments were provided, fall back to your default.
-if [ "$#" -eq 0 ]; then
-    PORTFOLIO=('JDE21' 'MADDE' 'NL_SHADE_RSP')
-else
-    PORTFOLIO=("$@")
-fi
+
+PORTFOLIO=('JDE21' 'MADDE' 'NL_SHADE_RSP')
 
 # CONFIGURATION
 ENV_PATH="$SCRATCH/DynamicAlgorithmSelection/.venv/bin/activate"
@@ -101,5 +98,5 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 22 ]]; then
 elif [[ $SLURM_ARRAY_TASK_ID -eq 23 ]]; then
     echo "Running Mode: Baselines"
     python3 dynamicalgorithmselection/main.py BASELINES \
-      -p "${PORTFOLIO[@]}" --agent random --mode baselines
+      -p "${PORTFOLIO[@]}" --mode baselines
 fi

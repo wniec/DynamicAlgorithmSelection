@@ -348,11 +348,11 @@ class JDE21(DE):
         else:
             indices = np.argsort(y)[: self.n_individuals]
             self.start_conditions = {"x": x[indices], "y": y[indices]}
-            self.Cr = kwargs.get("Cr", self.Cr)
-            if self.Cr is not None:
-                self.Cr = self.Cr[indices]
-            self.F = kwargs.get("F", self.F)
-            if self.F is not None:
-                self.F = self.F[indices]
+            Cr = kwargs.get("Cr")
+            if Cr is not None:
+                self.Cr = Cr[indices]
+            F = kwargs.get("F")
+            if F is not None:
+                self.F = F[indices]
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))

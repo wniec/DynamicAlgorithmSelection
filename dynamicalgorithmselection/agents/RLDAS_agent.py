@@ -10,11 +10,11 @@ from dynamicalgorithmselection.agents.ppo_utils import (
     DEVICE,
     RolloutBuffer,
     RLDASNetwork,
-    GAMMA,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 INITIAL_POPSIZE = 170
+GAMMA = 0.99
 
 
 class RLDASAgent(Agent):
@@ -40,7 +40,7 @@ class RLDASAgent(Agent):
         self.mean_rewards = options.get("mean_rewards", [])
         self.best_50_mean = float("inf")
         self.schedule_interval = options.get(
-            "schedule_interval", int(self.max_function_evaluations / 50)
+            "schedule_interval", int(self.max_function_evaluations / 10)
         )
 
         expected_trajectory_length = int(
@@ -272,7 +272,7 @@ class RLDASAgent(Agent):
 
             self._n_generations += 1
             self._print_verbose_info(fitness, self.best_so_far_y)
-
+        print(self._n_generations)
         fes_end = self.n_function_evaluations
         speed_factor = self.max_function_evaluations / fes_end
 

@@ -175,7 +175,17 @@ class Agent(Optimizer):
             raise ValueError("Inputs to iterate cannot be None")
         optimizer_input_data["best_x"] = self.best_so_far_x
         optimizer_input_data["best_y"] = self.best_so_far_y
-        optimizer.set_data(**optimizer_input_data)
+
+        historic_data = {
+            k[:-8]: v
+            for k, v in optimizer_input_data.items()
+            if k.endswith("_history") and k != "fitness_history"
+        }
+        current_data = {
+            k: v for k, v in optimizer_input_data.items() if not k.endswith("_history")
+        }
+        combined_input = current_data | historic_data
+        optimizer.set_data(**combined_input)
 
         if self._check_terminations():
             return optimizer.get_data()

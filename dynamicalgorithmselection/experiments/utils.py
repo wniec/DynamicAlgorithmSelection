@@ -1,13 +1,12 @@
 import json
 import os
 from itertools import islice, product
-from typing import Type, Optional
+from typing import Type, List
 
 import cocoex
 import numpy as np
 
 from dynamicalgorithmselection.agents.agent_utils import (
-    get_checkpoints,
     get_runtime_stats,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
@@ -48,7 +47,7 @@ def coco_bbob_single_function(
     return results
 
 
-def get_suite(mode: str, train: bool, dim: Optional[int]):
+def get_suite(mode: str, train: bool, dim: List[int]):
     """
     :param mode:  mode of the training (LOPO: easy and hard) or LOIO
     :param train: if suite should be for testing or training:
@@ -59,9 +58,7 @@ def get_suite(mode: str, train: bool, dim: Optional[int]):
     problems_suite = cocoex.Suite("bbob", "", "")
     all_problem_ids = [
         f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-        for i_id, f_id, dim in product(
-            INSTANCE_IDS, ALL_FUNCTIONS, (DIMENSIONS if dim is None else [dim])
-        )
+        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, dim)
     ]
     if mode in ["easy", "hard"]:
         easy = mode == "easy"
@@ -73,9 +70,7 @@ def get_suite(mode: str, train: bool, dim: Optional[int]):
 
         problem_ids = [
             f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-            for i_id, f_id, dim in product(
-                INSTANCE_IDS, function_ids, (DIMENSIONS if dim is None else [dim])
-            )
+            for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, dim)
         ]
 
     elif mode == "LOIO":

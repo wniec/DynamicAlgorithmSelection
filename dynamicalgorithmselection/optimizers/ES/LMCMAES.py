@@ -86,14 +86,13 @@ class LMCMAES(ES):
                 z = self.rng_optimization.standard_normal((self.ndim_problem,))
                 a_z = self._a_z(z, pm, vm, b)
 
-            # FIX 2: Check for potential overflow before update
             mutation_step = sign * self.sigma * a_z
             if np.any(np.isnan(mutation_step)) or np.any(np.isinf(mutation_step)):
                 # Fallback to prevent crash, effectively skipping this mutation
                 mutation_step = np.zeros_like(mutation_step)
 
             x[k] = mean + mutation_step
-            y[k] = self._evaluate_fitness(x[k], args, pm=pm, vm=vm, b=b)
+            y[k] = self._evaluate_fitness(x[k], args)
             sign *= -1
         return x, y
 
@@ -119,7 +118,6 @@ class LMCMAES(ES):
     ):
         mean_bak = np.dot(self._w, x[np.argsort(y)[: self.n_parents]])
 
-        # FIX 3: Safety clamp for sigma to prevent division by zero or overflow
         safe_sigma = np.clip(self.sigma, 1e-20, 1e20)
 
         p_c = self._p_c_1 * p_c + self._p_c_2 * (mean_bak - mean) / safe_sigma
@@ -147,7 +145,6 @@ class LMCMAES(ES):
             vm[self._j[i]] = self._a_inv_z(pm[self._j[i]], vm, d, i)
             v_n = np.dot(vm[self._j[i]], vm[self._j[i]])
 
-            # FIX 4: Safety clamp for v_n (denominator safety)
             # If v_n is 0 or NaN, b and d will explode.
             if v_n < 1e-20:
                 v_n = 1e-20

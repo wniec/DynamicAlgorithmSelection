@@ -36,10 +36,6 @@ class NL_SHADE_RSP(DE):
                     self._evaluate_fitness(
                         xi,
                         args,
-                        MF=self.MF[:],
-                        MCr=self.MCr[:],
-                        k_idx=self.k_idx,
-                        pa=self.pa,
                     )
                     for xi in x
                 ]
@@ -175,10 +171,6 @@ class NL_SHADE_RSP(DE):
                 self._evaluate_fitness(
                     ui,
                     args,
-                    MF=self.MF[:],
-                    MCr=self.MCr[:],
-                    k_idx=self.k_idx,
-                    pa=self.pa,
                 )
                 for ui in us
             ]

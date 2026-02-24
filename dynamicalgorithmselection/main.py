@@ -76,14 +76,6 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "-c",
-        "--compare",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable comparison with each algorithm alone (False by default)",
-    )
-
-    parser.add_argument(
         "-e",
         "--wandb_entity",
         type=str,
@@ -113,7 +105,7 @@ def parse_arguments():
         "--mode",
         type=str,
         default="LOIO",
-        choices=["LOIO", "hard", "easy", "CV-LOIO", "CV-LOPO", "baselines"],
+        choices=["LOIO", "hard", "easy", "CV-LODO", "CV-LOIO", "CV-LOPO", "baselines"],
         help="specify which agent to use",
     )
 
@@ -145,9 +137,10 @@ def parse_arguments():
     parser.add_argument(
         "-D",
         "--dimensionality",
-        type=int,
         choices=DIMENSIONS,
-        default=None,
+        nargs="+",
+        type=int,
+        default=DIMENSIONS,
         help="dimensionality of problems",
     )
 
@@ -188,7 +181,7 @@ def print_info(args):
     print("Population size: ", args.population_size)
     print("Function eval multiplier: ", args.fe_multiplier)
     print("Test mode: ", args.test)
-    print("Compare mode: ", args.compare)
+    print("Mode: ", args.mode)
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
@@ -285,6 +278,10 @@ def run_training(args, action_space):
 def run_CV(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_CV_{args.name}")):
         shutil.rmtree(os.path.join("exdata", f"DAS_CV_{args.name}"))
+    if args.mode == "CV-LODO" and args.dimensionality != DIMENSIONS:
+        raise ValueError(
+            "FOR Leave-One-Dimension-Out scenario all dimensionalities must be provided."
+        )
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
@@ -359,7 +356,7 @@ def main():
             run_training(args, action_space)
         if args.test and args.mode != "baselines":
             test(args, action_space)
-    if args.compare or args.mode == "baselines":
+    if args.mode == "baselines":
         run_baselines(args, action_space)
 
 
