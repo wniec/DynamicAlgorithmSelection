@@ -1,6 +1,8 @@
 from itertools import product
-from typing import List, Type, Optional
+from typing import List, Type, Optional, Dict, Any, Tuple
 import numpy as np
+
+from dynamicalgorithmselection.agents.agent_reward import AgentReward
 from dynamicalgorithmselection.agents.agent_state import (
     get_state_representation,
     StateNormalizer,
@@ -8,6 +10,7 @@ from dynamicalgorithmselection.agents.agent_state import (
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
+    MAX_DIM,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
@@ -55,14 +58,15 @@ class Agent(Optimizer):
         self.state_normalizer = self.options.get(
             "state_normalizer", StateNormalizer(input_shape=(self.state_dim,))
         )
-        self.initial_value_range = None
+        self.initial_value_range: Tuple[Optional[float], Optional[float]] = (None, None)
+        self.reward_method = AgentReward(self.options.get("reward_option", 1))
 
     def get_partial_state(
         self,
         x: Optional[np.ndarray],
         y: Optional[np.ndarray],
         optimization_state: bool = False,
-    ) -> np.array:
+    ) -> np.ndarray:
         sr_additional_params = (
             self.lower_boundary,
             self.upper_boundary,
@@ -72,11 +76,15 @@ class Agent(Optimizer):
         )
 
         if x is None or y is None:
-            state_representation = self.state_representation(
-                np.zeros((50, self.ndim_problem)),
-                np.zeros((50,)),
-                sr_additional_params,
-            )
+            if self.options.get("state_representation") != "ELA":
+                state_representation = self.state_representation(
+                    np.zeros((50, self.ndim_problem)),
+                    np.zeros((50,)),
+                    sr_additional_params,
+                )
+            else:
+                state_representation = (np.zeros((43,)),)
+
             return np.append(state_representation, (0, 0) if optimization_state else ())
         used_fe = self.n_function_evaluations / self.max_function_evaluations
         stagnation_coef = self.stagnation_count / self.max_function_evaluations
@@ -106,7 +114,14 @@ class Agent(Optimizer):
             optimization_state = self.get_partial_state(x, y, True).flatten()
             state = np.concatenate((landscape_state, optimization_state))
         else:
-            state = self.get_partial_state(x_history, y_history, True).flatten()
+            partial_state = self.get_partial_state(x_history, y_history, True).flatten()
+            state = np.append(
+                partial_state,
+                (
+                    self.ndim_problem / MAX_DIM,
+                    self.n_function_evaluations / self.max_function_evaluations,
+                ),
+            )
         return self.state_normalizer.normalize(state, update)
 
     def _print_verbose_info(self, fitness, y):
@@ -138,8 +153,8 @@ class Agent(Optimizer):
             self._counter_early_stopping, self._base_early_stopping = 0, best_y
 
     def _save_fitness(self, best_x, best_y, worst_x, worst_y):
-        if self.initial_value_range is None:
-            self.initial_value_range = max(worst_y - best_y, 1e-5)
+        if self.initial_value_range[0] is None:
+            self.initial_value_range = best_y, max(worst_y, best_y + 1e-5)
 
         self.best_parent = best_y
         self.history.append(best_y)
@@ -151,16 +166,32 @@ class Agent(Optimizer):
 
         self._check_early_stopping(best_y)
 
-    def iterate(self, optimizer_input_data=None, optimizer=None):
+    def iterate(
+        self,
+        optimizer_input_data: Optional[Dict] = None,
+        optimizer: Optional[Optimizer] = None,
+    ):
+        if optimizer_input_data is None or optimizer is None:
+            raise ValueError("Inputs to iterate cannot be None")
         optimizer_input_data["best_x"] = self.best_so_far_x
         optimizer_input_data["best_y"] = self.best_so_far_y
-        optimizer.set_data(**optimizer_input_data)
+
+        historic_data = {
+            k[:-8]: v
+            for k, v in optimizer_input_data.items()
+            if k.endswith("_history") and k != "fitness_history"
+        }
+        current_data = {
+            k: v for k, v in optimizer_input_data.items() if not k.endswith("_history")
+        }
+        combined_input = current_data | historic_data
+        optimizer.set_data(**combined_input)
 
         if self._check_terminations():
             return optimizer.get_data()
 
         self._n_generations += 1
-        results = optimizer.optimize()
+        results: Dict[str, Any] = optimizer.optimize()
         self.fitness_history.extend(results["fitness_history"])
 
         self._save_fitness(
@@ -196,7 +227,7 @@ class Agent(Optimizer):
                 1 if self.choices_history[i] == action_id else 0
             )
             for i, (action_id, action) in product(
-                range(self.n_checkpoints), enumerate(self.actions)
+                range(len(self.choices_history)), enumerate(self.actions)
             )
         }
         self.run.log(checkpoint_choices)
@@ -216,12 +247,9 @@ class Agent(Optimizer):
     def optimize(self, fitness_function=None, args=None):
         raise NotImplementedError
 
-    def get_reward(self, new_best_y, old_best_y):
-        if old_best_y == float("inf"):
-            return 0.0
-
-        improvement = old_best_y - new_best_y
-
-        # return float(improvement > 1e-3)
-        reward = improvement / self.initial_value_range
-        return np.log(np.clip(reward, 0.0, 1.0) + 1e-5)
+    def get_reward(
+        self, new_best_y: float, old_best_y: float, is_final_checkpoint: bool = False
+    ):
+        return self.reward_method(
+            new_best_y, old_best_y, self.initial_value_range, is_final_checkpoint
+        )

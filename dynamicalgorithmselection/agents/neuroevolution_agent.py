@@ -42,7 +42,7 @@ class NeuroevolutionAgent(Agent):
             action_options["verbose"] = False
             optimizer = self.actions[action](self.problem, action_options)
             optimizer.n_function_evaluations = self.n_function_evaluations
-            optimizer._n_generations = 0
+            setattr(optimizer, "_n_generations", 0)
             best_parent = self.best_so_far_y
             iteration_result = self.iterate(iteration_result, optimizer)
             x, y = iteration_result.get("x"), iteration_result.get("y")

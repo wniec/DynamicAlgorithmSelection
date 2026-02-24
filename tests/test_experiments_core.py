@@ -13,6 +13,7 @@ class TestCore(unittest.TestCase):
             "n_checkpoints": 5,
             "n_individuals": 10,
             "cdb": 0.5,
+            "n_epochs": 1,
         }
         self.eval_multiplier = 10
         self.problem_ids = ["p1", "p2"]
@@ -24,7 +25,10 @@ class TestCore(unittest.TestCase):
         self.suite_mock.get_problem.return_value = self.problem_mock
         self.observer_mock = MagicMock()
 
-    @patch("dynamicalgorithmselection.experiments.core.tqdm", side_effect=lambda x: x)
+    @patch(
+        "dynamicalgorithmselection.experiments.core.tqdm",
+        side_effect=lambda x, smoothing: x,
+    )
     @patch("dynamicalgorithmselection.experiments.core.dump_stats")
     @patch("dynamicalgorithmselection.experiments.core.coco_bbob_single_function")
     def test_run_testing(self, mock_single_func, mock_dump_stats, mock_tqdm):
@@ -50,7 +54,10 @@ class TestCore(unittest.TestCase):
         self.assertEqual(self.options["max_function_evaluations"], expected_max_fe)
         self.assertFalse(self.options["train_mode"])
 
-    @patch("dynamicalgorithmselection.experiments.core.tqdm", side_effect=lambda x: x)
+    @patch(
+        "dynamicalgorithmselection.experiments.core.tqdm",
+        side_effect=lambda x, smoothing: x,
+    )
     @patch("dynamicalgorithmselection.experiments.core.coco_bbob_single_function")
     def test_run_training(self, mock_single_func, mock_tqdm):
         fake_state_1 = {

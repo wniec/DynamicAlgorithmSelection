@@ -27,8 +27,6 @@ def load_data(path):
     return data
 
 
-seed = 0
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_path = os.path.join(BASE_DIR, "NeurELA.pkl")
 

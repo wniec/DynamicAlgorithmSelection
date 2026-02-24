@@ -1,17 +1,22 @@
 import unittest
 from unittest.mock import MagicMock, patch, mock_open
-import os
+from typing import Any, cast, Type  # Added imports
 
 from dynamicalgorithmselection.experiments.experiment import (
     coco_bbob_experiment,
     run_comparison,
     dump_extreme_stats,
 )
+from dynamicalgorithmselection.optimizers.Optimizer import (
+    Optimizer,
+)  # Import the base class
 
 
 class TestExperiment(unittest.TestCase):
     def setUp(self):
-        self.optimizer_mock = MagicMock()
+        self.optimizer_mock = MagicMock(
+            spec=Type[Optimizer]
+        )  # Use spec for better type safety
         self.optimizer_mock.__name__ = "MockOpt"
         self.options = {
             "name": "experiment_test",
@@ -27,7 +32,7 @@ class TestExperiment(unittest.TestCase):
             self.optimizer_mock, self.options, "test_exp", mode="CV_LOIO"
         )
         mock_cv.assert_called_once()
-        self.assertTrue(mock_cv.call_args[1]["is_loio"])
+        self.assertTrue(mock_cv.call_args[1]["leaving_mode"])
 
     @patch("dynamicalgorithmselection.experiments.experiment._coco_bbob_test_all")
     def test_coco_bbob_experiment_dispatch_random(self, mock_test_all):
@@ -87,7 +92,7 @@ class TestExperiment(unittest.TestCase):
         opt1.__name__ = "Opt1"
         opt2 = MagicMock()
         opt2.__name__ = "Opt2"
-        portfolio = [opt1, opt2]
+        portfolio = cast(list[Type[Optimizer]], [opt1, opt2])
 
         # Mock Suite
         mock_suite_obj = MagicMock()
@@ -95,11 +100,8 @@ class TestExperiment(unittest.TestCase):
         mock_problem.dimension = 2
         mock_suite_obj.get_problem.return_value = mock_problem
 
-        # get_suite returns (suite, problem_ids)
         mock_get_suite.return_value = (mock_suite_obj, ["p1"])
 
-        # FIXED: Return a dictionary, NOT a tuple.
-        # run_comparison treats results as a dictionary directly in one of the lines.
         mock_single_func.return_value = {"fitness_history": [1, 2]}
 
         # Execute
@@ -111,22 +113,20 @@ class TestExperiment(unittest.TestCase):
         self.assertEqual(mock_dump_stats.call_count, 2)
         mock_dump_extreme.assert_called_once()
 
-    @patch("dynamicalgorithmselection.experiments.experiment.get_checkpoints")
     @patch("dynamicalgorithmselection.experiments.experiment.get_extreme_stats")
     @patch("builtins.open", new_callable=mock_open)
     @patch("json.dump")
-    def test_dump_extreme_stats(
-        self, mock_json_dump, mock_file, mock_get_extreme, mock_get_checkpoints
-    ):
-        stats = {"Opt1": [], "Opt2": []}
-        portfolio = [MagicMock(__name__="Opt1"), MagicMock(__name__="Opt2")]
-        mock_get_extreme.return_value = ({"best": 1}, {"worst": 0})
+    def test_dump_extreme_stats(self, mock_json_dump, mock_file, mock_get_extreme):
+        stats: dict[str, list[Any]] = {"Opt1": [], "Opt2": []}
 
-        dump_extreme_stats(portfolio, stats, "p1", 100, 5, 10, 0.5)
+        mock_get_extreme.return_value = ({"best": 1}, {"worst": 0})
+        case_name = "OPT1_OPT2_OPT3"
+
+        dump_extreme_stats(case_name, stats, "p1", 100)
 
         self.assertEqual(mock_file.call_count, 2)
         self.assertEqual(mock_json_dump.call_count, 2)
 
         args_list = mock_file.call_args_list
-        self.assertIn("Opt1_Opt2_best", args_list[0][0][0])
-        self.assertIn("Opt1_Opt2_worst", args_list[1][0][0])
+        self.assertIn(f"{case_name}_best", args_list[0][0][0])
+        self.assertIn(f"{case_name}_worst", args_list[1][0][0])
