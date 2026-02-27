@@ -272,7 +272,6 @@ class RLDASAgent(Agent):
 
             self._n_generations += 1
             self._print_verbose_info(fitness, self.best_so_far_y)
-        print(self._n_generations)
         fes_end = self.n_function_evaluations
         speed_factor = self.max_function_evaluations / fes_end
 

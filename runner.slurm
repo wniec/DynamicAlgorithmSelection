@@ -63,7 +63,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 12 && $SLURM_ARRAY_TASK_ID -le 15 ]]; then
     echo "Running Mode: $MODE | Agent: Policy Gradient | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_${MODE}_${CDB_VAL}_${DIM} \
-      -p "${PORTFOLIO[@]}" -r custom --mode $MODE --dimensionality $DIM \
+      -p "${PORTFOLIO[@]}" --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
 # 5. Dimension-specific RL-DAS-random (Indices 16-19)
@@ -79,14 +79,14 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 20 ]]; then
     MODE="CV-LOIO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_MULTIDIMENSIONAL_${MODE}_${CDB_VAL} \
-      -p "${PORTFOLIO[@]}" -r custom --mode $MODE --cdb $CDB_VAL --agent policy-gradient
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 
 # 7. Multidimensional CV-LOPO (Index 21)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 21 ]]; then
     MODE="CV-LOPO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_MULTIDIMENSIONAL_${MODE}_${CDB_VAL} \
-      -p "${PORTFOLIO[@]}" -r custom --mode $MODE --cdb $CDB_VAL --agent policy-gradient
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 
 # 8. Global Random Agent (Index 22)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 22 ]]; then
