@@ -2,23 +2,30 @@ import argparse
 import os
 import pickle
 import shutil
-from typing import List, Type, Optional
+from random import seed as set_random_seed
+from typing import List, Type, Dict, Any
 import cocopp
 import neat
+import numpy as np
 import torch
 import wandb
 
+from dynamicalgorithmselection.agents.RLDAS_agent import RLDASAgent
+from dynamicalgorithmselection.agents.RLDAS_random_agent import RLDASRandomAgent
 from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
 from dynamicalgorithmselection.experiments.experiment import coco_bbob_experiment
 from dynamicalgorithmselection import optimizers
+from dynamicalgorithmselection.experiments.utils import DIMENSIONS
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 AGENTS_DICT = {
     "random": RandomAgent,
     "neuroevolution": NeuroevolutionAgent,
     "policy-gradient": PolicyGradientAgent,
+    "RL-DAS": RLDASAgent,
+    "RL-DAS-random": RLDASRandomAgent,
 }
 
 
@@ -40,7 +47,7 @@ def parse_arguments():
     parser.add_argument(
         "-m",
         "--population_size",
-        type=Optional[int],
+        type=int,
         default=None,
         help="Population size (default: 20)",
     )
@@ -69,14 +76,6 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "-c",
-        "--compare",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable comparison with each algorithm alone (False by default)",
-    )
-
-    parser.add_argument(
         "-e",
         "--wandb_entity",
         type=str,
@@ -97,7 +96,7 @@ def parse_arguments():
         "--agent",
         type=str,
         default="policy-gradient",
-        choices=["random", "neuroevolution", "policy-gradient"],
+        choices=list(AGENTS_DICT.keys()),
         help="specify which agent to use",
     )
 
@@ -105,8 +104,8 @@ def parse_arguments():
         "-l",
         "--mode",
         type=str,
-        default="easy",
-        choices=["LOIO", "hard", "easy", "CV-LOIO", "CV-LOPO", "baselines"],
+        default="LOIO",
+        choices=["LOIO", "hard", "easy", "CV-LODO", "CV-LOIO", "CV-LOPO", "baselines"],
         help="specify which agent to use",
     )
 
@@ -134,6 +133,40 @@ def parse_arguments():
         default=False,
         help="Enable selection of forcibly restarting optimizers",
     )
+
+    parser.add_argument(
+        "-D",
+        "--dimensionality",
+        choices=DIMENSIONS,
+        nargs="+",
+        type=int,
+        default=DIMENSIONS,
+        help="dimensionality of problems",
+    )
+
+    parser.add_argument(
+        "-E",
+        "--n_epochs",
+        type=int,
+        default=1,
+        help="number of training epochs",
+    )
+
+    parser.add_argument(
+        "-O",
+        "--reward-option",
+        type=int,
+        default=1,
+        help="id of method used to compute reward",
+    )
+
+    parser.add_argument(
+        "-S",
+        "--seed",
+        type=int,
+        default=42,
+        help="seed",
+    )
     return parser.parse_args()
 
 
@@ -148,13 +181,31 @@ def print_info(args):
     print("Population size: ", args.population_size)
     print("Function eval multiplier: ", args.fe_multiplier)
     print("Test mode: ", args.test)
-    print("Compare mode: ", args.compare)
+    print("Mode: ", args.mode)
     print("Weights and Biases entity: ", args.wandb_entity)
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
     print("Exponential checkpoint division base: ", args.cdb)
     print("State representation variant: ", args.state_representation)
     print("Forcing restarts: ", args.force_restarts)
+    print("Dimensionality of problems: ", args.dimensionality)
+    print("Number of training epochs: ", args.n_epochs)
+    print("Rewarding option: ", args.reward_option)
+
+
+def common_options(args) -> Dict[str, Any]:
+    options = {
+        "n_checkpoints": args.n_checkpoints,
+        "n_individuals": args.population_size,
+        "cdb": args.cdb,
+        "state_representation": args.state_representation,
+        "force_restarts": args.force_restarts,
+        "dimensionality": args.dimensionality,
+        "n_epochs": args.n_epochs,
+        "reward_option": args.reward_option,
+        "seed": args.seed,
+    }
+    return options
 
 
 def test(args, action_space):
@@ -162,13 +213,8 @@ def test(args, action_space):
         shutil.rmtree(os.path.join("exdata", f"DAS_{args.name}"))
 
     options = {
-        "n_checkpoints": args.n_checkpoints,
-        "n_individuals": args.population_size,
         "action_space": action_space,
-        "cdb": args.cdb,
-        "state_representation": args.state_representation,
-        "force_restarts": args.force_restarts,
-    }
+    } | common_options(args)
     # agent_state = torch.load(f)
     if args.agent == "neuroevolution":
         config = neat.Config(
@@ -215,14 +261,10 @@ def run_training(args, action_space):
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
-            "n_checkpoints": args.n_checkpoints,
-            "n_individuals": args.population_size,
             "run": run,
             "action_space": action_space,
-            "cdb": args.cdb,
-            "state_representation": args.state_representation,
-            "force_restarts": args.force_restarts,
-        },
+        }
+        | common_options(args),
         name=f"DAS_train_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
@@ -236,17 +278,17 @@ def run_training(args, action_space):
 def run_CV(args, action_space):
     if os.path.exists(os.path.join("exdata", f"DAS_CV_{args.name}")):
         shutil.rmtree(os.path.join("exdata", f"DAS_CV_{args.name}"))
+    if args.mode == "CV-LODO" and args.dimensionality != DIMENSIONS:
+        raise ValueError(
+            "FOR Leave-One-Dimension-Out scenario all dimensionalities must be provided."
+        )
     coco_bbob_experiment(
         AGENTS_DICT[args.agent],
         {
-            "n_checkpoints": args.n_checkpoints,
-            "n_individuals": args.population_size,
             "run": None,
             "action_space": action_space,
-            "cdb": args.cdb,
-            "state_representation": args.state_representation,
-            "force_restarts": args.force_restarts,
-        },
+        }
+        | common_options(args),
         name=f"DAS_CV_{args.name}",
         evaluations_multiplier=args.fe_multiplier,
         train=True,
@@ -258,34 +300,45 @@ def run_CV(args, action_space):
 
 def run_baselines(args, action_space):
     for optimizer in action_space:
-        if os.path.exists(os.path.join("exdata", optimizer.__name__)):
-            shutil.rmtree(os.path.join("exdata", optimizer.__name__))
+        if os.path.exists(
+            os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
+        ):
+            shutil.rmtree(
+                os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
+            )
 
-        print(f"--- Running Baseline: {optimizer.__name__} ---")
-
-        # 2. Run experiment for ONLY this optimizer
-        # NOTICE: We pass `[optimizer]` instead of `action_space` here.
-        coco_bbob_experiment(
-            None,
-            {
-                "optimizer_portfolio": [optimizer],  # <--- FIXED: List of 1
-                "n_individuals": args.population_size,
-                "baselines": True,
-                "n_checkpoints": args.n_checkpoints,
-                "cdb": args.cdb,
-                "state_representation": args.state_representation,
-                "force_restarts": args.force_restarts,
-            },
-            name=optimizer.__name__,
-            evaluations_multiplier=args.fe_multiplier,
-            train=False,
-            agent=None,
+    coco_bbob_experiment(
+        None,
+        {
+            "optimizer_portfolio": action_space,
+            "baselines": True,
+        }
+        | common_options(args),
+        name=f"{args.name}_baselines",
+        evaluations_multiplier=args.fe_multiplier,
+        train=False,
+        agent=None,
+    )
+    for optimizer in action_space:
+        cocopp.main(
+            os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
         )
-        cocopp.main(os.path.join("exdata", optimizer.__name__))
+
+
+def set_seed(seed):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    # Torch RNG
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # Python RNG
+    np.random.seed(seed)
+    set_random_seed(seed)
 
 
 def main():
     args = parse_arguments()
+    set_seed(args.seed)
     print_info(args)
     available_optimizers = optimizers.available_optimizers
     action_space: List[Type[Optimizer]] = []
@@ -294,18 +347,16 @@ def main():
             raise ValueError(f'Unknown optimizer "{optimizer}"')
         else:
             action_space.append(available_optimizers[optimizer])
-    if not os.path.exists("models"):
-        os.mkdir("models")
-    if not os.path.exists("results"):
-        os.mkdir("results")
+    os.makedirs("models", exist_ok=True)
+    os.makedirs("results", exist_ok=True)
     if args.mode.startswith("CV"):
         run_CV(args, action_space)
     else:
-        if args.agent != "random" and args.mode != "baselines":
+        if args.agent not in ["random", "RL-DAS-random"] and args.mode != "baselines":
             run_training(args, action_space)
         if args.test and args.mode != "baselines":
             test(args, action_space)
-    if args.compare or args.mode == "baselines":
+    if args.mode == "baselines":
         run_baselines(args, action_space)
 
 

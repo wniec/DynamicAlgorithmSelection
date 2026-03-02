@@ -41,7 +41,7 @@ class RandomAgent(Agent):
 
                 if historic_val is None:
                     self.iterations_history[variable_name] = appended_val
-                else:
+                elif appended_val.shape != (0,):
                     self.iterations_history[variable_name] = np.concatenate(
                         (historic_val, appended_val)
                     )
@@ -54,7 +54,7 @@ class RandomAgent(Agent):
         self.iterations_history = {"x": None, "y": None}
         iteration_result = {"x": x, "y": y}
         last_used_params = []
-        while not self._check_terminations():
+        while True:
             action = self._select_action()
             iteration_result, optimizer = self._execute_action(action, iteration_result)
             if len(last_used_params) > 0:
@@ -67,4 +67,6 @@ class RandomAgent(Agent):
             self.n_function_evaluations = optimizer.n_function_evaluations
             self._print_verbose_info(fitness, y)
             self.n_function_evaluations = optimizer.n_function_evaluations
+            if self._check_terminations() or self._n_generations == self.n_checkpoints:
+                break
         return self._collect(fitness, self.best_so_far_y)

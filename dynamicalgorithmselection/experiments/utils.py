@@ -1,13 +1,12 @@
 import json
 import os
 from itertools import islice, product
-from typing import Type
+from typing import Type, List
 
 import cocoex
 import numpy as np
 
 from dynamicalgorithmselection.agents.agent_utils import (
-    get_checkpoints,
     get_runtime_stats,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
@@ -48,17 +47,18 @@ def coco_bbob_single_function(
     return results
 
 
-def get_suite(mode, train):
+def get_suite(mode: str, train: bool, dim: List[int]):
     """
     :param mode:  mode of the training (LOPO: easy and hard) or LOIO
     :param train: if suite should be for testing or training:
+    :param dim: dimensionality of suite's problem. None indicates all of them
     :return suite and list of problem ids:
     """
     cocoex.utilities.MiniPrint()
     problems_suite = cocoex.Suite("bbob", "", "")
     all_problem_ids = [
         f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, DIMENSIONS)
+        for i_id, f_id, dim in product(INSTANCE_IDS, ALL_FUNCTIONS, dim)
     ]
     if mode in ["easy", "hard"]:
         easy = mode == "easy"
@@ -70,17 +70,17 @@ def get_suite(mode, train):
 
         problem_ids = [
             f"bbob_f{f_id:03d}_i{i_id:02d}_d{dim:02d}"
-            for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, DIMENSIONS)
+            for i_id, f_id, dim in product(INSTANCE_IDS, function_ids, dim)
         ]
 
     elif mode == "LOIO":
-        with open("LOIO_train_set.json") as f:
-            problem_ids = json.load(f)["data"]
-        np.random.seed(1234)
+        train_problem_ids = np.random.choice(
+            all_problem_ids, size=2 * len(all_problem_ids) // 3, replace=False
+        )
         if train:
-            pass
+            problem_ids = train_problem_ids
         else:
-            problem_ids = list(set(all_problem_ids).difference(problem_ids))
+            problem_ids = list(set(all_problem_ids).difference(train_problem_ids))
     elif mode == "CV":
         raise ValueError("CV mode is not suitable for get_suite function")
     else:
@@ -93,13 +93,7 @@ def dump_stats(
     name,
     problem_instance,
     max_function_evaluations,
-    n_checkpoints,
-    n_individuals,
-    cdb,
 ):
-    checkpoints = get_checkpoints(
-        n_checkpoints, max_function_evaluations, n_individuals or 100, cdb
-    )
     with open(
         os.path.join(
             "results",
@@ -113,7 +107,6 @@ def dump_stats(
                 problem_instance: get_runtime_stats(
                     results["fitness_history"],
                     max_function_evaluations,
-                    checkpoints,
                 )
             },
             f,

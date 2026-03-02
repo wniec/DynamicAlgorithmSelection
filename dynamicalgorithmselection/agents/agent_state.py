@@ -11,6 +11,8 @@ from pflacco.classical_ela_features import (
     calculate_information_content,
     calculate_ela_distribution,  # Information Content
 )
+from scipy.spatial.distance import pdist
+from scipy.stats import spearmanr
 
 from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
@@ -32,9 +34,7 @@ def get_state_representation(
             x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
         )[0].mean(axis=0), 34
     elif name == "ELA":
-        return lambda x, y, *args: ela_state_representation(
-            x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
-        ), 45
+        return lambda x, y, *args: ela_state_representation(x, y), 47
     elif name == "custom":
         return lambda x, y, args: AgentState(
             x, y, n_actions, *args
@@ -46,20 +46,39 @@ def get_state_representation(
 def ela_state_representation(x, y, *args):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        x_norm, y_norm = (
-            (x - x.mean()) / (x.std() + 1e-8),
-            (y - y.mean()) / (y.std() + 1e-8),
+
+        _, unique_indices = np.unique(x, axis=0, return_index=True)
+        unique_indices = np.sort(unique_indices)
+        x_deduplicated = x[unique_indices][-MAX_CONSIDERED_POPSIZE:]
+        y_deduplicated = y[unique_indices][-MAX_CONSIDERED_POPSIZE:]
+
+        x_raw = np.ascontiguousarray(x_deduplicated - x_deduplicated.mean()) / (
+            x_deduplicated.std() + 1e-8
         )
+        y_raw = np.ascontiguousarray(y_deduplicated - y_deduplicated.mean()) / (
+            y_deduplicated.std() + 1e-8
+        )
+
+        x_norm = pd.DataFrame(x_raw).reset_index(drop=True)
+        x_norm.columns = [f"x_{i}" for i in range(x_norm.shape[1])]
+        y_norm = pd.Series(y_raw).reset_index(drop=True)
+
+        is_unique = ~x_norm.duplicated()
+
+        # If we lost data, re-slice to ensure alignment
+        if not is_unique.all():
+            x_norm = x_norm[is_unique].reset_index(drop=True)
+            y_norm = y_norm[is_unique].reset_index(drop=True)
+
         meta_feats = calculate_ela_meta(x_norm, y_norm)
         ela_distr = (
             calculate_ela_distribution(x_norm, y_norm)
-            if (y**2).sum() > 0
+            if ((y**2).sum() > 0 and np.var(y_norm) > 1e-8)
             else {str(i): 0 for i in range(4)}
         )
         nbc_feats = calculate_nbc(x_norm, y_norm)
         disp_feats = calculate_dispersion(x_norm, y_norm)
-        df_temp = pd.DataFrame(x_norm)
-        df_temp.columns = [f"x_{i}" for i in range(df_temp.shape[1])]
+
         ic_feats = calculate_information_content(x_norm, y_norm)
 
         all_features = {
@@ -143,10 +162,10 @@ class AgentState:
         numerator = min((weights * norms_squared**exponent).sum(), 1e8)
         inertia_denom_w = np.linalg.norm(weights)
         inertia_denom_n = np.linalg.norm(norms_squared**exponent)
-        return numerator / max(1e-5, inertia_denom_w * max(1e-5, inertia_denom_n))
+        return numerator / max(1e-5, inertia_denom_w * inertia_denom_n)
 
     def normalized_distance(self, x0: np.ndarray, x1: np.ndarray) -> float:
-        return min(np.linalg.norm(x0 - x1) / self.max_distance, 1.0)
+        return float(min(np.linalg.norm(x0 - x1) / self.max_distance, 1.0))
 
     def get_fitness_weights(self) -> np.ndarray:
         weights = (
@@ -156,9 +175,9 @@ class AgentState:
         )
         return weights / weights.sum()
 
-    def population_relative_radius(self) -> np.ndarray:
+    def population_relative_radius(self) -> float:
         population_radius = np.linalg.norm(self.x.max(axis=0) - self.x.min(axis=0))
-        return population_radius / self.max_distance
+        return float(population_radius / self.max_distance)
 
     def slopes_stats(self) -> tuple:
         return get_list_stats(
@@ -311,7 +330,7 @@ class AgentState:
 
 
 def distance(x0: np.ndarray, x1: np.ndarray) -> float:
-    return np.linalg.norm(x0 - x1)
+    return float(np.linalg.norm(x0 - x1))
 
 
 def inverse_scaling(x):
@@ -340,20 +359,102 @@ class StateNormalizer:
             update (bool): Whether to update the running statistics.
                            Usually True during training, False during testing.
         """
-        # Ensure state is an array
         state = np.asarray(state)
 
-        # If training, update the statistics
         if update:
-            # RunningMeanStd expects a batch, so we add a dimension if needed
             if len(state.shape) == 1:
                 self.rms.update(state.reshape(1, -1))
             else:
                 self.rms.update(state)
 
-        # Calculate standard deviation
         std = np.sqrt(self.rms.var) + 1e-8
 
-        # Normalize and Clip to prevent extreme outliers (e.g., -5 to 5)
         normalized_state = (state - self.rms.mean) / std
         return np.clip(normalized_state, -5.0, 5.0)
+
+
+def get_la_features(agent, pop_x, pop_y):
+    """
+    Extracts 9 Landscape Analysis features based on the logic in Population.py.
+    Uses a single-step random walk for sampling-based features (f5-f8) to
+    save function evaluations.
+    """
+    n = len(pop_x)
+
+    best_y = np.min(pop_y)
+    best_x = pop_x[np.argmin(pop_y)]
+    norm_factor = (
+        agent.initial_cost
+        if hasattr(agent, "initial_cost")
+        and agent.initial_cost
+        and abs(agent.initial_cost) > 1e-9
+        else 1.0
+    )
+    f1_gbc = best_y / norm_factor
+
+    dists_to_best = np.linalg.norm(pop_x - best_x, axis=1)
+    if np.std(pop_y) < 1e-9 or np.std(dists_to_best) < 1e-9:
+        f2_fdc = 0.0
+    else:
+        fdc, _ = spearmanr(pop_y, dists_to_best)
+        f2_fdc = fdc if not np.isnan(fdc) else 0.0
+
+    n_top = max(2, int(0.1 * n))
+    if n > 1:
+        dist_matrix_all = pdist(pop_x)
+        disp_all = np.mean(dist_matrix_all) if len(dist_matrix_all) > 0 else 0.0
+
+        # Get distances for the top 10% individuals
+        top_idx = np.argsort(pop_y)[:n_top]
+        dist_matrix_top = pdist(pop_x[top_idx])
+        disp_top = np.mean(dist_matrix_top) if len(dist_matrix_top) > 0 else 0.0
+
+        f3_disp = disp_all - disp_top
+        f4_disp_ratio = disp_top / disp_all if disp_all > 1e-9 else 0.0
+    else:
+        f3_disp, f4_disp_ratio = 0.0, 0.0
+
+    # Adjust step size based on your search space bounds if available
+    step_scale = 0.01
+    if hasattr(agent, "Xmax") and hasattr(agent, "Xmin"):
+        step_size = step_scale * (agent.Xmax - agent.Xmin)
+    else:
+        step_size = step_scale
+
+    random_walk_samples = pop_x + np.random.normal(0, step_size, size=pop_x.shape)
+
+    # Evaluate the random walk samples
+    sample_costs = [agent.fitness_function(i) for i in random_walk_samples]
+    agent.n_function_evaluations += n  # Increment evaluations by population size
+
+    # Calculate differences between the walk and the current population
+    diffs = np.array(sample_costs) - pop_y
+
+    # --- Feature 5: Negative Slope Coefficient (nsc) ---
+    # Proportion of steps that resulted in an improvement
+    f5_nsc = np.sum(diffs < 0) / n
+
+    # --- Feature 6: Average Neutral Ratio (anr) ---
+    # Proportion of steps that resulted in practically zero change
+    eps = 1e-8
+    f6_anr = np.sum(np.abs(diffs) < eps) / n
+
+    f7_ni = np.sum(diffs >= 0) / n  # Ratio of individuals that failed to improve
+    f8_nw = np.sum(diffs <= 0) / n  # Ratio of individuals that failed to worsen
+
+    # --- Feature 9: Progress ---
+    f9_progress = agent.n_function_evaluations / agent.max_function_evaluations
+
+    return np.array(
+        [
+            f1_gbc,
+            f2_fdc,
+            f3_disp,
+            f4_disp_ratio,
+            f5_nsc,
+            f6_anr,
+            f7_ni,
+            f8_nw,
+            f9_progress,
+        ]
+    )

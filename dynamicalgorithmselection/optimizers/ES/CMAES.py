@@ -41,9 +41,6 @@ class CMAES(ES):
             None,
             2.0,
         )  # for CMA (c_w -> c_μ)
-        self._save_eig = options.get(
-            "_save_eig", False
-        )  # whether or not save eigenvalues and eigenvectors
 
     def _set_c_c(self):
         """Set decay rate of evolution path for the rank-one update of CMA."""
@@ -161,7 +158,11 @@ class CMAES(ES):
             )  # Gaussian noise for mutation
             d[k] = np.dot(e_ve @ np.diag(e_va), z)
             x[k] = mean + self.sigma * d[k]  # offspring individual
-            y[k] = self._evaluate_fitness(x[k], args, d=d[k], e_ve=e_ve, e_va=e_va)
+            y[k] = self._evaluate_fitness(
+                x[k],
+                args,
+                d=d[k],
+            )
         return x, y, d
 
     def update_distribution(
@@ -314,23 +315,8 @@ class CMAES(ES):
                 "mean": mean,
             }
         )
-        self.results.update(
-            {
-                "p_c": p_c,
-                "p_s": p_s,
-                "cm": cm,
-                "e_va": e_va,
-                "e_ve": e_ve,
-                "d": d,
-                "x": x,
-                "y": y,
-                "mean": mean,
-            }
-        )
         results = self._collect(fitness, y, mean)
-        # by default do *NOT* save eigenvalues and eigenvectors (with *quadratic* space complexity)
-        if self._save_eig:
-            results["e_va"], results["e_ve"] = e_va, e_ve
+        results["e_va"], results["e_ve"] = e_va, e_ve
         return results
 
     def set_data(
@@ -373,12 +359,13 @@ class CMAES(ES):
                     "cm",
                     "e_ve",
                     "e_va",
-                    "d",
                 ]
             }
+            start_conditions["d"] = d[indices] if d is not None else None
+
             mean = x[indices].mean(axis=0)
             stds = np.std(x[indices], axis=0)
-            sigma = np.max(stds)
+            sigma: float = np.max(stds)
             sigma = max(sigma, 1e-8)
             start_conditions.update(
                 {"x": x[indices], "y": y[indices], "mean": mean, "sigma": sigma}

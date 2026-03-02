@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 
 MAX_DIM = 40
@@ -6,8 +8,9 @@ MAX_DIM = 40
 def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
-    checkpoints: np.ndarray,
-) -> dict[str, float | list[float]]:
+) -> dict[
+    str, float | list[float]
+]:  # Changed from list[Optional[float]] to list[float]
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
     :param function_evaluations: max number of function evaluations during run.
@@ -16,35 +19,26 @@ def get_runtime_stats(
     """
     area_under_optimization_curve = 0.0
     last_i = 0
-    checkpoint_idx = 0
-    last_fitness = None
-    checkpoints_fitness = []
+
     for i, fitness in fitness_history:
         area_under_optimization_curve += fitness * (i - last_i)
-        while last_i <= checkpoints[checkpoint_idx] < i:
-            checkpoints_fitness.append(last_fitness)
-            checkpoint_idx += 1
         last_i = i
-        last_fitness = fitness
+
     area_under_optimization_curve += fitness_history[-1][1] * (
         function_evaluations - fitness_history[-1][0]
     )
     final_fitness = fitness_history[-1][1]
-    if function_evaluations == checkpoints[-1]:
-        while len(checkpoints_fitness) < len(checkpoints):
-            checkpoints_fitness.append(final_fitness)
+
     return {
         "area_under_optimization_curve": area_under_optimization_curve
         / function_evaluations,
         "final_fitness": final_fitness,
-        "checkpoints_fitness": checkpoints_fitness,
     }
 
 
 def get_extreme_stats(
     fitness_histories: dict[str, list[tuple[int, float]]],
     function_evaluations: int,
-    checkpoints: np.ndarray,
 ) -> tuple[dict[str, float | list[float]], dict[str, float | list[float]]]:
     """
     :param fitness_histories: list of lists of tuples [fe, fitness] with only points where best so far fitness improved for each algorithm
@@ -72,25 +66,26 @@ def get_extreme_stats(
         key=lambda x: (x[0], -x[2])
     )  # sort fe - increasing and by fitness - decreasing
 
-    current_fitness = {
+    current_fitnesses = {
         alg: float("inf") for alg in fitness_histories
     }  # current best fitness for each algorithm
     current_worst_fitness = float("inf")  # worst performance so far for each algorithm
 
     worst_history = []
     for fe, algorithm, fitness in all_improvements:
-        if fitness < current_fitness[algorithm]:
-            current_fitness[algorithm] = fitness
+        if fitness < current_fitnesses[algorithm]:
+            current_fitnesses[algorithm] = fitness
             new_worst_fitness = max(
-                i for i in current_fitness.values() if i != float("inf")
+                i for i in current_fitnesses.values() if i != float("inf")
             )
             if new_worst_fitness < current_worst_fitness:
                 worst_history.append((fe, fitness))
                 current_worst_fitness = new_worst_fitness
 
+    # These now match the expected return type of tuple[dict[str, float | list[float]], ...]
     return (
-        get_runtime_stats(best_history, function_evaluations, checkpoints),
-        get_runtime_stats(worst_history, function_evaluations, checkpoints),
+        get_runtime_stats(best_history, function_evaluations),
+        get_runtime_stats(worst_history, function_evaluations),
     )
 
 

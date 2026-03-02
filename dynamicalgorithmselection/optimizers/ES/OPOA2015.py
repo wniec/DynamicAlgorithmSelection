@@ -23,8 +23,6 @@ def cholesky_update(rm, z, downdate):
 
 class OPOA2015(ES):
     def __init__(self, problem, options):
-        self.mean_history = []
-        self.y_history = []
         options["n_individuals"] = 1  # mandatory setting
         options["n_parents"] = 1  # mandatory setting
         ES.__init__(self, problem, options | {"sigma": 0.9})
@@ -56,9 +54,6 @@ class OPOA2015(ES):
             self._evaluate_fitness(
                 x=mean,
                 args=args,
-                cf=cf,
-                p_s=p_s,
-                p_c=p_c,
             )
             if y is None
             else y
@@ -99,9 +94,6 @@ class OPOA2015(ES):
         y = self._evaluate_fitness(
             x=x,
             args=args,
-            cf=cf,
-            p_s=p_s,
-            p_c=p_c,
         )
         if y <= best_so_far_y:
             self._ancestors.append(y)
@@ -125,14 +117,14 @@ class OPOA2015(ES):
         self._n_generations += 1
         self.results.update(
             {
+                "x": np.array([x]),
+                "mean": mean,
                 "cf": cf,
                 "best_so_far_y": best_so_far_y,
                 "p_s": p_s,
                 "p_c": p_c,
             }
         )
-        self.mean_history.append(mean)
-        self.y_history.append(y)
         return mean, y, cf, best_so_far_y, p_s, p_c
 
     def restart_reinitialize(
@@ -161,7 +153,9 @@ class OPOA2015(ES):
             self._list_generations.append(self._n_generations)  # for each restart
             self._n_generations = 0
             self.sigma = np.copy(self._sigma_bak)
-            mean, y, cf, best_so_far_y, p_s, p_c = self.initialize(args, True)
+            mean, y, cf, best_so_far_y, p_s, p_c = self.initialize(
+                args, is_restart=True
+            )
             self._list_fitness = [best_so_far_y]
             self._ancestors = []
         return mean, y, cf, best_so_far_y, p_s, p_c
@@ -177,7 +171,13 @@ class OPOA2015(ES):
         y = self.start_conditions.get("y", None)
 
         mean, y, cf, best_so_far_y, p_s, p_c = self.initialize(
-            mean, y, cf, best_so_far_y, p_s, p_c, args
+            mean=mean,
+            y=y,
+            cf=cf,
+            best_so_far_y=best_so_far_y,
+            p_s=p_s,
+            p_c=p_c,
+            args=args,
         )
         while not self._check_terminations():
             self._print_verbose_info(fitness, y)
@@ -201,15 +201,24 @@ class OPOA2015(ES):
         *args,
         **kwargs,
     ):
+        if isinstance(y, np.ndarray) and x is not None:
+            best_idx = np.argmin(y)
+            y_val = float(y[best_idx])
+            x_val = x[best_idx]
+            mean = x_val if mean is None else mean
+        else:
+            y_val = y if isinstance(y, float) else None
+            x_val = x if x is not None else mean
+
         mean = (
             mean
             if mean is not None
             else (np.mean(x, axis=0) if x is not None else None)
         )
-        y = y if isinstance(y, float) else None
         self.start_conditions = {
+            "x": x_val,
             "mean": mean,
-            "y": y,
+            "y": y_val,
             "cf": cf,
             "best_so_far_y": best_so_far_y,
             "p_s": p_s,
@@ -220,11 +229,7 @@ class OPOA2015(ES):
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
 
     def get_data(self, n_individuals: Optional[int] = None):
-        pop_data = ["x", "y"]
-        best_indices = sorted(
-            [i for i in range(len(self.y_history))],
-            key=lambda x: self.y_history[x],
-        )[:n_individuals]
-        x = np.array(self.mean_history)[best_indices]
-        y = np.array(self.y_history)[best_indices]
+        indices = np.argsort(self.y_history)[: min(len(self.y_history), 200)]
+        x = np.array(self.x_history)[indices]
+        y = np.array(self.y_history)[indices]
         return self.results | {"x": x, "y": y} or self.start_conditions
