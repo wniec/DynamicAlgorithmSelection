@@ -45,21 +45,23 @@ def run_training(
 ):
     agent_state: dict[str, Any] = {}
     n_epochs = options["n_epochs"]
-    epoch_problem_ids = []
-    for _ in range(n_epochs):
-        epoch_problem_ids.extend(np.random.permutation(problem_ids).tolist())
-
-    for problem_id in tqdm(epoch_problem_ids, smoothing=0.0):
-        problem_instance = problems_suite.get_problem(problem_id)
-        max_fe = evaluations_multiplier * problem_instance.dimension
-        options["max_function_evaluations"] = max_fe
-        options.update(agent_state)
-        options["train_mode"] = True
-        options["verbose"] = False
-        results, agent_state = coco_bbob_single_function(
-            optimizer, problem_instance, options
-        )
-        options["state_normalizer"] = agent_state["state_normalizer"]
-        options["reward_normalizer"] = agent_state["reward_normalizer"]
-        options["buffer"] = agent_state["buffer"]
-        problem_instance.free()
+    options["clip_eps"] = 0.3
+    epsilon_decay = 0.99
+    for epoch in range(n_epochs):
+        for problem_id in tqdm(
+            np.random.permutation(problem_ids).tolist(), smoothing=0.0
+        ):
+            problem_instance = problems_suite.get_problem(problem_id)
+            max_fe = evaluations_multiplier * problem_instance.dimension
+            options["max_function_evaluations"] = max_fe
+            options.update(agent_state)
+            options["train_mode"] = True
+            options["verbose"] = False
+            results, agent_state = coco_bbob_single_function(
+                optimizer, problem_instance, options
+            )
+            options["state_normalizer"] = agent_state["state_normalizer"]
+            options["reward_normalizer"] = agent_state["reward_normalizer"]
+            options["buffer"] = agent_state["buffer"]
+            problem_instance.free()
+        options["clip_eps"] *= epsilon_decay
