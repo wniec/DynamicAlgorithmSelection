@@ -110,13 +110,6 @@ class RLDASRandomAgent(Agent):
         population_x, population_y = self.initialize()
         self.n_function_evaluations = INITIAL_POPSIZE
 
-        best_idx = np.argmin(population_y)
-        best_y_global = population_y[best_idx]
-        best_x_global = population_x[best_idx].copy()
-
-        self.best_so_far_y = best_y_global
-        self.best_so_far_x = best_x_global
-
         self.history.append(self.best_so_far_y)
         fitness.append(float(self.best_so_far_y))
 
@@ -178,8 +171,6 @@ class RLDASRandomAgent(Agent):
             self._update_ah_history(
                 action_idx, x_best_old, x_best_new, x_worst_old, x_worst_new
             )
-
-            best_y_global = min(best_y_global, cost_new)
 
             if cost_new < self.best_so_far_y:
                 self.best_so_far_y = cost_new

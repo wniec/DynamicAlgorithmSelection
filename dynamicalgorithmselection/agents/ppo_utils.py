@@ -142,48 +142,98 @@ class ActorLoss(nn.Module):
 
 
 class RLDASNetwork(nn.Module):
-    def __init__(self, d_dim, num_algorithms, la_dim=9):
+    def __init__(self, d_dim, num_algorithms):
         super(RLDASNetwork, self).__init__()
         self.L = num_algorithms
         self.D = d_dim
-        self.la_dim = la_dim
 
-        self.ah_input_flat_dim = self.L * 2 * self.D
-
-        self.ah_embed = nn.Sequential(
-            nn.Linear(self.ah_input_flat_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 2 * self.L),  # Output size aligned with paper description
-            nn.ReLU(),
-        )
-        self.fusion_input_dim = self.la_dim + (2 * self.L)
-
-        self.dv_layer = nn.Sequential(nn.Linear(self.fusion_input_dim, 64), nn.Tanh())
-
-        self.actor_head = nn.Sequential(
-            nn.Linear(64, 16), nn.Tanh(), nn.Linear(16, self.L), nn.Softmax(dim=-1)
-        )
-
-        self.critic_head = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),  # Scalar Value
-        )
+        self.actor = RLDASActor(d_dim, num_algorithms, DEVICE)
+        self.critic = RLDASCritic(d_dim, num_algorithms, DEVICE)
 
     def forward(self, la_state, ah_state):
-        if ah_state.dim() > 2:
-            batch_size = ah_state.size(0)
-            ah_flat = ah_state.view(batch_size, -1)
-        else:
-            ah_flat = ah_state
+        return self.actor(la_state, ah_state), self.critic(la_state, ah_state)
 
-        v_ah = self.ah_embed(ah_flat)
 
-        combined = torch.cat([la_state, v_ah], dim=1)
+class RLDASActor(nn.Module):
+    def __init__(self, dim, optimizer_num, device):
+        super().__init__()
+        self.device = device
+        self.optimizer_num = optimizer_num
+        self.embedders = [
+            (
+                nn.Sequential(
+                    nn.Linear(dim, 64),
+                    nn.ReLU(),
+                    nn.Linear(64, 1),
+                    nn.ReLU(),
+                )
+            ).to(device)
+            for _ in range(2 * optimizer_num)
+        ]
 
-        dv = self.dv_layer(combined)
+        self.embedder_final = nn.Sequential(
+            nn.Linear(9 + optimizer_num * 2, 64),
+            nn.Tanh(),
+        ).to(device)
+        self.model = nn.Sequential(
+            nn.Linear(64, 16),
+            nn.Tanh(),
+            nn.Linear(16, optimizer_num),
+            nn.Softmax(dim=-1),
+        ).to(device)
 
-        probs = self.actor_head(dv)
-        value = self.critic_head(dv)
+    def forward(self, la_state, ah_state):
+        flattened_ah_state = torch.flatten(ah_state, start_dim=1, end_dim=2)
 
-        return probs, value
+        embedded_ah = [
+            embedder(flattened_ah_state[:, i, :])
+            for i, embedder in enumerate(self.embedders)
+        ]
+
+        embedded_ah = torch.cat(embedded_ah, dim=-1)
+        batch_size = ah_state.shape[0]
+        x = torch.cat((la_state, embedded_ah), dim=-1).view(batch_size, -1)
+        x = self.embedder_final(x)
+        probs = self.model(x)
+
+        return probs
+
+
+class RLDASCritic(nn.Module):
+    def __init__(self, dim, optimizer_num, device):
+        super().__init__()
+        self.device = device
+        self.embedders = [
+            (
+                nn.Sequential(
+                    nn.Linear(dim, 64),
+                    nn.ReLU(),
+                    nn.Linear(64, 1),
+                    nn.ReLU(),
+                )
+            ).to(device)
+            for _ in range(2 * optimizer_num)
+        ]
+        self.embedder_final = nn.Sequential(
+            nn.Linear(9 + optimizer_num * 2, 64),
+            nn.Tanh(),
+        ).to(device)
+        self.model = nn.Sequential(
+            nn.Linear(64, 16),
+            nn.Tanh(),
+            nn.Linear(16, 1),
+        ).to(device)
+
+    def forward(self, la_state, ah_state):
+        flattened_ah_state = torch.flatten(ah_state, start_dim=1, end_dim=2)
+        embedded_ah = [
+            embedder(flattened_ah_state[:, i, :])
+            for i, embedder in enumerate(self.embedders)
+        ]
+        embedded_ah = torch.cat(embedded_ah, dim=-1)
+        batch_size = ah_state.shape[0]
+        feature = torch.cat((la_state, embedded_ah), dim=-1).view(batch_size, -1)
+        feature = self.embedder_final(feature)
+        val = self.model(feature.view(batch_size, -1))
+
+        return val
