@@ -37,7 +37,7 @@ if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
     DIM=${DIMS[$SLURM_ARRAY_TASK_ID]}
     echo "Running Mode: $MODE | Dimension: $DIM"
 
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_${CDB_VAL}_DIM${DIM} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_${CDB_VAL}_${DIM} \
       -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
@@ -47,7 +47,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
     DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
     echo "Running Mode: $MODE | Dimension: $DIM"
 
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_${CDB_VAL}_DIM${DIM} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_${CDB_VAL}_${DIM} \
       -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 

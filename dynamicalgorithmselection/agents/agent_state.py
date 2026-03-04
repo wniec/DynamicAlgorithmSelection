@@ -373,6 +373,21 @@ class StateNormalizer:
         return np.clip(normalized_state, -5.0, 5.0)
 
 
+def negative_slope_coefficient(group_cost, sample_cost):  # [j]
+    gs = sample_cost.shape[0]
+    m = 10
+    gs -= gs % m  # to be divisible
+    if gs < m:  # not enough costs for m dividing
+        return 0
+    sorted_cost = np.array(sorted(list(zip(group_cost[:gs], sample_cost[:gs]))))
+    sorted_group = sorted_cost[:, 0].reshape(m, -1)
+    sorted_sample = sorted_cost[:, 1].reshape(m, -1)
+    Ms = np.mean(sorted_group, -1)
+    Ns = np.mean(sorted_sample, -1)
+    nsc = np.minimum((Ns[1:] - Ns[:-1]) / (Ms[1:] - Ms[:-1] + 1e-8), 0)
+    return np.sum(nsc)
+
+
 def get_la_features(agent, pop_x, pop_y):
     """
     Extracts 9 Landscape Analysis features based on the logic in Population.py.
@@ -424,7 +439,7 @@ def get_la_features(agent, pop_x, pop_y):
     random_walk_samples = pop_x + np.random.normal(0, step_size, size=pop_x.shape)
 
     # Evaluate the random walk samples
-    sample_costs = [agent.fitness_function(i) for i in random_walk_samples]
+    sample_costs = np.array([agent.fitness_function(i) for i in random_walk_samples])
     agent.n_function_evaluations += n  # Increment evaluations by population size
 
     # Calculate differences between the walk and the current population
@@ -432,7 +447,7 @@ def get_la_features(agent, pop_x, pop_y):
 
     # --- Feature 5: Negative Slope Coefficient (nsc) ---
     # Proportion of steps that resulted in an improvement
-    f5_nsc = np.sum(diffs < 0) / n
+    f5_nsc = negative_slope_coefficient(pop_y, sample_cost=sample_costs)
 
     # --- Feature 6: Average Neutral Ratio (anr) ---
     # Proportion of steps that resulted in practically zero change
