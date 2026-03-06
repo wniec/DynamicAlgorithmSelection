@@ -29,7 +29,7 @@ DIMS=(2 3 5 10)
 # 1. Dimension-specific CV-LOIO | RL-DAS (Indices 0-3)
 if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
     MODE="CV-LOIO"
-    DIM=DIM${DIMS[$SLURM_ARRAY_TASK_ID]}
+    DIM=${DIMS[$SLURM_ARRAY_TASK_ID]}
     echo "Running Mode: $MODE | Agent: RL-DAS | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RLDAS_${MODE}_DIM${DIM}_SEED${SEED} \
@@ -38,7 +38,7 @@ if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
 # 2. Dimension-specific CV-LOIO | Policy Gradient (Indices 4-7)
 elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
     MODE="CV-LOIO"
-    DIM=DIM${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
+    DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
     echo "Running Mode: $MODE | Agent: Policy Gradient | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_${MODE}_${CDB_VAL}_DIM${DIM}_SEED${SEED} \
@@ -48,7 +48,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
 # 3. Dimension-specific CV-LOPO | RL-DAS (Indices 8-11)
 elif [[ $SLURM_ARRAY_TASK_ID -ge 8 && $SLURM_ARRAY_TASK_ID -le 11 ]]; then
     MODE="CV-LOPO"
-    DIM=DIM${DIMS[$((SLURM_ARRAY_TASK_ID - 8))]}
+    DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 8))]}
     echo "Running Mode: $MODE | Agent: RL-DAS | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RLDAS_${MODE}_DIM${DIM}_SEED${SEED} \
@@ -57,7 +57,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 8 && $SLURM_ARRAY_TASK_ID -le 11 ]]; then
 # 4. Dimension-specific CV-LOPO | Policy Gradient (Indices 12-15)
 elif [[ $SLURM_ARRAY_TASK_ID -ge 12 && $SLURM_ARRAY_TASK_ID -le 15 ]]; then
     MODE="CV-LOPO"
-    DIM=DIM${DIMS[$((SLURM_ARRAY_TASK_ID - 12))]}
+    DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 12))]}
     echo "Running Mode: $MODE | Agent: Policy Gradient | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_${MODE}_${CDB_VAL}_DIM${DIM}_SEED${SEED} \
@@ -66,7 +66,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 12 && $SLURM_ARRAY_TASK_ID -le 15 ]]; then
 
 # 5. Dimension-specific RL-DAS-random (Indices 16-19)
 elif [[ $SLURM_ARRAY_TASK_ID -ge 16 && $SLURM_ARRAY_TASK_ID -le 19 ]]; then
-    DIM=DIM${DIMS[$((SLURM_ARRAY_TASK_ID - 16))]}
+    DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 16))]}
     echo "Running Mode: Random Agent - RLDAS variant | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RANDOM_DAS_DIM${DIM}_SEED${SEED} \
