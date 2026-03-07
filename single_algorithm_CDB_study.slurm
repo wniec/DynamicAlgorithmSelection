@@ -26,37 +26,10 @@ mkdir -p logs
 # Array of Dimensions
 DIMS=(2 3 5 10)
 
-# 1. Dimension-specific CV-LOIO (Indices 0-3)
-if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
-    MODE="CV-LOIO"
-    DIM=${DIMS[$SLURM_ARRAY_TASK_ID]}
-    echo "Running Mode: $MODE | Dimension: $DIM"
+MODE="CV-LOPO"
+DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
+echo "Running Mode: $MODE | Dimension: $DIM"
 
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_DIM${DIM} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
-      --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
-
-# 2. Dimension-specific CV-LOPO (Indices 4-7)
-elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
-    MODE="CV-LOPO"
-    DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
-    echo "Running Mode: $MODE | Dimension: $DIM"
-
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_DIM${DIM} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
-      --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
-
-# 3. Multidimensional CV-LOIO (Index 8)
-elif [[ $SLURM_ARRAY_TASK_ID -eq 8 ]]; then
-    MODE="CV-LOIO"
-    echo "Running Mode: $MODE | Multidimensional PG"
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --cdb $CDB_VAL --agent policy-gradient
-
-# 4. Multidimensional CV-LOPO (Index 9)
-elif [[ $SLURM_ARRAY_TASK_ID -eq 9 ]]; then
-    MODE="CV-LOPO"
-    echo "Running Mode: $MODE | Multidimensional PG"
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --cdb $CDB_VAL --agent policy-gradient
-fi
+python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM} \
+  -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
+  --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient

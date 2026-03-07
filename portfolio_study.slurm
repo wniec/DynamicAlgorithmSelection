@@ -32,7 +32,7 @@ if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
     DIM=${DIMS[$SLURM_ARRAY_TASK_ID]}
     echo "Running Mode: $MODE | Dimension: $DIM"
 
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_$_REWARD_${REWARD_OPTION}_DIM${DIM} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_$_CDB${CDB_VAL}_DIM${DIM} \
       -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
@@ -42,7 +42,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
     DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
     echo "Running Mode: $MODE | Dimension: $DIM"
 
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_REWARD_${REWARD_OPTION}_DIM${DIM} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM} \
       -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
@@ -50,13 +50,13 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
 elif [[ $SLURM_ARRAY_TASK_ID -eq 8 ]]; then
     MODE="CV-LOIO"
     echo "Running Mode: $MODE | Multidimensional PG"
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_REWARD_${REWARD_OPTION} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL} \
       -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 
 # 4. Multidimensional CV-LOPO (Index 9)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 9 ]]; then
     MODE="CV-LOPO"
     echo "Running Mode: $MODE | Multidimensional PG"
-    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_REWARD_${REWARD_OPTION} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL} \
       -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 fi
