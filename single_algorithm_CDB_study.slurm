@@ -9,7 +9,7 @@
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --array=0-9           # 10 tasks total
 
-REWARD_OPTION=${1:-1}
+REWARD_OPTION=${1:-2}
 
 CDB_VAL=1.5
 
