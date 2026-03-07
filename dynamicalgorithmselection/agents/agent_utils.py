@@ -1,5 +1,3 @@
-from typing import Optional
-
 import numpy as np
 
 MAX_DIM = 40
@@ -14,7 +12,6 @@ def get_runtime_stats(
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
     :param function_evaluations: max number of function evaluations during run.
-    :param checkpoints: list of checkpoints by their n_function_evaluations
     :return: dictionary of selected run statistics, ready to dump
     """
     area_under_optimization_curve = 0.0
@@ -43,7 +40,6 @@ def get_extreme_stats(
     """
     :param fitness_histories: list of lists of tuples [fe, fitness] with only points where best so far fitness improved for each algorithm
     :param function_evaluations: max number of function evaluations during run.
-    :param checkpoints: list of checkpoints by their n_function_evaluations
     :return: dictionary of selected run statistics, ready to dump
     """
     all_improvements = []
