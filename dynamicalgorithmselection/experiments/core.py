@@ -45,9 +45,11 @@ def run_training(
 ):
     agent_state: dict[str, Any] = {}
     n_epochs = options["n_epochs"]
-    for problem_id in tqdm(
-        np.random.permutation(problem_ids).tolist() * n_epochs, smoothing=0.0
-    ):
+    epoch_problem_ids = []
+    for _ in range(n_epochs):
+        epoch_problem_ids.extend(np.random.permutation(problem_ids).tolist())
+
+    for problem_id in tqdm(epoch_problem_ids, smoothing=0.0):
         problem_instance = problems_suite.get_problem(problem_id)
         max_fe = evaluations_multiplier * problem_instance.dimension
         options["max_function_evaluations"] = max_fe
