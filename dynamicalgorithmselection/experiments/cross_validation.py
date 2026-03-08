@@ -1,6 +1,6 @@
 import os
 from itertools import product
-from typing import Type, List
+from typing import Literal, Type, List
 
 import cocoex
 import numpy as np
@@ -18,7 +18,7 @@ def run_cross_validation(
     optimizer: Type[Optimizer],
     options: dict,
     evaluations_multiplier: int = 1_000,
-    leaving_mode: str = "LOIO",
+    leaving_mode: Literal["LOIO", "LOPO", "LODO"] = "LOIO",
 ):
     results_dir = os.path.join("results", f"{options.get('name')}")
     if not os.path.exists(results_dir):
@@ -58,7 +58,9 @@ def run_cross_validation(
     return observer.result_folder
 
 
-def _get_cv_folds(n: int, leaving_mode: str, dim: List[int]):
+def _get_cv_folds(
+    n: int, leaving_mode: Literal["LOIO", "LOPO", "LODO"], dim: List[int]
+):
     """
     :param n:  number of cross validation folds
     :param is_loio: boolean to indicate how train and test sets should be split (leave-instance-out/leave-problem-out).
@@ -97,7 +99,7 @@ def _get_cv_folds(n: int, leaving_mode: str, dim: List[int]):
             remaining_function_ids = remaining_function_ids.difference(
                 selected_functions
             )
-        else:
+        elif leaving_mode == "LODO":
             selected_dimensionalities = np.random.choice(
                 list(remaining_dimensions),
                 size=len(DIMENSIONS) // n,
@@ -111,6 +113,8 @@ def _get_cv_folds(n: int, leaving_mode: str, dim: List[int]):
             remaining_dimensions = remaining_dimensions.difference(
                 selected_dimensionalities
             )
+        else:
+            raise ValueError(f"Invalid leaving_mode: {leaving_mode}")
         test_sets.append(selected)
     folds = [
         (list(set(all_problem_ids).difference(test_set)), test_set)
