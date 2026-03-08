@@ -13,6 +13,8 @@ from dynamicalgorithmselection.experiments.utils import (
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
+FOLDS_NUMBER = 3  # low number of folds due to time limitations on computational cluster
+
 
 def run_cross_validation(
     optimizer: Type[Optimizer],
@@ -25,7 +27,7 @@ def run_cross_validation(
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, cv_folds = _get_cv_folds(
-        4 if leaving_mode != "LODO" else 3, leaving_mode, options.get("dimensionality")
+        FOLDS_NUMBER, leaving_mode, options.get("dimensionality")
     )
     # cv_folds is a tuple (train_set, test_set) for each fold
     # using len(cv_folds[0]) was a bug, because it was always 2
@@ -54,6 +56,11 @@ def run_cross_validation(
         options.pop("optimizer", None)
         options.pop("state_normalizer", None)
         options.pop("reward_normalizer", None)
+        options.pop("network_parameters", None)
+        options.pop("critic_parameters", None)
+        options.pop("actor_parameters", None)
+        options.pop("actor_optimizer", None)
+        options.pop("critic_optimizer", None)
 
     return observer.result_folder
 
@@ -63,7 +70,7 @@ def _get_cv_folds(
 ):
     """
     :param n:  number of cross validation folds
-    :param is_loio: boolean to indicate how train and test sets should be split (leave-instance-out/leave-problem-out).
+    :param leaving_mode: str to indicate how train and test sets should be split (leave-instance-out/leave-problem-out/leave-dimension-out).
     :param dim: dimensionality of the problems. None indicates all of them.
     :return suite, list of (train set, test set) pairs:
     """

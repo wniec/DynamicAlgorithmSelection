@@ -73,7 +73,7 @@ uv run das <name> [options]
 | `-x`, `--cdb`                      | `float`     | `1.0`                       | **Checkpoint Division Exponent**; determines how quickly checkpoint length increases.                            |
 | `-r`, `--state-representation`     | `str`       | `ELA`                       | Method used to extract features from the algorithm population.                                                   |
 | `-d`, `--force-restarts`           | `bool`      | `False`                     | Enable selection of forcibly restarting optimizers.                                                              |
-| `-D`, `--dimensionality`           | `int`       | `None`                      | Dimensionality of problems.                                                                                      |
+| `-D`, `--dimensionality`           | `list[int]` | `[2, 3, 5, 10, 20, 40]`     | Dimensionality of problems.                                                                                      |
 | `-E`, `--n_epochs`                 | `int`       | `1`                         | Number of training epochs.                                                                                       |
 | `-O`, `--reward-option`            | `int`       | `1`                         | ID of method used to compute reward.                                                                             |
 

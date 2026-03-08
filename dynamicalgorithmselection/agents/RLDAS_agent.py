@@ -87,6 +87,8 @@ class RLDASAgent(Agent):
             self.ah_vectors[alg_idx, 1] * H + sv_worst_current
         ) / (H + 1)
 
+        # Here I am computing current average
+
         self.alg_usage_counts[alg_idx] += 1
 
     def _save_context(self, optimizer, alg_name):
@@ -167,25 +169,20 @@ class RLDASAgent(Agent):
         population_x, population_y = self.initialize()
         self.n_function_evaluations = INITIAL_POPSIZE
 
-        best_idx = np.argmin(population_y)
-        best_y_global = population_y[best_idx]
-        best_x_global = population_x[best_idx].copy()
-
-        self.best_so_far_y = best_y_global
-        self.best_so_far_x = best_x_global
-
         self.history.append(self.best_so_far_y)
         fitness.append(float(self.best_so_far_y))
 
-        self.initial_cost = best_y_global if abs(best_y_global) > 1e-8 else 1.0
+        self.initial_cost = (
+            self.best_so_far_y if abs(self.best_so_far_y) > 1e-8 else 1.0
+        )
 
         self.ah_vectors.fill(0.0)
         self.alg_usage_counts.fill(0.0)
         self.context_memory = {name: {} for name in self.alg_names}
         self.context_memory["Common"] = {}
-
+        cost_new, cost_old = float(np.min(population_y)), float(np.min(population_y))
         trajectory = []
-
+        clip_eps = self.options.get("ppo_eps", 0.3)
         while self.n_function_evaluations < self.max_function_evaluations:
             state = self.get_state(population_x, population_y)
 
@@ -203,7 +200,7 @@ class RLDASAgent(Agent):
 
             x_best_old = population_x[np.argmin(population_y)].copy()
             x_worst_old = population_x[np.argmax(population_y)].copy()
-            cost_old = np.copy(np.min(population_y))
+            cost_old = float(cost_new)
 
             target_fes = min(
                 self.n_function_evaluations + self.schedule_interval,
@@ -237,13 +234,18 @@ class RLDASAgent(Agent):
 
             x_best_new: np.ndarray = population_x[np.argmin(population_y)].copy()
             x_worst_new: np.ndarray = population_x[np.argmax(population_y)].copy()
-            cost_new: float = np.min(population_y)
+            cost_new: float = self.best_so_far_y
 
             self._update_ah_history(
                 action_idx, x_best_old, x_best_new, x_worst_old, x_worst_new
             )
 
-            adc = (cost_old - cost_new) / self.initial_cost
+            # Update Agent Best State and History
+            if cost_new < self.best_so_far_y:
+                self.best_so_far_y = cost_new
+                self.best_so_far_x = x_best_new
+
+            adc = (cost_old - self.best_so_far_y) / self.initial_cost
             if self.run:
                 self.run.log({"adc": adc})
 
@@ -260,24 +262,15 @@ class RLDASAgent(Agent):
                 }
             )
 
-            best_y_global = min(best_y_global, cost_new)
-
-            # Update Agent Best State and History
-            if cost_new < self.best_so_far_y:
-                self.best_so_far_y = cost_new
-                self.best_so_far_x = x_best_new
-
             self.history.append(self.best_so_far_y)
             fitness.append(float(self.best_so_far_y))
 
             self._n_generations += 1
             self._print_verbose_info(fitness, self.best_so_far_y)
-        print(self._n_generations)
-        fes_end = self.n_function_evaluations
-        speed_factor = self.max_function_evaluations / fes_end
+        speed_factor = self.max_function_evaluations / self.n_function_evaluations
 
         for step in trajectory:
-            final_reward = step["adc"] * speed_factor
+            final_reward = max(step["adc"] * speed_factor, 0)
             self.rewards.append(final_reward)
             la_state, ah_state = step["state"]
 
@@ -301,7 +294,7 @@ class RLDASAgent(Agent):
                 self.buffer,
                 epochs=K,
                 minibatch_size=32,
-                clip_eps=0.2,
+                clip_eps=clip_eps,
                 value_coef=0.5,
                 entropy_coef=0.01,
             )
@@ -337,7 +330,7 @@ class RLDASAgent(Agent):
         buffer,
         epochs=4,
         minibatch_size=None,
-        clip_eps=0.2,
+        clip_eps=0.3,
         value_coef=0.5,
         entropy_coef=0.01,
     ):
@@ -406,5 +399,5 @@ class RLDASAgent(Agent):
 
             self.optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
+            torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.1)
             self.optimizer.step()
