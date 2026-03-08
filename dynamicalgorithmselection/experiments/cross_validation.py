@@ -106,7 +106,7 @@ def _get_cv_folds(n: int, leaving_mode: str, dim: List[int]):
                 for i in all_problem_ids
                 if any(i.endswith(f"d{dim:02d}") for dim in selected_dimensionalities)
             ]
-            remaining_dimensions = remaining_function_ids.difference(
+            remaining_dimensions = remaining_dimensions.difference(
                 selected_dimensionalities
             )
         test_sets.append(selected)
