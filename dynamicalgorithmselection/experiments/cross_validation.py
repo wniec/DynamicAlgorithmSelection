@@ -27,7 +27,9 @@ def run_cross_validation(
     problems_suite, cv_folds = _get_cv_folds(
         4 if leaving_mode != "LODO" else 3, leaving_mode, options.get("dimensionality")
     )
-    options["n_problems"] = len(cv_folds[0])
+    # cv_folds is a tuple (train_set, test_set) for each fold
+    # using len(cv_folds[0]) was a bug, because it was always 2
+    options["n_problems"] = len(cv_folds[0][0])
     observer = cocoex.Observer("bbob", "result_folder: " + options["name"])
     for i, (train_set, test_set) in enumerate(cv_folds):
         print(f"Running cross validation training, fold {i + 1}")
