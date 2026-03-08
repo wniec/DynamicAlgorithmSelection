@@ -68,7 +68,7 @@ uv run das <name> [options]
 | `-c`, `--compare` / `--no-compare` | `bool`      | `False`                     | Whether to compare results against standalone optimizers.                                                        |
 | `-e`, `--wandb_entity`             | `str`       | `None`                      | Weights and Biases (WandB) entity name.                                                                          |
 | `-w`, `--wandb_project`            | `str`       | `None`                      | Weights and Biases (WandB) project name.                                                                         |
-| `-a`, `--agent`                    | `str`       | `policy-gradient`           | Agent type. Options: `neuroevolution`, `policy-gradient`, `random`, `RL-DAS`, `RL-DAS-random`.                   |
+| `-a`, `--agent`                    | `str`       | `policy-gradient`           | Agent type. Options: `policy-gradient`, `random`, `RL-DAS`, `RL-DAS-random`.                                     |
 | `-l`, `--mode`                     | `str`       | `LOIO`                      | Train/Test split mode (see [Split Strategies](https://www.google.com/search?q=%23-train-test-split-strategies)). |
 | `-x`, `--cdb`                      | `float`     | `1.0`                       | **Checkpoint Division Exponent**; determines how quickly checkpoint length increases.                            |
 | `-r`, `--state-representation`     | `str`       | `ELA`                       | Method used to extract features from the algorithm population.                                                   |
@@ -83,13 +83,12 @@ uv run das <name> [options]
 
 There are following agent options available in this project.
 
-| Agent                              | Uses CDB? | Description                                                                                                                                                                       | Implementation                                                    |
-|------------------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
-| `neuroevolution`                   | Yes       | Neuroevolution-based agent. Its training is implemented using NEAT algorithm.                                                                                                     | [here](dynamicalgorithmselection/agents/neuroevolution_agent.py)  |
-| `policy-gradient`                  | Yes       | PPO-based agent. Main subject of experiments.                                                                                                                                     | [here](dynamicalgorithmselection/agents/policy_gradient_agent.py) |
-| `random`                           | Yes       | Baseline for agents, that use Checkpoint division. Randomly selects actions using equal probabilities.                                                                            | [here](dynamicalgorithmselection/agents/random_agent.py)          |
-| `RL-DAS`                           | No        | Implementation of [Deep Reinforcement Learning for Dynamic Algorithm Selection: A Proof-of-Principle Study on Differential Evolution](https://doi.org/10.48550/arXiv.2403.02131). | [here](dynamicalgorithmselection/agents/RLDAS_agent.py)           |
-| `RL-DAS-random`                    | No        | Implementation of the baseline proposed by the authors of `RL-DAS` algorithm. Randomly selects action using equal probabilities.                                                  | [here](dynamicalgorithmselection/agents/RLDAS_random_agent.py)    |
+| Agent             | Uses CDB? | Description                                                                                                                                                                       | Implementation                                                    |
+|-------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+| `policy-gradient` | Yes       | PPO-based agent. Main subject of experiments.                                                                                                                                     | [here](dynamicalgorithmselection/agents/policy_gradient_agent.py) |
+| `random`          | Yes       | Baseline for agents, that use Checkpoint division. Randomly selects actions using equal probabilities.                                                                            | [here](dynamicalgorithmselection/agents/random_agent.py)          |
+| `RL-DAS`          | No        | Implementation of [Deep Reinforcement Learning for Dynamic Algorithm Selection: A Proof-of-Principle Study on Differential Evolution](https://doi.org/10.48550/arXiv.2403.02131). | [here](dynamicalgorithmselection/agents/RLDAS_agent.py)           |
+| `RL-DAS-random`   | No        | Implementation of the baseline proposed by the authors of `RL-DAS` algorithm. Randomly selects action using equal probabilities.                                                  | [here](dynamicalgorithmselection/agents/RLDAS_random_agent.py)    |
 ---
 
 ## 📊 Train-Test Split Strategies
@@ -151,16 +150,12 @@ Calculates the scaled improvement between checkpoints and provides a binary outc
 
 ## 🧠 State Representation
 
-There are three options for representing the optimization state (`-r` flag):
+There are two options for representing the optimization state (`-r` flag):
 
 1. **`ELA` (Exploratory Landscape Analysis):**
    Implemented using [pflacco](https://pflacco.readthedocs.io/en/latest/index.html). Uses a subset of features to manage
    computational complexity.
-2. **`NeurELA`:**
-   Uses a pre-trained model for feature extraction. The implementation is
-   available [here](https://github.com/MetaEvo/Neur-ELA) and described in
-   this [paper](https://arxiv.org/pdf/2408.10672).
-3. **`custom`:**
+2. **`custom`:**
    A proposed feature extraction method
    implemented [here](dynamicalgorithmselection/agents/agent_state.py). This can be
    modified to include additional features.

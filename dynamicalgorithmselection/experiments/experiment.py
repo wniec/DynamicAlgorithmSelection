@@ -4,9 +4,6 @@ from typing import Type, Optional
 
 from dynamicalgorithmselection.experiments.core import run_testing, run_training
 from dynamicalgorithmselection.experiments.cross_validation import run_cross_validation
-from dynamicalgorithmselection.experiments.neuroevolution import (
-    _coco_bbob_neuroevolution_train,
-)
 from dynamicalgorithmselection.experiments.utils import (
     coco_bbob_single_function,
     get_suite,
@@ -80,10 +77,6 @@ def coco_bbob_experiment(
         )
     elif not train:
         return _coco_bbob_test(optimizer, options, evaluations_multiplier, mode)
-    elif agent == "neuroevolution":
-        return _coco_bbob_neuroevolution_train(
-            optimizer, options, evaluations_multiplier, mode
-        )
     else:
         return _coco_bbob_policy_gradient_train(
             optimizer, options, evaluations_multiplier, mode

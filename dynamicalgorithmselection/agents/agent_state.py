@@ -13,8 +13,6 @@ from pflacco.classical_ela_features import (
 )
 from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr
-
-from dynamicalgorithmselection.NeurELA.NeurELA import feature_embedder
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
 
 BASE_STATE_SIZE = 102
@@ -29,11 +27,7 @@ def get_state_representation(
     :param n_actions: number of actions to take
     :return: function used to infer state representation from population and dimensionality of that state representation
     """
-    if name == "NeurELA":
-        return lambda x, y, *args: feature_embedder(
-            x[-MAX_CONSIDERED_POPSIZE:], y[-MAX_CONSIDERED_POPSIZE:]
-        )[0].mean(axis=0), 34
-    elif name == "ELA":
+    if name == "ELA":
         return lambda x, y, *args: ela_state_representation(x, y), 47
     elif name == "custom":
         return lambda x, y, args: AgentState(
