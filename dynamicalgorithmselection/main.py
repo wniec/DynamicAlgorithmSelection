@@ -1,18 +1,15 @@
 import argparse
 import os
-import pickle
 import shutil
 from random import seed as set_random_seed
 from typing import List, Type, Dict, Any
 import cocopp
-import neat
 import numpy as np
 import torch
 import wandb
 
 from dynamicalgorithmselection.agents.RLDAS_agent import RLDASAgent
 from dynamicalgorithmselection.agents.RLDAS_random_agent import RLDASRandomAgent
-from dynamicalgorithmselection.agents.neuroevolution_agent import NeuroevolutionAgent
 from dynamicalgorithmselection.agents.policy_gradient_agent import PolicyGradientAgent
 from dynamicalgorithmselection.agents.random_agent import RandomAgent
 from dynamicalgorithmselection.experiments.experiment import coco_bbob_experiment
@@ -22,7 +19,6 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 AGENTS_DICT = {
     "random": RandomAgent,
-    "neuroevolution": NeuroevolutionAgent,
     "policy-gradient": PolicyGradientAgent,
     "RL-DAS": RLDASAgent,
     "RL-DAS-random": RLDASRandomAgent,
@@ -114,7 +110,7 @@ def parse_arguments():
         "--state-representation",
         type=str,
         default="ELA",
-        choices=["ELA", "NeurELA", "custom"],
+        choices=["ELA", "custom"],
         help="specify which state representation to use",
     )
 
@@ -216,19 +212,7 @@ def test(args, action_space):
         "action_space": action_space,
     } | common_options(args)
     # agent_state = torch.load(f)
-    if args.agent == "neuroevolution":
-        config = neat.Config(
-            neat.DefaultGenome,
-            neat.DefaultReproduction,
-            neat.DefaultSpeciesSet,
-            neat.DefaultStagnation,
-            "neuroevolution_config",
-        )
-        with open(os.path.join("models", f"DAS_train_{args.name}.pkl"), "rb") as f:
-            winner_genome = pickle.load(f)
-            net = neat.nn.FeedForwardNetwork.create(winner_genome, config)
-        options.update({"net": net})
-    elif args.agent == "policy-gradient":
+    if args.agent == "policy-gradient":
         options.update(
             torch.load(
                 os.path.join("models", f"DAS_train_{args.name}_final.pth"),
