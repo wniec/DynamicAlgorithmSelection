@@ -152,7 +152,7 @@ def parse_arguments():
         "-O",
         "--reward-option",
         type=int,
-        default=1,
+        default=2,
         help="id of method used to compute reward",
     )
 
