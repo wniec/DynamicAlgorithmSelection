@@ -67,7 +67,10 @@ def coco_bbob_experiment(
     options["name"] = name
     if mode.startswith("CV"):
         return run_cross_validation(
-            optimizer, options, evaluations_multiplier, leaving_mode=mode[-4:]
+            optimizer=optimizer,
+            options=options,
+            evaluations_multiplier=evaluations_multiplier,
+            leaving_mode=mode[-4:],
         )
     elif agent in ["random", "RL-DAS-random"]:
         return _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode)

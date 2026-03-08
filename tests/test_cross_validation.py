@@ -2,6 +2,9 @@ import unittest
 from unittest.mock import MagicMock, patch
 import os
 
+import numpy as np
+
+from dynamicalgorithmselection.experiments.utils import DIMENSIONS
 from dynamicalgorithmselection.experiments.cross_validation import (
     run_cross_validation,
     _get_cv_folds,
@@ -83,6 +86,57 @@ class TestCrossValidation(unittest.TestCase):
 
         # Check return value
         self.assertEqual(res_folder, "results/test_cv_opt")
+
+    @patch(
+        "dynamicalgorithmselection.experiments.cross_validation.cocoex.utilities.MiniPrint"
+    )
+    @patch("dynamicalgorithmselection.experiments.cross_validation.cocoex.Suite")
+    def test_lodo_folds_only_contain_valid_dimensions(self, mock_suite, mock_miniprint):
+        dims = DIMENSIONS  # [2, 3, 5, 10, 20, 40]
+        n_folds = 3  # LODO uses 3 folds
+
+        np.random.seed(42)
+        suite, folds = _get_cv_folds(n_folds, leaving_mode="LODO", dim=dims)
+
+        valid_dims_set = set(dims)
+
+        for fold_idx, (train_set, test_set) in enumerate(folds):
+            # Extract dimensions from problem IDs in the test set
+            test_dims = set()
+            for pid in test_set:
+                # Format: bbob_f{fid}_i{iid}_d{dim}
+                dim_str = pid.split("_d")[1]
+                test_dims.add(int(dim_str))
+
+            # Every dimension found in test set must be a valid BBOB dimension
+            invalid_dims = test_dims - valid_dims_set
+            self.assertEqual(
+                invalid_dims,
+                set(),
+                f"Fold {fold_idx} test set contains invalid dimensions {invalid_dims}. "
+                f"Valid dimensions are {valid_dims_set}. "
+                f"This indicates remaining_dimensions was corrupted by function IDs.",
+            )
+
+            # Test set should not be empty
+            self.assertGreater(
+                len(test_set),
+                0,
+                f"Fold {fold_idx} has an empty test set.",
+            )
+
+        # All dimensions should be covered across all test folds
+        all_test_dims = set()
+        for _, test_set in folds:
+            for pid in test_set:
+                dim_str = pid.split("_d")[1]
+                all_test_dims.add(int(dim_str))
+        self.assertEqual(
+            all_test_dims,
+            valid_dims_set,
+            f"Not all dimensions covered by LODO folds. "
+            f"Covered: {all_test_dims}, Expected: {valid_dims_set}",
+        )
 
 
 if __name__ == "__main__":
