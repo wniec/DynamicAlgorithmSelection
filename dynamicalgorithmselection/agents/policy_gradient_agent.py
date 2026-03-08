@@ -347,9 +347,8 @@ class PolicyGradientAgent(Agent):
             reward = self._process_step_reward(best_parent, idx, full_buffer)
 
             # Store in Buffer
-            self.n_function_evaluations = optimizer.n_function_evaluations
             is_done = (
-                self.n_function_evaluations >= self.max_function_evaluations
+                optimizer.n_function_evaluations >= self.max_function_evaluations
                 or idx == self.n_checkpoints - 1
             )
             self.buffer.add(
