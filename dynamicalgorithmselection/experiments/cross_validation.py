@@ -54,6 +54,11 @@ def run_cross_validation(
         options.pop("optimizer", None)
         options.pop("state_normalizer", None)
         options.pop("reward_normalizer", None)
+        options.pop("network_parameters", None)
+        options.pop("critic_parameters", None)
+        options.pop("actor_parameters", None)
+        options.pop("actor_optimizer", None)
+        options.pop("critic_optimizer", None)
 
     return observer.result_folder
 
