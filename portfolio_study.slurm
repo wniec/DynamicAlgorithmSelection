@@ -7,9 +7,8 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
-#SBATCH --array=0-9           # 10 tasks total
-
-REWARD_OPTION=${1:-1}
+#SBATCH -A plgautopt26-gpu-a100
+#SBATCH --array=0-9 # 10 tasks total
 
 CDB_VAL=1.5
 
@@ -33,7 +32,7 @@ if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
     echo "Running Mode: $MODE | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_$_CDB${CDB_VAL}_DIM${DIM} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
+      -p "${PORTFOLIO[@]}" --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
 # 2. Dimension-specific CV-LOPO (Indices 4-7)
@@ -43,7 +42,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
     echo "Running Mode: $MODE | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
+      -p "${PORTFOLIO[@]}" --mode $MODE --dimensionality $DIM \
       --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
 
 # 3. Multidimensional CV-LOIO (Index 8)
@@ -51,12 +50,12 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 8 ]]; then
     MODE="CV-LOIO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --cdb $CDB_VAL --agent policy-gradient
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 
 # 4. Multidimensional CV-LOPO (Index 9)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 9 ]]; then
     MODE="CV-LOPO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL} \
-      -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --cdb $CDB_VAL --agent policy-gradient
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient
 fi

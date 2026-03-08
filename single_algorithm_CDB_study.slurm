@@ -7,9 +7,8 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
+#SBATCH -A plgautopt26-gpu-a100
 #SBATCH --array=0-9           # 10 tasks total
-
-REWARD_OPTION=${1:-2}
 
 CDB_VAL=1.5
 
@@ -31,5 +30,5 @@ DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
 echo "Running Mode: $MODE | Dimension: $DIM"
 
 python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM} \
-  -p "${PORTFOLIO[@]}" -r ELA --mode $MODE --dimensionality $DIM \
+  -p "${PORTFOLIO[@]}" --mode $MODE --dimensionality $DIM \
   --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient

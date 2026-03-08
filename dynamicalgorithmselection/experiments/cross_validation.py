@@ -13,6 +13,8 @@ from dynamicalgorithmselection.experiments.utils import (
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
+FOLDS_NUMBER = 3  # low number of folds due to time limitations on computational cluster
+
 
 def run_cross_validation(
     optimizer: Type[Optimizer],
@@ -25,7 +27,7 @@ def run_cross_validation(
         os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, cv_folds = _get_cv_folds(
-        3, leaving_mode, options.get("dimensionality")
+        FOLDS_NUMBER, leaving_mode, options.get("dimensionality")
     )
     # cv_folds is a tuple (train_set, test_set) for each fold
     # using len(cv_folds[0]) was a bug, because it was always 2

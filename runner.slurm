@@ -7,6 +7,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
+#SBATCH -A plgautopt26-gpu-a100
 #SBATCH --array=0-23           # Increased to 24 tasks total to split sequential runs
 
 # 1st argument: CDB_VAL (Default: 1.5)
@@ -97,4 +98,11 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 23 ]]; then
     echo "Running Mode: Baselines"
     python3 dynamicalgorithmselection/main.py BASELINES \
       -p "${PORTFOLIO[@]}" --mode baselines -S "$SEED"
+
+# 10. Multidimensional CV-LODO (Index 24)
+elif [[ $SLURM_ARRAY_TASK_ID -eq 24 ]]; then
+    MODE="CV-LOPO"
+    echo "Running Mode: $MODE | Multidimensional PG"
+    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_PG_MULTIDIMENSIONAL_${MODE}_${CDB_VAL}_SEED${SEED} \
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient -S "$SEED"
 fi
