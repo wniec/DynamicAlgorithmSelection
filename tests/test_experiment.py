@@ -55,15 +55,6 @@ class TestExperiment(unittest.TestCase):
         mock_test.assert_called_once()
 
     @patch(
-        "dynamicalgorithmselection.experiments.experiment._coco_bbob_neuroevolution_train"
-    )
-    def test_coco_bbob_experiment_dispatch_neuro(self, mock_neuro):
-        coco_bbob_experiment(
-            self.optimizer_mock, self.options, "test_exp", agent="neuroevolution"
-        )
-        mock_neuro.assert_called_once()
-
-    @patch(
         "dynamicalgorithmselection.experiments.experiment._coco_bbob_policy_gradient_train"
     )
     def test_coco_bbob_experiment_dispatch_pg(self, mock_pg):

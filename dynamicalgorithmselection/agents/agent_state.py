@@ -1,6 +1,6 @@
 import warnings
 from operator import itemgetter
-from typing import Tuple, Callable, Any
+from typing import Tuple, Callable, Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -20,7 +20,7 @@ MAX_CONSIDERED_POPSIZE = 2500
 
 
 def get_state_representation(
-    name: str, n_actions: int
+    name: Literal["ELA", "custom"], n_actions: int
 ) -> Tuple[Callable[[np.ndarray, np.ndarray, Any], np.ndarray], int]:
     """
     :param name: name of the state representation mode

@@ -152,8 +152,9 @@ def parse_arguments():
         "-O",
         "--reward-option",
         type=int,
-        default=1,
-        help="id of method used to compute reward",
+        choices=[1, 2, 3, 4],
+        default=2,
+        help="id of method used to compute reward (valid options: 1-4, default 2 maps to r2)",
     )
 
     parser.add_argument(
