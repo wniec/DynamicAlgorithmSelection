@@ -135,12 +135,12 @@ class StepwiseRewardNormalizer:
 
     def normalize(self, reward, step_idx, update=True):
         idx = min(step_idx, self.max_steps - 1)
-        if update:
-            self.stats[idx].update(np.array([reward]))
 
         mean = self.stats[idx].mean
         std = np.sqrt(self.stats[idx].var) + 1e-8
-
         normalized_reward = (reward - mean) / std
+
+        if update:
+            self.stats[idx].update(np.array([reward]))
 
         return np.clip(normalized_reward, -self.clip, self.clip)
