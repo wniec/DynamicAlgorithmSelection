@@ -340,7 +340,7 @@ class CMAES(ES):
             self.start_conditions = {
                 i: loc.get(i, None)
                 for i in [
-                    "yp_c",
+                    "p_c",
                     "p_s",
                     "cm",
                     "e_ve",
@@ -354,7 +354,7 @@ class CMAES(ES):
             start_conditions = {
                 i: loc.get(i, None)
                 for i in [
-                    "yp_c",
+                    "p_c",
                     "p_s",
                     "cm",
                     "e_ve",
