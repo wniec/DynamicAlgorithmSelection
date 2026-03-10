@@ -283,6 +283,7 @@ class CMAES(ES):
                     "x": x,
                     "y": y,
                     "mean": mean,
+                    "sigma": self.sigma,
                 }
             )
             if self.is_restart:
@@ -300,6 +301,7 @@ class CMAES(ES):
                         "x": x,
                         "y": y,
                         "mean": mean,
+                        "sigma": self.sigma,
                     }
                 )
         self.results.update(
@@ -313,6 +315,7 @@ class CMAES(ES):
                 "x": x,
                 "y": y,
                 "mean": mean,
+                "sigma": self.sigma,
             }
         )
         results = self._collect(fitness, y, mean)
@@ -335,45 +338,29 @@ class CMAES(ES):
     ):
         if x is None or y is None:
             self.start_conditions = {"x": None, "y": None, "mean": None}
-        elif not isinstance(y, np.ndarray):
-            loc = locals()
-            self.start_conditions = {
-                i: loc.get(i, None)
-                for i in [
-                    "p_c",
-                    "p_s",
-                    "cm",
-                    "e_ve",
-                    "e_va",
-                    "d",
-                ]
-            }
         else:
+            if not isinstance(y, np.ndarray):
+                y = np.asarray(y)
             indices = np.argsort(y)[: self.n_individuals]
-            loc = locals()
-            start_conditions = {
-                i: loc.get(i, None)
-                for i in [
-                    "p_c",
-                    "p_s",
-                    "cm",
-                    "e_ve",
-                    "e_va",
-                ]
-            }
-            start_conditions["d"] = d[indices] if d is not None else None
 
-            mean = x[indices].mean(axis=0)
-            stds = np.std(x[indices], axis=0)
-            sigma: float = np.max(stds)
-            sigma = max(sigma, 1e-8)
-            start_conditions.update(
-                {"x": x[indices], "y": y[indices], "mean": mean, "sigma": sigma}
-            )
-            self.start_conditions = start_conditions
-        if self.start_conditions.get("d") is not None:
-            self.start_conditions["d"] = self.start_conditions["d"][
-                : self.n_individuals
-            ]
+            if mean is None:
+                mean = x[indices].mean(axis=0)
+            sigma = kwargs.get("sigma", None)
+            if sigma is None:
+                stds = np.std(x[indices], axis=0)
+                sigma = max(float(np.max(stds)), 1e-8)
+
+            self.start_conditions = {
+                "x": x[indices],
+                "y": y[indices],
+                "mean": mean,
+                "sigma": sigma,
+                "p_c": p_c,
+                "p_s": p_s,
+                "cm": cm,
+                "e_ve": e_ve,
+                "e_va": e_va,
+                "d": d[indices] if d is not None else None,
+            }
         self.best_so_far_x = kwargs.get("best_x", None)
         self.best_so_far_y = kwargs.get("best_y", float("inf"))
