@@ -184,7 +184,7 @@ class Agent(Optimizer):
         current_data = {
             k: v for k, v in optimizer_input_data.items() if not k.endswith("_history")
         }
-        combined_input = historic_data | current_data
+        combined_input = current_data | historic_data
         optimizer.set_data(**combined_input)
 
         if self._check_terminations():
