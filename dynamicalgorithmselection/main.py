@@ -106,15 +106,6 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "-r",
-        "--state-representation",
-        type=str,
-        default="ELA",
-        choices=["ELA", "custom"],
-        help="specify which state representation to use",
-    )
-
-    parser.add_argument(
         "-x",
         "--cdb",
         type=float,
@@ -183,7 +174,6 @@ def print_info(args):
     print("Weights and Biases project: ", args.wandb_project)
     print("Agent type: ", args.agent if args.mode != "baselines" else None)
     print("Exponential checkpoint division base: ", args.cdb)
-    print("State representation variant: ", args.state_representation)
     print("Forcing restarts: ", args.force_restarts)
     print("Dimensionality of problems: ", args.dimensionality)
     print("Number of training epochs: ", args.n_epochs)
@@ -195,7 +185,6 @@ def common_options(args) -> Dict[str, Any]:
         "n_checkpoints": args.n_checkpoints,
         "n_individuals": args.population_size,
         "cdb": args.cdb,
-        "state_representation": args.state_representation,
         "force_restarts": args.force_restarts,
         "dimensionality": args.dimensionality,
         "n_epochs": args.n_epochs,

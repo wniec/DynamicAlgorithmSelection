@@ -210,14 +210,13 @@ class PolicyGradientAgent(Agent):
 
         return results, agent_state
 
-    def _prepare_state_tensor(self, x, y, full_buffer):
+    def _prepare_state_tensor(self, x, y):
         """Generates and normalizes the state tensor using self.iterations_history."""
         state = self.get_state(
             x,
             y,
             self.iterations_history["x"],
             self.iterations_history["y"],
-            self.train_mode and not full_buffer,
         )
         state = torch.nan_to_num(
             torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
@@ -322,7 +321,7 @@ class PolicyGradientAgent(Agent):
             full_buffer = self.buffer.size() >= self.buffer.capacity
 
             # Prepare State (uses self.iterations_history internally)
-            state = self._prepare_state_tensor(x, y, full_buffer)
+            state = self._prepare_state_tensor(x, y)
 
             # Select Action
             action, log_prob, value = self._select_action(state, full_buffer)

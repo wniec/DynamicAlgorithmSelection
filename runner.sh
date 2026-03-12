@@ -1,0 +1,42 @@
+#!/bin/bash
+
+SEEDS=(123 234 345 456)
+
+CDB_VALUES=(1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7)
+
+PORTFOLIOS=(
+    "CMAES SPSOL OPOA2015"
+    "G3PCX LMCMAES SPSO"
+    "MADDE JDE21 NL_SHADE_RSP"
+)
+
+echo "Starting Cartesian product job submissions..."
+
+for SEED in "${SEEDS[@]}"; do
+    for PORTFOLIO in "${PORTFOLIOS[@]}"; do
+
+        echo "Submitting portfolio study with: SEED=${SEED} | PORTFOLIO=${PORTFOLIO}"
+
+        sbatch portfolio_study.slurm $SEED $PORTFOLIO
+
+        sleep 1
+
+    done
+
+    for CDB in "${CDB_VALUES[@]}"; do
+
+        echo "Submitting single algorithm study with: SEED=${SEED} | CDB=${CDB}"
+        sbatch single_algorithm_CDB_study.slurm $SEED $CDB
+        echo "Submitting CDB study with: SEED=${SEED} | CDB=${CDB}"
+        sbatch CDB_study.slurm $SEED $CDB
+
+        sleep 1
+
+    done
+
+    echo "Submitting comprehensive study with: SEED=${SEED}"
+    sbatch comprehensive_study.slurm $SEED
+
+done
+
+echo "All jobs submitted!"
