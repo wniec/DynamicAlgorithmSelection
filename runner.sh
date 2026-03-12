@@ -26,7 +26,7 @@ for SEED in "${SEEDS[@]}"; do
     for CDB in "${CDB_VALUES[@]}"; do
 
         echo "Submitting single algorithm study with: SEED=${SEED} | CDB=${CDB}"
-        sbatch single_algorithm.slurm $SEED $CDB
+        sbatch single_algorithm_CDB_study.slurm $SEED $CDB
         echo "Submitting CDB study with: SEED=${SEED} | CDB=${CDB}"
         sbatch CDB_study.slurm $SEED $CDB
 
@@ -35,7 +35,7 @@ for SEED in "${SEEDS[@]}"; do
     done
 
     echo "Submitting comprehensive study with: SEED=${SEED}"
-    sbatch runner.slurm $SEED
+    sbatch comprehensive_study.slurm $SEED
 
 done
 
