@@ -9,12 +9,10 @@
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH -A plgautopt26-gpu-a100
 
-# 1. Accept variables from outside (positional arguments)
-# Syntax: ${1:-default_value} means if $1 is empty, use the default.
-CDB_VAL=${1:-1.5}
-SEED=${2:-42}
+SEED=${1:-42}
+CDB_VAL=${2:-1.5}
 
-PORTFOLIO=('MADDE')
+PORTFOLIO=('G3PCX')
 PORTFOLIO_STR=$(IFS="_"; echo "${PORTFOLIO[*]}")
 
 # CONFIGURATION
