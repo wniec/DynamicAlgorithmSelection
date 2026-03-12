@@ -4,13 +4,14 @@ import numpy as np
 
 from dynamicalgorithmselection.agents.agent_reward import AgentReward
 from dynamicalgorithmselection.agents.agent_state import (
-    get_state_representation,
     StateNormalizer,
+    ela_state_representation,
+    BASE_STATE_SIZE,
+    AgentState,
 )
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
     StepwiseRewardNormalizer,
-    MAX_DIM,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimizer
@@ -52,48 +53,28 @@ class Agent(Optimizer):
         self.reward_normalizer = self.options.get(
             "reward_normalizer", StepwiseRewardNormalizer(max_steps=self.n_checkpoints)
         )
-        self.state_representation, self.state_dim = get_state_representation(
-            self.options.get("state_representation", None), len(self.actions)
-        )
+        n_actions = len(self.actions)
+        self.state_dim = BASE_STATE_SIZE + 2 * n_actions
         self.state_normalizer = self.options.get(
             "state_normalizer", StateNormalizer(input_shape=(self.state_dim,))
         )
         self.initial_value_range: Tuple[Optional[float], Optional[float]] = (None, None)
         self.reward_method = AgentReward(self.options.get("reward_option", 1))
 
-    def get_partial_state(
+    def get_optimization_state(
         self,
-        x: Optional[np.ndarray],
-        y: Optional[np.ndarray],
-        optimization_state: bool = False,
     ) -> np.ndarray:
-        sr_additional_params = (
-            self.lower_boundary,
-            self.upper_boundary,
+        state_representation_object = AgentState(
+            len(self.actions),
             self.choices_history,
             self.n_checkpoints,
             self.ndim_problem,
         )
 
-        if x is None or y is None:
-            if self.options.get("state_representation") != "ELA":
-                state_representation = self.state_representation(
-                    np.zeros((50, self.ndim_problem)),
-                    np.zeros((50,)),
-                    sr_additional_params,
-                )
-            else:
-                state_representation = (np.zeros((43,)),)
+        if len(self.choices_history) == 0:
+            return state_representation_object.get_initial_state()
 
-            return np.append(state_representation, (0, 0) if optimization_state else ())
-        used_fe = self.n_function_evaluations / self.max_function_evaluations
-        stagnation_coef = self.stagnation_count / self.max_function_evaluations
-
-        state_representation = self.state_representation(x, y, sr_additional_params)
-        return np.append(
-            state_representation,
-            (used_fe, stagnation_coef) if optimization_state else (),
-        )
+        return state_representation_object.get_state()
 
     def get_state(
         self,
@@ -108,20 +89,21 @@ class Agent(Optimizer):
             indices = np.sort(indices)
             x_history = x_history[indices]
             y_history = y_history[indices]
-
-        if self.options.get("state_representation") != "ELA":
-            landscape_state = self.get_partial_state(x_history, y_history).flatten()
-            optimization_state = self.get_partial_state(x, y, True).flatten()
-            state = np.concatenate((landscape_state, optimization_state))
+            landscape_state = ela_state_representation(x_history, y_history)
         else:
-            partial_state = self.get_partial_state(x_history, y_history, True).flatten()
-            state = np.append(
-                partial_state,
-                (
-                    self.ndim_problem / MAX_DIM,
-                    self.n_function_evaluations / self.max_function_evaluations,
-                ),
+            landscape_state = np.zeros(
+                43,
             )
+
+        optimization_state = self.get_optimization_state()
+        state = np.concatenate((landscape_state, optimization_state))
+        state = np.append(
+            state,
+            (
+                self.n_function_evaluations / self.max_function_evaluations,
+                self.stagnation_count / self.max_function_evaluations,
+            ),
+        )
         return self.state_normalizer.normalize(state, update)
 
     def _print_verbose_info(self, fitness, y):

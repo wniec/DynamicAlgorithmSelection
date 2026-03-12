@@ -8,27 +8,25 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH -A plgautopt26-gpu-a100
-#SBATCH --array=0-9           # 10 tasks total
 
-CDB_VAL=1.5
+# 1. Accept variables from outside (positional arguments)
+# Syntax: ${1:-default_value} means if $1 is empty, use the default.
+CDB_VAL=${1:-1.5}
+SEED=${2:-42}
 
 PORTFOLIO=('MADDE')
-
 PORTFOLIO_STR=$(IFS="_"; echo "${PORTFOLIO[*]}")
-
 
 # CONFIGURATION
 ENV_PATH="$SCRATCH/DynamicAlgorithmSelection/.venv/bin/activate"
 source "$ENV_PATH"
 mkdir -p logs
 
-# Array of Dimensions
-DIMS=(2 3 5 10)
-
+DIM=10
 MODE="CV-LOPO"
-DIM=${DIMS[$((SLURM_ARRAY_TASK_ID - 4))]}
-echo "Running Mode: $MODE | Dimension: $DIM"
 
-python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM} \
+echo "Running Mode: $MODE | Dimension: $DIM | CDB: $CDB_VAL | SEED: $SEED"
+
+python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM}_SEED${SEED} \
   -p "${PORTFOLIO[@]}" --mode $MODE --dimensionality $DIM \
-  --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient
+  --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient --seed $SEED

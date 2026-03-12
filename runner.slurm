@@ -8,7 +8,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH -A plgautopt26-gpu-a100
-#SBATCH --array=0-23           # Increased to 24 tasks total to split sequential runs
+#SBATCH --array=0-24           # Increased to 25 tasks total to split sequential runs
 
 # 1st argument: CDB_VAL (Default: 1.5)
 CDB_VAL=${1:-1.5}
