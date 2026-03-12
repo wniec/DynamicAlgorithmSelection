@@ -9,6 +9,7 @@ from dynamicalgorithmselection.experiments.cross_validation import (
     run_cross_validation,
     _get_cv_folds,
 )
+from dynamicalgorithmselection.main import set_seed
 
 
 class TestCrossValidation(unittest.TestCase):
@@ -137,6 +138,41 @@ class TestCrossValidation(unittest.TestCase):
             f"Not all dimensions covered by LODO folds. "
             f"Covered: {all_test_dims}, Expected: {valid_dims_set}",
         )
+
+    @patch(
+        "dynamicalgorithmselection.experiments.cross_validation.cocoex.utilities.MiniPrint"
+    )
+    @patch("dynamicalgorithmselection.experiments.cross_validation.cocoex.Suite")
+    def test_get_cv_folds_deterministic_after_set_seed(
+        self, mock_suite, mock_miniprint
+    ):
+        for leaving_mode, dims in [
+            ("LOIO", [10]),
+            ("LOPO", [10]),
+            ("LODO", DIMENSIONS),
+        ]:
+            n_folds = 3
+
+            set_seed(42)
+            _, folds_a = _get_cv_folds(n_folds, leaving_mode=leaving_mode, dim=dims)
+
+            set_seed(42)
+            _, folds_b = _get_cv_folds(n_folds, leaving_mode=leaving_mode, dim=dims)
+
+            self.assertEqual(len(folds_a), len(folds_b))
+            for i, ((train_a, test_a), (train_b, test_b)) in enumerate(
+                zip(folds_a, folds_b)
+            ):
+                self.assertEqual(
+                    sorted(train_a),
+                    sorted(train_b),
+                    f"mode={leaving_mode} fold {i}: train sets differ after identical seed",
+                )
+                self.assertEqual(
+                    sorted(test_a),
+                    sorted(test_b),
+                    f"mode={leaving_mode} fold {i}: test sets differ after identical seed",
+                )
 
 
 if __name__ == "__main__":
