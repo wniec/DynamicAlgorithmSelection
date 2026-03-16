@@ -70,7 +70,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 10 ]]; then
 # 6. Global Random Agent (Index 11)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 11 ]]; then
     echo "Running Mode: Global Random Agent"
-    python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RANDOM_${CDB_VAL}_SEED${SEED} \
+    python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_${CDB_VAL}_SEED${SEED} \
       -p "${PORTFOLIO[@]}" --cdb $CDB_VAL --agent random -S "$SEED"
 
 fi

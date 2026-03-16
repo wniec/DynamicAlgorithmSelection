@@ -76,10 +76,9 @@ class AgentState:
         self.n_actions = n_actions
         self.n_checkpoints = n_checkpoints
         self.ndim_problem = n_dim_problem
-
+        self.choice_history = choice_history
         if len(choice_history) < 1:
             return  # the rest of properties won't be needed
-        self.choice_history = choice_history
 
         self.last_action_index = (
             self.choice_history[-1] if self.choice_history else None
@@ -132,10 +131,6 @@ class AgentState:
                 self.ndim_problem / MAX_DIM,
             ]
         return np.array(vector, dtype=np.float32)
-
-
-def distance(x0: np.ndarray, x1: np.ndarray) -> float:
-    return float(np.linalg.norm(x0 - x1))
 
 
 class StateNormalizer:

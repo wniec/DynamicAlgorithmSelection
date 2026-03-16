@@ -11,7 +11,7 @@
 #SBATCH --array=0-12           # Increased to 13 tasks total to split sequential runs
 
 # 1st argument: SEED (Default: 42)
-SEED=${1:-1.5}
+SEED=${1:-42}
 
 # Fixed PORTFOLIO variable
 PORTFOLIO=('JDE21' 'MADDE' 'NL_SHADE_RSP')
