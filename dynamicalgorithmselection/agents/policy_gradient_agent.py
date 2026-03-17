@@ -210,14 +210,14 @@ class PolicyGradientAgent(Agent):
 
         return results, agent_state
 
-    def _prepare_state_tensor(self, x, y, full_buffer):
+    def _prepare_state_tensor(self, x, y, is_buffer_full: bool = False):
         """Generates and normalizes the state tensor using self.iterations_history."""
         state = self.get_state(
             x,
             y,
             self.iterations_history["x"],
             self.iterations_history["y"],
-            self.train_mode and not full_buffer,
+            update=not is_buffer_full and self.train_mode,
         )
         state = torch.nan_to_num(
             torch.tensor(state), nan=0.5, neginf=0.0, posinf=1.0
