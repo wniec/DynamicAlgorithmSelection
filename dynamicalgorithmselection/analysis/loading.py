@@ -26,7 +26,7 @@ def load_experiment_results(
         for result_file in sorted(experiment.iterdir()):
             if not result_file.suffix == ".json":
                 continue
-            with open(result_file) as f:
+            with open(result_file, encoding="utf-8") as f:
                 run_results: dict[str, dict[str, float]] = json.load(f)
             for key, val in run_results.items():
                 experiment_data[key] = val
