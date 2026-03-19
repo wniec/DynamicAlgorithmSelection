@@ -9,6 +9,8 @@ class DE(Optimizer):
             self.n_individuals is None
         ):  # number of offspring, aka offspring population size
             self.n_individuals = 170
+        self.Nmin = 30  # Discrepancy: Nmin is 30 in Population.py
+        self.Nmax = 170
         assert self.n_individuals > 0
         self._n_generations = 0  # number of generations
         self._printed_evaluations = self.n_function_evaluations

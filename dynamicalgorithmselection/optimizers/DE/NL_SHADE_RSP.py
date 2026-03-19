@@ -3,11 +3,14 @@ from dynamicalgorithmselection.optimizers.DE.DE import DE
 
 
 class NL_SHADE_RSP(DE):
+    """Implementation of this algorithm tries to be faithful both to original paper
+    and to its implementation in RL-DAS project.
+    In case of any difference, it follows RL-DAS approach"""
+
     start_condition_parameters = ["x", "y", "archive", "MF", "MCr", "k_idx", "pa"]
 
     def __init__(self, problem, options):
         super().__init__(problem, options)
-        self.Nmax = options.get("Nmax", 30 * self.ndim_problem)
         self.Nmin = options.get("Nmin", 4)
         self.n_individuals = self.Nmax
 
@@ -56,12 +59,9 @@ class NL_SHADE_RSP(DE):
         # Step Length (Cauchy)
         cauchy_locs = self.MF[ind_r]
         F = self._sample_cauchy(cauchy_locs, 0.1, NP)
-        # Symmetry correction for negative values
-        attempts = 0
-        while np.any(F <= 0) and attempts < 100:
-            idx = np.where(F <= 0)[0]
-            F[idx] = self._sample_cauchy(cauchy_locs[idx], 0.1, len(idx))
-            attempts += 1
+        err = np.where(F < 0)[0]
+        F[err] = 2 * cauchy_locs[err] - F[err]
+
         return Cr, np.minimum(1, F)
 
     def _update_memory(self, SF, SCr, df):
@@ -69,9 +69,9 @@ class NL_SHADE_RSP(DE):
             w = df / np.sum(df)
             mean_wL_F = np.sum(w * (SF**2)) / (np.sum(w * SF) + 1e-15)
             mean_wL_Cr = np.sum(w * (SCr**2)) / (np.sum(w * SCr) + 1e-15)
-            c = 0.5
-            self.MF[self.k_idx] = c * self.MF[self.k_idx] + (1 - c) * mean_wL_F
-            self.MCr[self.k_idx] = c * self.MCr[self.k_idx] + (1 - c) * mean_wL_Cr
+
+            self.MF[self.k_idx] = mean_wL_F
+            self.MCr[self.k_idx] = mean_wL_Cr
             self.k_idx = (self.k_idx + 1) % self.memory_size
 
     def iterate(self, x=None, y=None, args=None):
@@ -86,7 +86,7 @@ class NL_SHADE_RSP(DE):
 
         Cr, F = self._choose_F_Cr(NP)
 
-        # Sort Cr so better individuals get smaller Cr (for exponential crossover)
+        # Sort Cr so better individuals get smaller Cr
         Cr = np.sort(Cr)
 
         # Adaptive greediness pb (from 0.4 to 0.2)
@@ -94,8 +94,9 @@ class NL_SHADE_RSP(DE):
         pb = 0.4 - 0.2 * nfe_ratio
         pb_upper = max(2, int(np.round(NP * pb)))
 
-        # Adaptive Cr_b for binomial crossover
-        Cr_b = 0.0 if nfe_ratio < 0.5 else 2.0 * (nfe_ratio - 0.5)
+        # BUG : Inverted Cr_b calculation - same as in RL-DAS implementation, did so for compatibility of comparison
+        # It is non-zero (negative) in the first half and 0.0 in the second half
+        Cr_b = 2.0 * (nfe_ratio - 0.5) if nfe_ratio < 0.5 else 0.0
 
         # Rank-based probabilities for r2 (RSP)
         ranks = np.exp(-np.arange(NP) / NP)
@@ -144,19 +145,24 @@ class NL_SHADE_RSP(DE):
         # Generate Trials: current-to-pbest/1
         x_pbest = x[pbest_idx]
         vs = x + F[:, np.newaxis] * (x_pbest - x) + F[:, np.newaxis] * (x[r1] - x2)
-        vs = np.clip(vs, self.lower_boundary, self.upper_boundary)
 
-        # Dual Crossover Handling
+        # Note: Removed the correct np.clip() here to implement Bug 5
+
         us = np.copy(x)
-        for i in range(NP):
-            if self.rng_optimization.random() < 0.5:
-                # Binomial crossover with Cr_b
+
+        CrossExponential = self.rng_optimization.random() < 0.5
+
+        # ^ Bug copied from RL-DAS implementation
+        if CrossExponential:
+            # Executes Binomial logic with Cr_b when CrossExponential is True -> RL-DAS bug compatibility
+            for i in range(NP):
                 jrand = self.rng_optimization.integers(self.ndim_problem)
                 for j in range(self.ndim_problem):
                     if self.rng_optimization.random() < Cr_b or j == jrand:
                         us[i, j] = vs[i, j]
-            else:
-                # Exponential crossover with Cr_i
+        else:
+            # Executes Exponential logic with Cr when CrossExponential is False -> RL-DAS bug compatibility
+            for i in range(NP):
                 n1 = self.rng_optimization.integers(self.ndim_problem)
                 n2 = 1
                 while self.rng_optimization.random() < Cr[i] and n2 < self.ndim_problem:
@@ -164,6 +170,15 @@ class NL_SHADE_RSP(DE):
                 for j in range(n2):
                     idx = (n1 + j) % self.ndim_problem
                     us[i, idx] = vs[i, idx]
+
+        # BUG 5: Hardcoded [-100, 100] bounds
+        out_of_bounds = (us < -100) | (us > 100)
+        if np.any(out_of_bounds):
+            us = np.where(
+                out_of_bounds,
+                self.rng_optimization.uniform(-100, 100, size=us.shape),
+                us,
+            )
 
         # Selection
 
@@ -183,8 +198,10 @@ class NL_SHADE_RSP(DE):
             df = y[better_idx] - new_y[better_idx]
             arc_used_better = use_arc[better_idx]
 
-            df_A = np.sum(df[arc_used_better])
-            df_P = np.sum(df[~arc_used_better])
+            # BUG  Swapped Archive metrics -> from RL-DAS compatibility
+            df_P = np.sum(df[arc_used_better])  # Population gets archive improvements
+            df_A = np.sum(df[~arc_used_better])  # Archive gets population improvements
+
             n_A_total = np.sum(use_arc)
             n_P_total = NP - n_A_total
 

@@ -18,7 +18,7 @@ from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.experiments.utils import DIMENSIONS
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
-warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore")
 
 AGENTS_DICT = {
     "random": RandomAgent,
@@ -204,7 +204,6 @@ def test(args, action_space):
     options = {
         "action_space": action_space,
     } | common_options(args)
-    # agent_state = torch.load(f)
     if args.agent == "policy-gradient":
         options.update(
             torch.load(
