@@ -1,6 +1,7 @@
 import argparse
 import os
 import shutil
+import warnings
 from random import seed as set_random_seed
 from typing import List, Type, Dict, Any
 import cocopp
@@ -16,6 +17,8 @@ from dynamicalgorithmselection.experiments.experiment import coco_bbob_experimen
 from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.experiments.utils import DIMENSIONS
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
+
+warnings.filterwarnings("ignore")
 
 AGENTS_DICT = {
     "random": RandomAgent,
@@ -144,7 +147,7 @@ def parse_arguments():
         "--reward-option",
         type=int,
         choices=[1, 2, 3, 4],
-        default=2,
+        default=1,
         help="id of method used to compute reward (valid options: 1-4, default 2 maps to r2)",
     )
 

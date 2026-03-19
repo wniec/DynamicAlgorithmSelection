@@ -67,10 +67,11 @@ class NL_SHADE_RSP(DE):
     def _update_memory(self, SF, SCr, df):
         if len(SF) > 0:
             w = df / np.sum(df)
-            # Weighted Lehmer Mean for F
-            self.MF[self.k_idx] = np.sum(w * (SF**2)) / (np.sum(w * SF) + 1e-15)
-            # Weighted Arithmetic Mean for Cr
-            self.MCr[self.k_idx] = np.sum(w * SCr)
+            mean_wL_F = np.sum(w * (SF**2)) / (np.sum(w * SF) + 1e-15)
+            mean_wL_Cr = np.sum(w * (SCr**2)) / (np.sum(w * SCr) + 1e-15)
+            c = 0.5
+            self.MF[self.k_idx] = c * self.MF[self.k_idx] + (1 - c) * mean_wL_F
+            self.MCr[self.k_idx] = c * self.MCr[self.k_idx] + (1 - c) * mean_wL_Cr
             self.k_idx = (self.k_idx + 1) % self.memory_size
 
     def iterate(self, x=None, y=None, args=None):

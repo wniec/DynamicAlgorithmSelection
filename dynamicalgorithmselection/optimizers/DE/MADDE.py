@@ -61,11 +61,12 @@ class MADDE(DE):
         Cr = np.clip(Cr, 0, 1)
 
         # Cauchy-like sampling for F
-        F = self.MF[indices] + 0.1 * np.tan(
-            np.pi * (self.rng_optimization.random(NP) - 0.5)
-        )
+        F = self.MF[indices] + 0.1 * self.rng_optimization.standard_cauchy(size=NP)
         while np.any(F <= 0):
             idx = np.where(F <= 0)[0]
+            F[idx] = self.MF[
+                indices[idx]
+            ] + 0.1 * self.rng_optimization.standard_cauchy(size=len(idx))
             F[idx] = self.MF[indices[idx]] + 0.1 * np.tan(
                 np.pi * (self.rng_optimization.random(len(idx)) - 0.5)
             )

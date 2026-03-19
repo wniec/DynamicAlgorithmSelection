@@ -131,6 +131,11 @@ class JDE21(DE):
 
         return x, y
 
+    # Helper to pick a target
+    def r_choice(self, preferred_pool, exclude):
+        valid = [idx for idx in preferred_pool if idx not in exclude]
+        return self.rng_optimization.choice(valid) if valid else exclude[0]
+
     def _evolve_population(self, x, y, args, is_big=True):
         if self.n_individuals == 0:
             return x, y
@@ -172,20 +177,9 @@ class JDE21(DE):
 
                 pool_r2_r3 = np.concatenate([np.arange(self.bNP), ms_indices])
 
-                # Helper to safely pick a target or fallback sequentially
-                def safe_choice(preferred_pool, exclude):
-                    valid = [idx for idx in preferred_pool if idx not in exclude]
-                    if not valid:
-                        valid = [
-                            idx
-                            for idx in range(self.n_individuals)
-                            if idx not in exclude
-                        ]
-                    return self.rng_optimization.choice(valid) if valid else i
-
-                r1 = safe_choice(range(self.bNP), [i])
-                r2 = safe_choice(pool_r2_r3, [i, r1])
-                r3 = safe_choice(pool_r2_r3, [i, r1, r2])
+                r1 = self.r_choice(range(self.bNP), [i])
+                r2 = self.r_choice(pool_r2_r3, [i, r1])
+                r3 = self.r_choice(pool_r2_r3, [i, r1, r2])
 
             else:
                 pool = [idx for idx in range(self.bNP, self.n_individuals) if idx != i]
