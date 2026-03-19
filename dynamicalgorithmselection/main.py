@@ -18,7 +18,7 @@ from dynamicalgorithmselection import optimizers
 from dynamicalgorithmselection.experiments.utils import DIMENSIONS
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
-# warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")
 
 AGENTS_DICT = {
     "random": RandomAgent,

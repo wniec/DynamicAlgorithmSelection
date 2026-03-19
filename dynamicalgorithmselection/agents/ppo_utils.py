@@ -159,17 +159,19 @@ class RLDASActor(nn.Module):
         super().__init__()
         self.device = device
         self.optimizer_num = optimizer_num
-        self.embedders = [
-            (
-                nn.Sequential(
-                    nn.Linear(dim, 64),
-                    nn.ReLU(),
-                    nn.Linear(64, 1),
-                    nn.ReLU(),
-                )
-            ).to(device)
-            for _ in range(2 * optimizer_num)
-        ]
+        self.embedders = nn.ModuleList(
+            [
+                (
+                    nn.Sequential(
+                        nn.Linear(dim, 64),
+                        nn.ReLU(),
+                        nn.Linear(64, 1),
+                        nn.ReLU(),
+                    )
+                ).to(device)
+                for _ in range(2 * optimizer_num)
+            ]
+        )
 
         self.embedder_final = nn.Sequential(
             nn.Linear(9 + optimizer_num * 2, 64),
@@ -203,17 +205,19 @@ class RLDASCritic(nn.Module):
     def __init__(self, dim, optimizer_num, device):
         super().__init__()
         self.device = device
-        self.embedders = [
-            (
-                nn.Sequential(
-                    nn.Linear(dim, 64),
-                    nn.ReLU(),
-                    nn.Linear(64, 1),
-                    nn.ReLU(),
-                )
-            ).to(device)
-            for _ in range(2 * optimizer_num)
-        ]
+        self.embedders = nn.ModuleList(
+            [
+                (
+                    nn.Sequential(
+                        nn.Linear(dim, 64),
+                        nn.ReLU(),
+                        nn.Linear(64, 1),
+                        nn.ReLU(),
+                    )
+                ).to(device)
+                for _ in range(2 * optimizer_num)
+            ]
+        )
         self.embedder_final = nn.Sequential(
             nn.Linear(9 + optimizer_num * 2, 64),
             nn.Tanh(),
