@@ -29,7 +29,7 @@ EXTRA_BASELINES = [
 
 def run_results_pipeline() -> None:
     print("=" * 60)
-    print("RESULTS PIPELINE (Comparision 1.ipynb)")
+    print("RESULTS PIPELINE")
     print("=" * 60)
 
     results = load_experiment_results(DATA_DIR / "results")
@@ -41,7 +41,9 @@ def run_results_pipeline() -> None:
 
     auoc_agg = aggregate_over_seeds(auoc)
     ff_agg = aggregate_over_seeds(final_fitness)
-    print(f"After seed aggregation — AUOC: {auoc_agg.shape}, final_fitness: {ff_agg.shape}")
+    print(
+        f"After seed aggregation — AUOC: {auoc_agg.shape}, final_fitness: {ff_agg.shape}"
+    )
 
     datasets = split_results_by_dimension(
         auoc_agg, ff_agg, dims=DIMS, extra_baselines=EXTRA_BASELINES
@@ -65,7 +67,7 @@ def run_results_pipeline() -> None:
 
 def run_ert_pipeline() -> None:
     print("\n" + "=" * 60)
-    print("ERT PIPELINE (load_ERT 3.ipynb)")
+    print("ERT PIPELINE")
     print("=" * 60)
 
     htmls = load_ert_htmls(DATA_DIR / "ppdata")

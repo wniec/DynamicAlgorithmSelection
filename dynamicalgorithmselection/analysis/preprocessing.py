@@ -103,7 +103,9 @@ def split_results_by_dimension(
         dim_rows = [
             r
             for r in all_rows
-            if r.endswith(str(dim)) and r not in multidim_rows and r not in extreme_rows
+            if r.endswith(f"_DIM{dim}")
+            and r not in multidim_rows
+            and r not in extreme_rows
         ]
 
         columns = [c for c in auoc.columns if int(c[-2:]) == dim]
