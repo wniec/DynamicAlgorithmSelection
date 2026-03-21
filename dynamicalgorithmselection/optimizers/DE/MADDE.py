@@ -166,11 +166,22 @@ class MADDE(DE):
                     )
                 ]
 
-            # Memory and Strategy probability update
             df = np.maximum(0, y - new_y)
-            self._update_memory(F[optim], Cr[optim], df[optim])
-            self._update_pm(df, y, mu)
+            # Archive update: one-by-one to match RL-DAS semantics
+            for i in np.where(optim)[0]:
+                if len(self.archive) < self.NA:
+                    self.archive = np.vstack([self.archive, x[i:i+1]])
+                else:
+                    ri = self.rng_optimization.integers(len(self.archive))
+                    self.archive[ri] = x[i]
 
+        # Memory and strategy probability update run every generation
+        # (reference resets MF/MCr[k] to 0.5 and advances k when SF is empty)
+        df = np.maximum(0, y - new_y)
+        self._update_memory(F[optim], Cr[optim], df[optim])
+        self._update_pm(df, y, mu)
+
+        if np.any(optim):
             x[optim], y[optim] = u[optim], new_y[optim]
 
         x, y = self._nlpsr(x, y)
@@ -217,30 +228,112 @@ class MADDE(DE):
                 self.archive = self.archive[: self.NA]  # Slice directly
         return x, y
 
-    # Helper mutation methods (Vectorized)
+    # Helper mutation methods (Vectorized, with index deduplication matching RL-DAS)
     def _ctb_w_arc(self, x, best, archive, F):
         NP = x.shape[0]
-        xb = best[self.rng_optimization.integers(0, len(best), NP)]
-        r1 = self.rng_optimization.integers(0, NP, NP)
+        NB = len(best)
         combined = np.vstack([x, archive]) if len(archive) > 0 else x
-        r2 = self.rng_optimization.integers(0, len(combined), NP)
+        NC = len(combined)
+        idx = np.arange(NP)
+
+        # rb: index into best, rb ≠ i
+        rb = self.rng_optimization.integers(0, NB, NP)
+        count = 0
+        duplicate = np.where(rb == idx)[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            rb[duplicate] = self.rng_optimization.integers(0, NB, duplicate.shape[0])
+            duplicate = np.where(rb == idx)[0]
+            count += 1
+
+        # r1: index into x, r1 ≠ i, r1 ≠ rb
+        r1 = self.rng_optimization.integers(0, NP, NP)
+        count = 0
+        duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r1[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+            count += 1
+
+        # r2: index into combined (x+archive), r2 ≠ i, r2 ≠ rb, r2 ≠ r1
+        r2 = self.rng_optimization.integers(0, NC, NP)
+        count = 0
+        duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r2[duplicate] = self.rng_optimization.integers(0, NC, duplicate.shape[0])
+            duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+            count += 1
+
+        xb = best[rb]
+        x1 = x[r1]
+        x2 = combined[r2]
         return (
-            x + F[:, np.newaxis] * (xb - x) + F[:, np.newaxis] * (x[r1] - combined[r2])
+            x + F[:, np.newaxis] * (xb - x) + F[:, np.newaxis] * (x1 - x2)
         )
 
     def _ctr_w_arc(self, x, archive, F):
         NP = x.shape[0]
-        r1 = self.rng_optimization.integers(0, NP, NP)
         combined = np.vstack([x, archive]) if len(archive) > 0 else x
-        r2 = self.rng_optimization.integers(0, len(combined), NP)
-        return x + F[:, np.newaxis] * (x[r1] - combined[r2])
+        NC = len(combined)
+        idx = np.arange(NP)
+
+        # r1: index into x, r1 ≠ i
+        r1 = self.rng_optimization.integers(0, NP, NP)
+        count = 0
+        duplicate = np.where(r1 == idx)[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r1[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where(r1 == idx)[0]
+            count += 1
+
+        # r2: index into combined (x+archive), r2 ≠ i, r2 ≠ r1
+        r2 = self.rng_optimization.integers(0, NC, NP)
+        count = 0
+        duplicate = np.where((r2 == idx) + (r2 == r1))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r2[duplicate] = self.rng_optimization.integers(0, NC, duplicate.shape[0])
+            duplicate = np.where((r2 == idx) + (r2 == r1))[0]
+            count += 1
+
+        x1 = x[r1]
+        x2 = combined[r2]
+        return x + F[:, np.newaxis] * (x1 - x2)
 
     def _weighted_rtb(self, x, best, F, Fa):
         NP = x.shape[0]
-        xb = best[self.rng_optimization.integers(0, len(best), NP)]
+        NB = len(best)
+        idx = np.arange(NP)
+
+        # rb: index into best, rb ≠ i
+        rb = self.rng_optimization.integers(0, NB, NP)
+        count = 0
+        duplicate = np.where(rb == idx)[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            rb[duplicate] = self.rng_optimization.integers(0, NB, duplicate.shape[0])
+            duplicate = np.where(rb == idx)[0]
+            count += 1
+
+        # r1: index into x, r1 ≠ i, r1 ≠ rb
         r1 = self.rng_optimization.integers(0, NP, NP)
+        count = 0
+        duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r1[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+            count += 1
+
+        # r2: index into x, r2 ≠ i, r2 ≠ rb, r2 ≠ r1
         r2 = self.rng_optimization.integers(0, NP, NP)
-        return F[:, np.newaxis] * x[r1] + (F * Fa)[:, np.newaxis] * (xb - x[r2])
+        count = 0
+        duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r2[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+            count += 1
+
+        xb = best[rb]
+        x1 = x[r1]
+        x2 = x[r2]
+        return F[:, np.newaxis] * x1 + (F * Fa)[:, np.newaxis] * (xb - x2)
 
     def _binomial(self, x, v, Cr):
         NP, dim = x.shape
