@@ -4,7 +4,8 @@ from dynamicalgorithmselection.optimizers.DE.DE import DE
 
 class JDE21(DE):
     """Implementation adapted to exactly mirror the discrepancies found in the provided
-    optimizer.py and Population.py, including continuous NLPSR and unused success archives."""
+    optimizer.py and Population.py, including continuous NLPSR and unused success archives.
+    """
 
     start_condition_parameters = ["x", "y", "F", "Cr"]
 
@@ -93,7 +94,6 @@ class JDE21(DE):
         )
 
         if new_NP < self.n_individuals:
-            # Discrepancy: optimizer.py simply takes the last NP elements
             x = x[-new_NP:]
             y = y[-new_NP:]
             self.F = self.F[-new_NP:]
@@ -205,7 +205,6 @@ class JDE21(DE):
                 target = i
 
             if new_y < y[target]:
-                # Track for unused history archives
                 SF.append(new_F)
                 SCr.append(new_Cr)
                 d = (y[target] - new_y) / (y[target] + 1e-9)
@@ -226,20 +225,19 @@ class JDE21(DE):
         return x, y, SF, SCr, df
 
     def iterate(self, x=None, y=None, args=None):
+        # Reverse sort (worst first, best last) so [:bNP] holds the worst
+        # and [-NP:] reduction keeps the best. Mirrors MetaBox population.sort(NP, True).
         ind = np.argsort(-y)
         x = x[ind]
         y = y[ind]
         self.F = self.F[ind]
         self.Cr = self.Cr[ind]
 
-        x, y = self._check_population_reduction(x, y)
-
-        # P_b Reinitialization Check
+        # 1. P_b Reinitialization Check
         if self.bNP > 0:
             global_best_y = (
                 self.best_so_far_y if np.isfinite(self.best_so_far_y) else np.min(y)
             )
-            # Discrepancy: prevecEnakih logic
             eqs_b = np.sum(np.abs(y[: self.bNP] - global_best_y) < self.eps)
             age_limit = 0.1 * self.max_function_evaluations
 
@@ -251,11 +249,19 @@ class JDE21(DE):
                 )
                 self.F[: self.bNP] = self.Finit
                 self.Cr[: self.bNP] = self.CRinit
-                # Discrepancy: Setting cost explicitly to 1e15 without evaluating
                 y[: self.bNP] = 1e15
                 self.age = 0
 
-        # P_s Reinitialization Check
+        SF_total, SCr_total, df_total = [], [], []
+
+        # 2. Big Population Evolution
+        if self.bNP > 0:
+            x, y, SF, SCr, df = self._evolve_population(x, y, args, is_big=True)
+            SF_total.extend(SF)
+            SCr_total.extend(SCr)
+            df_total.extend(df)
+
+        # 3. P_s Reinitialization Check (after big evolve, can react to changes)
         if self.sNP > 0:
             best_s_idx = self.bNP + np.argmin(y[self.bNP :])
             eqs_s = np.sum(np.abs(y[self.bNP :] - y[best_s_idx]) < self.eps)
@@ -271,30 +277,19 @@ class JDE21(DE):
                 )
                 self.F[self.bNP :] = self.Finit
                 self.Cr[self.bNP :] = self.CRinit
-                # Discrepancy: Setting cost explicitly to 1e15
                 y[self.bNP :] = 1e15
 
                 x[best_s_idx] = best_x_s
                 y[best_s_idx] = best_y_s
 
-        SF_total, SCr_total, df_total = [], [], []
-
-        # Big Population Generation
-        if self.bNP > 0:
-            x, y, SF, SCr, df = self._evolve_population(x, y, args, is_big=True)
-            SF_total.extend(SF)
-            SCr_total.extend(SCr)
-            df_total.extend(df)
-
-        # Migration
+        # 4. Migration (best of big → first of small)
         if self.bNP > 0 and self.sNP > 0:
             best_overall_idx = np.argmin(y)
             if best_overall_idx < self.bNP:
-                # Discrepancy: Overwrites explicitly the first index of P_s (self.bNP)
                 x[self.bNP] = x[best_overall_idx].copy()
                 y[self.bNP] = y[best_overall_idx]
 
-        # Small Population Generation (repeats m times)
+        # 5. Small Population Evolution (repeats m times)
         if self.sNP > 0:
             m = self.bNP // self.sNP if self.bNP > 0 else 1
             m = max(1, m)
@@ -304,7 +299,7 @@ class JDE21(DE):
                 SCr_total.extend(SCr)
                 df_total.extend(df)
 
-        # Discrepancy: Update dead history archives
+        # 6. Update MF/MCr history archives
         if len(SF_total) > 0:
             SF_arr = np.array(SF_total)
             SCr_arr = np.array(SCr_total)
@@ -323,6 +318,9 @@ class JDE21(DE):
         else:
             self.MF[self.k] = 0.5
             self.MCr[self.k] = 0.5
+
+        # 7. NLPSR reduction (at the end, matching MetaBox)
+        x, y = self._check_population_reduction(x, y)
 
         self._n_generations += 1
         return x, y
