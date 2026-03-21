@@ -124,6 +124,11 @@ class JDE21(DE):
         # Snapshot population so all mutations/crossovers/crowding reference the same state
         x_snapshot = x.copy()
 
+        # Age increments by batch size before selection (MetaBox line 986)
+        pop_size = end_idx - start_idx
+        self.age += pop_size
+        cbest = np.min(y)
+
         for i in range(start_idx, end_idx):
             # Parameter Adaptation
             new_F = (
@@ -209,12 +214,14 @@ class JDE21(DE):
                 x[target], y[target] = u, new_y
                 self.F[target], self.Cr[target] = new_F, new_Cr
 
-                if is_big and new_y < self.best_so_far_y:
+                # Reset age when any trial beats cbest (MetaBox line 1000-1001)
+                if new_y < cbest:
+                    self.age = 0
+                    cbest = new_y
+
+                if new_y < self.best_so_far_y:
                     self.best_so_far_y = new_y
                     self.best_so_far_x = np.copy(u)
-                    self.age = 0
-            elif is_big and target == i:
-                self.age += 1
 
         return x, y, SF, SCr, df
 
@@ -322,6 +329,7 @@ class JDE21(DE):
 
     def optimize(self, fitness_function=None, args=None):
         fitness = super().optimize(fitness_function)
+        self.age = 0
         x, y = self.initialize(
             args, self.start_conditions.get("x"), self.start_conditions.get("y")
         )
