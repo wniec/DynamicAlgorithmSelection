@@ -37,6 +37,9 @@ for SEED in "${SEEDS[@]}"; do
     echo "Submitting comprehensive study with: SEED=${SEED}"
     sbatch comprehensive_study.slurm $SEED
 
+    echo "Submitting degenerate case study with: SEED=${SEED}"
+    sbatch dummy_case.slurm $SEED
+
 done
 
 echo "All jobs submitted!"
