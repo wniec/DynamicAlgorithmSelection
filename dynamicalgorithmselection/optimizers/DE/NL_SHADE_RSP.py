@@ -7,11 +7,10 @@ class NL_SHADE_RSP(DE):
     and to its implementation in RL-DAS project.
     In case of any difference, it follows RL-DAS approach"""
 
-    start_condition_parameters = ["x", "y", "archive", "MF", "MCr", "k_idx", "pa"]
+    start_condition_parameters = ["x", "y", "archive", "MF", "MCr", "k_idx"]
 
     def __init__(self, problem, options):
         super().__init__(problem, options)
-        self.Nmin = options.get("Nmin", 4)
         self.n_individuals = self.Nmax
 
         self.pa = 0.5
@@ -67,12 +66,25 @@ class NL_SHADE_RSP(DE):
     def _update_memory(self, SF, SCr, df):
         if len(SF) > 0:
             w = df / np.sum(df)
-            mean_wL_F = np.sum(w * (SF**2)) / (np.sum(w * SF) + 1e-15)
-            mean_wL_Cr = np.sum(w * (SCr**2)) / (np.sum(w * SCr) + 1e-15)
+
+            sum_w_SF = np.sum(w * SF)
+            if sum_w_SF > 0.000001:
+                mean_wL_F = np.sum(w * (SF**2)) / sum_w_SF
+            else:
+                mean_wL_F = 0.5
+
+            sum_w_SCr = np.sum(w * SCr)
+            if sum_w_SCr > 0.000001:
+                mean_wL_Cr = np.sum(w * (SCr**2)) / sum_w_SCr
+            else:
+                mean_wL_Cr = 0.5
 
             self.MF[self.k_idx] = mean_wL_F
             self.MCr[self.k_idx] = mean_wL_Cr
             self.k_idx = (self.k_idx + 1) % self.memory_size
+        else:
+            self.MF[self.k_idx] = 0.5
+            self.MCr[self.k_idx] = 0.5
 
     def iterate(self, x=None, y=None, args=None):
         if x is None or y is None:
@@ -99,46 +111,49 @@ class NL_SHADE_RSP(DE):
         Cr_b = 2.0 * (nfe_ratio - 0.5) if nfe_ratio < 0.5 else 0.0
 
         # Rank-based probabilities for r2 (RSP)
-        ranks = np.exp(-np.arange(NP) / NP)
+        ranks = np.exp(-(np.arange(NP) + 1) / NP)
         pr = ranks / np.sum(ranks)
 
         x2 = np.zeros_like(x)
         use_arc = self.rng_optimization.random(NP) < self.pa
+
+        # Logical Change 3: Archive indices canceled if archive is too small
+        if len(self.archive) < 25:
+            use_arc[:] = False
 
         r1 = np.zeros(NP, dtype=int)
         r2 = np.zeros(NP, dtype=int)
         pbest_idx = np.zeros(NP, dtype=int)
 
         for i in range(NP):
-            # pbest index
-            valid_pbest = [j for j in range(pb_upper) if j != i]
-            pb_i = int(self.rng_optimization.choice(valid_pbest)) if valid_pbest else i
+            # Logical Change 3: pbest index with bounded retries
+            pb_i = self.rng_optimization.integers(0, pb_upper)
+            count = 0
+            while pb_i == i and count < 1:
+                pb_i = self.rng_optimization.integers(0, NP)
+                count += 1
             pbest_idx[i] = pb_i
 
-            # r1 index (uniform)
-            valid_r1 = [j for j in range(NP) if j not in (i, pb_i)]
-            r1_i = (
-                int(self.rng_optimization.choice(valid_r1))
-                if valid_r1
-                else self.rng_optimization.integers(0, NP)
-            )
+            # Logical Change 3: r1 index with bounded retries
+            r1_i = self.rng_optimization.integers(0, NP)
+            count = 0
+            while (r1_i == i or r1_i == pb_i) and count < 25:
+                r1_i = self.rng_optimization.integers(0, NP)
+                count += 1
             r1[i] = r1_i
 
-            # r2 index (archive or RSP)
+            # Logical Change 3: r2 index (archive or RSP) with bounded retries
             if use_arc[i] and len(self.archive) > 0:
-                r2[i] = self.rng_optimization.integers(0, len(self.archive))
+                r2[i] = self.rng_optimization.integers(
+                    0, min(len(self.archive), self.NA)
+                )
                 x2[i] = self.archive[r2[i]]
             else:
-                use_arc[i] = False
-                valid_r2 = [j for j in range(NP) if j not in (i, pb_i, r1_i)]
-
-                if valid_r2:
-                    # Re-normalize RSP probabilities for the remaining valid choices
-                    valid_pr = pr[valid_r2] / np.sum(pr[valid_r2])
-                    r2_i = int(self.rng_optimization.choice(valid_r2, p=valid_pr))
-                else:
-                    r2_i = self.rng_optimization.integers(0, NP)
-
+                r2_i = int(self.rng_optimization.choice(np.arange(NP), p=pr))
+                count = 0
+                while (r2_i == i or r2_i == pb_i or r2_i == r1_i) and count < 25:
+                    r2_i = int(self.rng_optimization.choice(np.arange(NP), p=pr))
+                    count += 1
                 r2[i] = r2_i
                 x2[i] = x[r2_i]
 
@@ -150,10 +165,9 @@ class NL_SHADE_RSP(DE):
 
         us = np.copy(x)
 
-        CrossExponential = self.rng_optimization.random() < 0.5
+        perform_binomial_crossover = self.rng_optimization.random() < 0.5
 
-        # ^ Bug copied from RL-DAS implementation
-        if CrossExponential:
+        if perform_binomial_crossover:
             # Executes Binomial logic with Cr_b when CrossExponential is True -> RL-DAS bug compatibility
             for i in range(NP):
                 jrand = self.rng_optimization.integers(self.ndim_problem)
@@ -161,15 +175,16 @@ class NL_SHADE_RSP(DE):
                     if self.rng_optimization.random() < Cr_b or j == jrand:
                         us[i, j] = vs[i, j]
         else:
-            # Executes Exponential logic with Cr when CrossExponential is False -> RL-DAS bug compatibility
-            for i in range(NP):
-                n1 = self.rng_optimization.integers(self.ndim_problem)
-                n2 = 1
-                while self.rng_optimization.random() < Cr[i] and n2 < self.ndim_problem:
-                    n2 += 1
-                for j in range(n2):
-                    idx = (n1 + j) % self.ndim_problem
-                    us[i, idx] = vs[i, idx]
+            # Executes RL-DAS vectorized "Exponential_" logic with Cr:
+            # - pick random start per individual, mark all dims >= start
+            # - independently copy from vs where random > Cr (inverted probability, no wrapping)
+            dim = self.ndim_problem
+            L = self.rng_optimization.integers(dim, size=NP)
+            L = L.repeat(dim).reshape(NP, dim) <= np.arange(dim)
+            rvs = self.rng_optimization.random((NP, dim))
+            Cr_2d = Cr.repeat(dim).reshape(NP, dim)
+            mask = np.where(rvs > Cr_2d, L, False)
+            us = np.where(mask, vs, us)
 
         # BUG 5: Hardcoded [-100, 100] bounds
         out_of_bounds = (us < -100) | (us > 100)
@@ -193,40 +208,44 @@ class NL_SHADE_RSP(DE):
         )
         better_idx = np.where(new_y < y)[0]
 
+        SF = np.array([])
+        SCr = np.array([])
+        df = np.array([])
+
         if len(better_idx) > 0:
-            # Update Archive Probability (pa)
-            df = y[better_idx] - new_y[better_idx]
+            # Logical Change 4: Normalized df calculation
+            df = (y[better_idx] - new_y[better_idx]) / (y[better_idx] + 1e-9)
+
             arc_used_better = use_arc[better_idx]
 
-            # BUG  Swapped Archive metrics -> from RL-DAS compatibility
-            df_P = np.sum(df[arc_used_better])  # Population gets archive improvements
-            df_A = np.sum(df[~arc_used_better])  # Archive gets population improvements
+            fp = np.sum(df[arc_used_better])
+            fa = np.sum(df[~arc_used_better])
+            na = np.sum(arc_used_better)
 
-            n_A_total = np.sum(use_arc)
-            n_P_total = NP - n_A_total
-
-            mean_A = df_A / n_A_total if n_A_total > 0 else 0
-            mean_P = df_P / n_P_total if n_P_total > 0 else 0
-
-            if mean_A + mean_P > 0:
-                self.pa = mean_A / (mean_A + mean_P)
-            self.pa = np.clip(self.pa, 0.1, 0.9)  # Clipping rule applied
-
-            # Update Archive
-            success_x = x[better_idx]
-            self.archive = np.vstack([self.archive, success_x])
-            if len(self.archive) > self.NA:
-                # Remove random individuals
-                remove_idx = self.rng_optimization.choice(
-                    len(self.archive), len(self.archive) - self.NA, replace=False
+            if na == 0 or fa == 0:
+                self.pa = 0.5
+            else:
+                self.pa = (fa / (na + 1e-15)) / (
+                    (fa / (na + 1e-15)) + (fp / (NP - na + 1e-15))
                 )
-                self.archive = np.delete(self.archive, remove_idx, axis=0)
+                self.pa = np.clip(self.pa, 0.1, 0.9)
 
-            # Record successes for memory update
-            self._update_memory(F[better_idx], Cr[better_idx], df)
+            # Logical Change 6: One-by-one Archive updating/trimming
+            for i in better_idx:
+                if len(self.archive) < self.NA:
+                    self.archive = np.vstack([self.archive, x[i]])
+                else:
+                    replace_idx = self.rng_optimization.integers(0, len(self.archive))
+                    self.archive[replace_idx] = x[i]
+
+            SF = F[better_idx]
+            SCr = Cr[better_idx]
 
             x[better_idx] = us[better_idx]
             y[better_idx] = new_y[better_idx]
+
+        # Update memory and pa every generation (even when no improvements)
+        self._update_memory(SF, SCr, df)
 
         # NLPSR (Non-Linear Population Size Reduction)
         FEs = self.n_function_evaluations
@@ -247,6 +266,9 @@ class NL_SHADE_RSP(DE):
             y = y[sort_idx_final][:new_NP]
             self.n_individuals = new_NP
             self.NA = int(max(new_NP * 2.1, self.Nmin))
+            # Slice archive if it exceeds the new reduced NA
+            if len(self.archive) > self.NA:
+                self.archive = self.archive[: self.NA]
 
         self._n_generations += 1
         return x, y
@@ -258,6 +280,8 @@ class NL_SHADE_RSP(DE):
         y = self.start_conditions.get("y", None)
 
         x, y = self.initialize(args, x, y)
+        # RL-DAS resets archive-use probability once per scheduled optimizer run.
+        self.pa = 0.5
 
         while True:
             old_evals = self.n_function_evaluations
@@ -271,7 +295,6 @@ class NL_SHADE_RSP(DE):
                     "MF": self.MF[:],
                     "MCr": self.MCr[:],
                     "k_idx": self.k_idx,
-                    "pa": self.pa,
                 }
             )
             if self._check_terminations() or self.n_function_evaluations == old_evals:
@@ -295,7 +318,7 @@ class NL_SHADE_RSP(DE):
             start_conditions = {}
             start_conditions.update({"x": x[indices], "y": y[indices]})
             self.start_conditions = start_conditions
-            for var in ["archive", "MF", "MCr", "k_idx", "pa"]:
+            for var in ["archive", "MF", "MCr", "k_idx"]:
                 if var in kwargs:
                     setattr(self, var, kwargs[var])
         self.best_so_far_x = kwargs.get("best_x", None)

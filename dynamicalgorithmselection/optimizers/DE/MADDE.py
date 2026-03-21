@@ -161,7 +161,7 @@ class MADDE(DE):
             # Archive update: one-by-one to match RL-DAS semantics
             for i in np.where(optim)[0]:
                 if len(self.archive) < self.NA:
-                    self.archive = np.vstack([self.archive, x[i:i+1]])
+                    self.archive = np.vstack([self.archive, x[i : i + 1]])
                 else:
                     ri = self.rng_optimization.integers(len(self.archive))
                     self.archive[ri] = x[i]
@@ -257,9 +257,7 @@ class MADDE(DE):
         xb = best[rb]
         x1 = x[r1]
         x2 = combined[r2]
-        return (
-            x + F[:, np.newaxis] * (xb - x) + F[:, np.newaxis] * (x1 - x2)
-        )
+        return x + F[:, np.newaxis] * (xb - x) + F[:, np.newaxis] * (x1 - x2)
 
     def _ctr_w_arc(self, x, archive, F):
         NP = x.shape[0]
