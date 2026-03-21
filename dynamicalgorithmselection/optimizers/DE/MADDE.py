@@ -99,6 +99,11 @@ class MADDE(DE):
     def iterate(self, x=None, y=None, args=None):
         if x is None or y is None:
             raise ValueError("x and y must be provided for iteration.")
+
+        # Sort population by fitness (matches RL-DAS: sort at start of generation)
+        order = np.argsort(y)
+        x, y = x[order], y[order]
+
         NP = x.shape[0]
         dim = self.ndim_problem
         FEs, MaxFEs = self.n_function_evaluations, self.max_function_evaluations
@@ -134,11 +139,7 @@ class MADDE(DE):
             # Pick qbest from combined population and archive
             combined = np.vstack([x, self.archive]) if len(self.archive) > 0 else x
             q_limit = max(int(q * len(combined)), 2)
-            q_best_combined = combined[
-                np.argsort(np.concatenate([y, np.full(len(self.archive), np.inf)]))[
-                    :q_limit
-                ]
-            ]
+            q_best_combined = combined[:q_limit]
             cross_qbest = q_best_combined[
                 self.rng_optimization.integers(0, len(q_best_combined), np.sum(qu_idx))
             ]
@@ -157,16 +158,6 @@ class MADDE(DE):
         optim = new_y < y
 
         if np.any(optim):
-            # Archive update
-            self.archive = np.vstack([self.archive, x[optim]])
-            if len(self.archive) > self.NA:
-                self.archive = self.archive[
-                    self.rng_optimization.choice(
-                        len(self.archive), self.NA, replace=False
-                    )
-                ]
-
-            df = np.maximum(0, y - new_y)
             # Archive update: one-by-one to match RL-DAS semantics
             for i in np.where(optim)[0]:
                 if len(self.archive) < self.NA:
