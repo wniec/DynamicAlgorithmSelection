@@ -28,6 +28,9 @@ class RLDASAgent(Agent):
             num_algorithms=self.n_algorithms, d_dim=self.ndim_problem
         ).to(DEVICE)
 
+        if not self.train_mode:
+            self.network.eval()
+
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=3e-5)
 
         self._load_parameters(options)
@@ -136,6 +139,8 @@ class RLDASAgent(Agent):
         la_tensor = torch.FloatTensor(la_state).unsqueeze(0).to(DEVICE)
         ah_tensor = torch.FloatTensor(ah_state).unsqueeze(0).to(DEVICE)
 
+        self.network.eval()
+
         with torch.no_grad():
             probs, value = self.network(la_tensor, ah_tensor)
             dist = torch.distributions.Categorical(probs)
@@ -146,6 +151,8 @@ class RLDASAgent(Agent):
             if self.run is not None:
                 entropy = -np.sum(probs * np.log(probs + 1e-12)) / np.log(len(probs))
                 self.run.log({"normalized entropy": entropy})
+
+        self.network.train()
 
         return action.item(), log_prob, value
 
