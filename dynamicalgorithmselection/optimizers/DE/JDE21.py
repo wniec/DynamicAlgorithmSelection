@@ -199,7 +199,7 @@ class JDE21(DE):
             else:
                 target = i
 
-            if new_y <= y[target]:
+            if new_y < y[target]:
                 # Track for unused history archives
                 SF.append(new_F)
                 SCr.append(new_Cr)
