@@ -63,7 +63,7 @@ class RLDASRandomAgent(Agent):
         elif "MadDE" in alg_name:
             specific_attrs = ["pm", "pbest", "PqBX"]
         elif "NL_SHADE" in alg_name:
-            specific_attrs = ["NA", "pa"]
+            specific_attrs = ["NA"]
 
         for attr in specific_attrs:
             if hasattr(optimizer, attr):

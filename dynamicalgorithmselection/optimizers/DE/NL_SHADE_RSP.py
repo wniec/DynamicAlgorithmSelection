@@ -90,7 +90,6 @@ class NL_SHADE_RSP(DE):
         if x is None or y is None:
             raise ValueError("x and y must be provided for iteration.")
         NP = x.shape[0]
-        self.pa = 0.5
 
         # Sort population according to fitness for RSP and Crossover mapping
         sort_idx = np.argsort(y)
@@ -282,6 +281,8 @@ class NL_SHADE_RSP(DE):
         y = self.start_conditions.get("y", None)
 
         x, y = self.initialize(args, x, y)
+        # RL-DAS resets archive-use probability once per scheduled optimizer run.
+        self.pa = 0.5
 
         while True:
             old_evals = self.n_function_evaluations
