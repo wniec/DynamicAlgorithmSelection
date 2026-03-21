@@ -165,10 +165,9 @@ class NL_SHADE_RSP(DE):
 
         us = np.copy(x)
 
-        CrossExponential = self.rng_optimization.random() < 0.5
+        perform_binomial_crossover = self.rng_optimization.random() < 0.5
 
-        # ^ Bug copied from RL-DAS implementation
-        if CrossExponential:
+        if perform_binomial_crossover:
             # Executes Binomial logic with Cr_b when CrossExponential is True -> RL-DAS bug compatibility
             for i in range(NP):
                 jrand = self.rng_optimization.integers(self.ndim_problem)
