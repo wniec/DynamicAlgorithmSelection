@@ -177,15 +177,16 @@ class NL_SHADE_RSP(DE):
                     if self.rng_optimization.random() < Cr_b or j == jrand:
                         us[i, j] = vs[i, j]
         else:
-            # Executes Exponential logic with Cr when CrossExponential is False -> RL-DAS bug compatibility
-            for i in range(NP):
-                n1 = self.rng_optimization.integers(self.ndim_problem)
-                n2 = 1
-                while self.rng_optimization.random() < Cr[i] and n2 < self.ndim_problem:
-                    n2 += 1
-                for j in range(n2):
-                    idx = (n1 + j) % self.ndim_problem
-                    us[i, idx] = vs[i, idx]
+            # Executes RL-DAS vectorized "Exponential_" logic with Cr:
+            # - pick random start per individual, mark all dims >= start
+            # - independently copy from vs where random > Cr (inverted probability, no wrapping)
+            dim = self.ndim_problem
+            L = self.rng_optimization.integers(dim, size=NP)
+            L = L.repeat(dim).reshape(NP, dim) <= np.arange(dim)
+            rvs = self.rng_optimization.random((NP, dim))
+            Cr_2d = Cr.repeat(dim).reshape(NP, dim)
+            mask = np.where(rvs > Cr_2d, L, False)
+            us = np.where(mask, vs, us)
 
         # BUG 5: Hardcoded [-100, 100] bounds
         out_of_bounds = (us < -100) | (us > 100)
