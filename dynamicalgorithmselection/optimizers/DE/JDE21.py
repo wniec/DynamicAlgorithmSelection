@@ -69,16 +69,7 @@ class JDE21(DE):
         return x, y
 
     def _reflect_bounds(self, v):
-        v = np.where(
-            v < self.initial_lower_boundary, 2 * self.initial_lower_boundary - v, v
-        )
-
-        v = np.where(
-            v > self.initial_upper_boundary, 2 * self.initial_upper_boundary - v, v
-        )
-
-        v = np.clip(v, self.initial_lower_boundary, self.initial_upper_boundary)
-        return v
+        return np.clip(v, self.initial_lower_boundary, self.initial_upper_boundary)
 
     def _check_population_reduction(self, x, y):
         # SYNCHRONIZATION
