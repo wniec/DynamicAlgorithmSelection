@@ -121,6 +121,9 @@ class JDE21(DE):
 
         SF, SCr, df = [], [], []
 
+        # Snapshot population so all mutations/crossovers/crowding reference the same state
+        x_snapshot = x.copy()
+
         for i in range(start_idx, end_idx):
             # Parameter Adaptation
             new_F = (
@@ -172,15 +175,15 @@ class JDE21(DE):
                             full_pool_with_i, 3, replace=True
                         )
 
-            # Mutation and Reflection
-            v = x[r1] + new_F * (x[r2] - x[r3])
+            # Mutation and Reflection (use snapshot so all mutations reference pre-update state)
+            v = x_snapshot[r1] + new_F * (x_snapshot[r2] - x_snapshot[r3])
             v = self._reflect_bounds(v)
 
             # Crossover (Rotational Invariant Strategy)
             if new_Cr > 1.0:
                 u = v.copy()
             else:
-                u = x[i].copy()
+                u = x_snapshot[i].copy()
                 j_rand = self.rng_optimization.integers(0, self.ndim_problem)
                 mask = self.rng_optimization.random(self.ndim_problem) <= new_Cr
                 mask[j_rand] = True
