@@ -7,7 +7,7 @@ class NL_SHADE_RSP(DE):
     and to its implementation in RL-DAS project.
     In case of any difference, it follows RL-DAS approach"""
 
-    start_condition_parameters = ["x", "y", "archive", "MF", "MCr", "k_idx", "pa"]
+    start_condition_parameters = ["x", "y", "archive", "MF", "MCr", "k_idx"]
 
     def __init__(self, problem, options):
         super().__init__(problem, options)
@@ -85,12 +85,12 @@ class NL_SHADE_RSP(DE):
         else:
             self.MF[self.k_idx] = 0.5
             self.MCr[self.k_idx] = 0.5
-            self.k_idx = (self.k_idx + 1) % self.memory_size
 
     def iterate(self, x=None, y=None, args=None):
         if x is None or y is None:
             raise ValueError("x and y must be provided for iteration.")
         NP = x.shape[0]
+        self.pa = 0.5
 
         # Sort population according to fitness for RSP and Crossover mapping
         sort_idx = np.argsort(y)
@@ -209,6 +209,10 @@ class NL_SHADE_RSP(DE):
         )
         better_idx = np.where(new_y < y)[0]
 
+        SF = np.array([])
+        SCr = np.array([])
+        df = np.array([])
+
         if len(better_idx) > 0:
             # Logical Change 4: Normalized df calculation
             df = (y[better_idx] - new_y[better_idx]) / (y[better_idx] + 1e-9)
@@ -235,11 +239,14 @@ class NL_SHADE_RSP(DE):
                     replace_idx = self.rng_optimization.integers(0, len(self.archive))
                     self.archive[replace_idx] = x[i]
 
-            # Record successes for memory update
-            self._update_memory(F[better_idx], Cr[better_idx], df)
+            SF = F[better_idx]
+            SCr = Cr[better_idx]
 
             x[better_idx] = us[better_idx]
             y[better_idx] = new_y[better_idx]
+
+        # Update memory and pa every generation (even when no improvements)
+        self._update_memory(SF, SCr, df)
 
         # NLPSR (Non-Linear Population Size Reduction)
         FEs = self.n_function_evaluations
@@ -287,7 +294,6 @@ class NL_SHADE_RSP(DE):
                     "MF": self.MF[:],
                     "MCr": self.MCr[:],
                     "k_idx": self.k_idx,
-                    "pa": self.pa,
                 }
             )
             if self._check_terminations() or self.n_function_evaluations == old_evals:
@@ -311,7 +317,7 @@ class NL_SHADE_RSP(DE):
             start_conditions = {}
             start_conditions.update({"x": x[indices], "y": y[indices]})
             self.start_conditions = start_conditions
-            for var in ["archive", "MF", "MCr", "k_idx", "pa"]:
+            for var in ["archive", "MF", "MCr", "k_idx"]:
                 if var in kwargs:
                     setattr(self, var, kwargs[var])
         self.best_so_far_x = kwargs.get("best_x", None)
