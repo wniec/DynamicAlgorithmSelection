@@ -7,7 +7,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
-#SBATCH -A plgautopt26-gpu-a100
+#SBATCH -A plgrldas2026-gpu-a100
 #SBATCH --array=0-12           # Increased to 13 tasks total to split sequential runs
 
 # 1st argument: SEED (Default: 42)

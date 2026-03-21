@@ -3,26 +3,23 @@ from dynamicalgorithmselection.optimizers.DE.DE import DE
 
 
 class JDE21(DE):
+    """Implementation adapted to exactly mirror the discrepancies found in the provided
+    optimizer.py and Population.py, including continuous NLPSR and unused success archives.
+    """
+
     start_condition_parameters = ["x", "y", "F", "Cr"]
 
     def __init__(self, problem, options):
         super().__init__(problem, options)
-
-        # Mathematical minimum population limit to survive RL starvation
-        self.Nmin = 4
-
         # Population parameters
-        # We start with the base sizes defined in the j21 paper,
-        # though set_data/initialize will override this if the RL agent injects a different size.
         self.bNP = 160
         self.sNP = 10
         self.n_individuals = self.bNP + self.sNP
 
         # Stagnation and Reset parameters
         self.age = 0
-        self.eps = 1e-12  # Tolerance for fitness equality
-        self.MyEps = 0.25  # Threshold ratio (25%) for reset
-        self.reductions_done = 0
+        self.eps = 1e-12
+        self.MyEps = 0.25
 
         # Self-adaptation probabilities
         self.tau1 = 0.1
@@ -38,7 +35,7 @@ class JDE21(DE):
         # Parameter Limits (Small Population)
         self.Fl_s = 0.17
         self.CRl_s = 0.1
-        self.CRu_s = 0.8
+        self.CRu_s = 0.8  # Note: ignored in optimizer.py logic
 
         # Shared Upper Bound for F
         self.Fu = 1.1
@@ -55,7 +52,6 @@ class JDE21(DE):
             )
         else:
             self.n_individuals = x.shape[0]
-            self.sNP = min(10, max(1, self.n_individuals // 4))
             self.bNP = self.n_individuals - self.sNP
         if y is None:
             y = np.array(
@@ -64,83 +60,74 @@ class JDE21(DE):
                     for i, xi in enumerate(x)
                 ]
             )
+
+        # Discrepancy: Initialize dead history archives from Population.py
+        self.MF = np.ones(self.ndim_problem * 20) * 0.2
+        self.MCr = np.ones(self.ndim_problem * 20) * 0.2
+        self.k = 0
+
         return x, y
 
     def _reflect_bounds(self, v):
-        v = np.where(
-            v < self.initial_lower_boundary, 2 * self.initial_lower_boundary - v, v
-        )
-
-        v = np.where(
-            v > self.initial_upper_boundary, 2 * self.initial_upper_boundary - v, v
-        )
-
-        v = np.clip(v, self.initial_lower_boundary, self.initial_upper_boundary)
-        return v
+        return np.clip(v, self.initial_lower_boundary, self.initial_upper_boundary)
 
     def _check_population_reduction(self, x, y):
         # SYNCHRONIZATION
         actual_size = len(y)
         if actual_size != self.n_individuals:
             self.n_individuals = actual_size
-            self.sNP = min(10, max(1, actual_size // 4))
             self.bNP = self.n_individuals - self.sNP
 
             if len(self.F) != actual_size:
                 self.F = np.full(actual_size, self.Finit)
                 self.Cr = np.full(actual_size, self.CRinit)
 
-        # REDUCTION LOGIC
-        thresholds = [0.25, 0.50, 0.75]
-        if self.reductions_done < len(thresholds):
-            progress = self.n_function_evaluations / self.max_function_evaluations
-            if progress >= thresholds[self.reductions_done]:
-                # Calculate the standard halved size for the big population
-                new_bNP = self.bNP // 2
+        # Discrepancy: Continuous NLPSR logic from Population.py
+        progress = self.n_function_evaluations / self.max_function_evaluations
+        if progress >= 1.0:
+            return x, y
 
-                min_allowed_bNP = max(1, self.Nmin - self.sNP)
-                new_bNP = max(new_bNP, min_allowed_bNP)
+        new_NP = int(
+            np.round(
+                self.Nmax + (self.Nmin - self.Nmax) * np.power(progress, 1 - progress)
+            )
+        )
 
-                # Only perform the competition if we are actually shrinking the array
-                if new_bNP < self.bNP:
-                    part1_idx = np.arange(new_bNP)
-                    part2_idx = np.arange(new_bNP, 2 * new_bNP)
-
-                    keep_idx = []
-                    for i, j in zip(part1_idx, part2_idx):
-                        if j < self.bNP:
-                            keep_idx.append(i if y[i] <= y[j] else j)
-                        else:
-                            keep_idx.append(i)
-
-                    keep_b_idx = np.array(keep_idx, dtype=int)
-                    s_idx = np.arange(int(self.bNP), int(self.n_individuals), dtype=int)
-
-                    x = np.concatenate([x[keep_b_idx], x[s_idx]], axis=0)
-                    y = np.concatenate([y[keep_b_idx], y[s_idx]], axis=0)
-                    self.F = np.concatenate([self.F[keep_b_idx], self.F[s_idx]], axis=0)
-                    self.Cr = np.concatenate(
-                        [self.Cr[keep_b_idx], self.Cr[s_idx]], axis=0
-                    )
-
-                    # Update sizes for the newly reduced population
-                    self.bNP = int(len(keep_b_idx))
-                    self.n_individuals = int(len(y))
-
-                self.reductions_done += 1
+        if new_NP < self.n_individuals:
+            x = x[-new_NP:]
+            y = y[-new_NP:]
+            self.F = self.F[-new_NP:]
+            self.Cr = self.Cr[-new_NP:]
+            self.n_individuals = new_NP
+            self.bNP = new_NP - self.sNP
 
         return x, y
 
+    def r_choice(self, preferred_pool, exclude):
+        valid = [idx for idx in preferred_pool if idx not in exclude]
+        return self.rng_optimization.choice(valid) if valid else exclude[0]
+
     def _evolve_population(self, x, y, args, is_big=True):
         if self.n_individuals == 0:
-            return x, y
+            return x, y, [], [], []
 
         start_idx = 0 if is_big else self.bNP
         end_idx = self.bNP if is_big else self.n_individuals
 
         f_low = self.Fl_b if is_big else self.Fl_s
-        cr_bound = self.CRu_b if is_big else self.CRu_s
+        # Discrepancy: optimizer.py ignores CRu_s and uses CRu_b for both!
+        cr_bound = self.CRu_b
         cr_low = self.CRl_b if is_big else self.CRl_s
+
+        SF, SCr, df = [], [], []
+
+        # Snapshot population so all mutations/crossovers/crowding reference the same state
+        x_snapshot = x.copy()
+
+        # Age increments by batch size before selection (MetaBox line 986)
+        pop_size = end_idx - start_idx
+        self.age += pop_size
+        cbest = np.min(y)
 
         for i in range(start_idx, end_idx):
             # Parameter Adaptation
@@ -155,7 +142,7 @@ class JDE21(DE):
                 else self.Cr[i]
             )
 
-            # Mutation Pool Selection with Extreme RL Fallbacks
+            # Mutation Pool Selection
             if is_big:
                 progress = self.n_function_evaluations / self.max_function_evaluations
                 ms_size = 1 if progress <= 1 / 3 else 2 if progress <= 2 / 3 else 3
@@ -172,51 +159,36 @@ class JDE21(DE):
 
                 pool_r2_r3 = np.concatenate([np.arange(self.bNP), ms_indices])
 
-                # Helper to safely pick a target or fallback sequentially
-                def safe_choice(preferred_pool, exclude):
-                    valid = [idx for idx in preferred_pool if idx not in exclude]
-                    if not valid:
-                        valid = [
-                            idx
-                            for idx in range(self.n_individuals)
-                            if idx not in exclude
-                        ]
-                    return self.rng_optimization.choice(valid) if valid else i
-
-                r1 = safe_choice(range(self.bNP), [i])
-                r2 = safe_choice(pool_r2_r3, [i, r1])
-                r3 = safe_choice(pool_r2_r3, [i, r1, r2])
+                r1 = self.r_choice(range(self.bNP), [i])
+                r2 = self.r_choice(pool_r2_r3, [i, r1])
+                r3 = self.r_choice(pool_r2_r3, [i, r1, r2])
 
             else:
                 pool = [idx for idx in range(self.bNP, self.n_individuals) if idx != i]
 
-                # Normal behavior: P_s has enough individuals
                 if len(pool) >= 3:
                     r1, r2, r3 = self.rng_optimization.choice(pool, 3, replace=False)
                 else:
-                    # FALLBACK 1: Try borrowing from the full population without replacement
                     full_pool = [idx for idx in range(self.n_individuals) if idx != i]
                     if len(full_pool) >= 3:
                         r1, r2, r3 = self.rng_optimization.choice(
                             full_pool, 3, replace=False
                         )
                     else:
-                        # EXTREME FALLBACK: Population is < 4. We MUST allow replacement.
-                        # If population is literally 1, it will just pick `i` three times.
                         full_pool_with_i = list(range(self.n_individuals))
                         r1, r2, r3 = self.rng_optimization.choice(
                             full_pool_with_i, 3, replace=True
                         )
 
-            # Mutation and Reflection
-            v = x[r1] + new_F * (x[r2] - x[r3])
+            # Mutation and Reflection (use snapshot so all mutations reference pre-update state)
+            v = x_snapshot[r1] + new_F * (x_snapshot[r2] - x_snapshot[r3])
             v = self._reflect_bounds(v)
 
             # Crossover (Rotational Invariant Strategy)
             if new_Cr > 1.0:
                 u = v.copy()
             else:
-                u = x[i].copy()
+                u = x_snapshot[i].copy()
                 j_rand = self.rng_optimization.integers(0, self.ndim_problem)
                 mask = self.rng_optimization.random(self.ndim_problem) <= new_Cr
                 mask[j_rand] = True
@@ -227,56 +199,74 @@ class JDE21(DE):
 
             # Crowding & Selection
             if is_big:
-                # Euclidean distance crowding
-                dists = np.sum((x[: self.bNP] - u) ** 2, axis=1)
+                dists = np.sum((x_snapshot[: self.bNP] - u) ** 2, axis=1)
                 target = np.argmin(dists)
             else:
                 target = i
 
-            if new_y <= y[target]:
+            if new_y < y[target]:
+                SF.append(new_F)
+                SCr.append(new_Cr)
+                d = (y[target] - new_y) / (y[target] + 1e-9)
+                df.append(d)
+
                 x[target], y[target] = u, new_y
                 self.F[target], self.Cr[target] = new_F, new_Cr
 
-                if is_big and new_y < self.best_so_far_y:
-                    self.best_so_far_y = new_y
+                # Reset age when any trial beats cbest (MetaBox line 1000-1001)
+                if new_y < cbest:
                     self.age = 0
-            elif is_big and target == i:
-                self.age += 1
+                    cbest = new_y
 
-        return x, y
+                if new_y < self.best_so_far_y:
+                    self.best_so_far_y = new_y
+                    self.best_so_far_x = np.copy(u)
+
+        return x, y, SF, SCr, df
 
     def iterate(self, x=None, y=None, args=None):
-        x, y = self._check_population_reduction(x, y)
+        # Reverse sort (worst first, best last) so [:bNP] holds the worst
+        # and [-NP:] reduction keeps the best. Mirrors MetaBox population.sort(NP, True).
+        ind = np.argsort(-y)
+        x = x[ind]
+        y = y[ind]
+        self.F = self.F[ind]
+        self.Cr = self.Cr[ind]
 
-        # P_b Reinitialization Check
+        # 1. P_b Reinitialization Check
         if self.bNP > 0:
-            best_b_y = np.min(y[: self.bNP])
-            eqs_b = np.sum(np.abs(y[: self.bNP] - best_b_y) < self.eps)
+            global_best_y = (
+                self.best_so_far_y if np.isfinite(self.best_so_far_y) else np.min(y)
+            )
+            eqs_b = np.sum(np.abs(y[: self.bNP] - global_best_y) < self.eps)
             age_limit = 0.1 * self.max_function_evaluations
 
-            if (eqs_b >= self.bNP * self.MyEps) or (self.age >= age_limit):
+            if (eqs_b > 2 and eqs_b > self.bNP * self.MyEps) or (self.age > age_limit):
                 x[: self.bNP] = self.rng_initialization.uniform(
                     self.initial_lower_boundary,
                     self.initial_upper_boundary,
                     (self.bNP, self.ndim_problem),
                 )
-                y[: self.bNP] = np.array(
-                    [
-                        self._evaluate_fitness(xi, args, F=self.F[i], Cr=self.Cr[i])
-                        for i, xi in enumerate(x[: self.bNP])
-                    ]
-                )
                 self.F[: self.bNP] = self.Finit
                 self.Cr[: self.bNP] = self.CRinit
+                y[: self.bNP] = 1e15
                 self.age = 0
 
-        # P_s Reinitialization Check
+        SF_total, SCr_total, df_total = [], [], []
+
+        # 2. Big Population Evolution
+        if self.bNP > 0:
+            x, y, SF, SCr, df = self._evolve_population(x, y, args, is_big=True)
+            SF_total.extend(SF)
+            SCr_total.extend(SCr)
+            df_total.extend(df)
+
+        # 3. P_s Reinitialization Check (after big evolve, can react to changes)
         if self.sNP > 0:
-            # Safely find the best in the small population
             best_s_idx = self.bNP + np.argmin(y[self.bNP :])
             eqs_s = np.sum(np.abs(y[self.bNP :] - y[best_s_idx]) < self.eps)
 
-            if eqs_s >= self.sNP * self.MyEps:
+            if eqs_s > 2 and eqs_s > self.sNP * self.MyEps:
                 best_x_s = x[best_s_idx].copy()
                 best_y_s = y[best_s_idx]
 
@@ -285,51 +275,67 @@ class JDE21(DE):
                     self.initial_upper_boundary,
                     (self.sNP, self.ndim_problem),
                 )
-                y[self.bNP :] = np.array(
-                    [
-                        self._evaluate_fitness(xi, args, F=self.F[i], Cr=self.Cr[i])
-                        for i, xi in enumerate(x[self.bNP :])
-                    ]
-                )
                 self.F[self.bNP :] = self.Finit
                 self.Cr[self.bNP :] = self.CRinit
+                y[self.bNP :] = 1e15
 
-                # Elitism: retain the best small-population individual
-                x[self.bNP], y[self.bNP] = best_x_s, best_y_s
+                x[best_s_idx] = best_x_s
+                y[best_s_idx] = best_y_s
 
-        # Big Population Generation
-        if self.bNP > 0:
-            x, y = self._evolve_population(x, y, args, is_big=True)
-
-        # Migration
-        # The best individual migrates from P_b to P_s
+        # 4. Migration (best of big → first of small)
         if self.bNP > 0 and self.sNP > 0:
             best_overall_idx = np.argmin(y)
             if best_overall_idx < self.bNP:
-                worst_s_idx = self.bNP + np.argmax(y[self.bNP :])
-                x[worst_s_idx] = x[best_overall_idx].copy()
-                y[worst_s_idx] = y[best_overall_idx]
-                self.F[worst_s_idx] = self.F[best_overall_idx]
-                self.Cr[worst_s_idx] = self.Cr[best_overall_idx]
+                x[self.bNP] = x[best_overall_idx].copy()
+                y[self.bNP] = y[best_overall_idx]
 
-        # Small Population Generation (repeats m times)
+        # 5. Small Population Evolution (repeats m times)
         if self.sNP > 0:
-            # m is traditionally bNP // sNP, but must fallback cleanly if bNP is 0
             m = self.bNP // self.sNP if self.bNP > 0 else 1
-            m = max(1, m)  # Ensure it executes at least once if P_s is all we have
+            m = max(1, m)
             for _ in range(m):
-                x, y = self._evolve_population(x, y, args, is_big=False)
+                x, y, SF, SCr, df = self._evolve_population(x, y, args, is_big=False)
+                SF_total.extend(SF)
+                SCr_total.extend(SCr)
+                df_total.extend(df)
+
+        # 6. Update MF/MCr history archives
+        if len(SF_total) > 0:
+            SF_arr = np.array(SF_total)
+            SCr_arr = np.array(SCr_total)
+            df_arr = np.array(df_total)
+
+            def mean_wL(df_vals, s_vals):
+                w = df_vals / np.sum(df_vals)
+                if np.sum(w * s_vals) > 0.000001:
+                    return np.sum(w * (s_vals**2)) / np.sum(w * s_vals)
+                else:
+                    return 0.5
+
+            self.MF[self.k] = mean_wL(df_arr, SF_arr)
+            self.MCr[self.k] = mean_wL(df_arr, SCr_arr)
+            self.k = (self.k + 1) % len(self.MF)
+        else:
+            self.MF[self.k] = 0.5
+            self.MCr[self.k] = 0.5
+
+        # 7. NLPSR reduction (at the end, matching MetaBox)
+        x, y = self._check_population_reduction(x, y)
 
         self._n_generations += 1
         return x, y
 
     def optimize(self, fitness_function=None, args=None):
         fitness = super().optimize(fitness_function)
+        self.age = 0
         x, y = self.initialize(
             args, self.start_conditions.get("x"), self.start_conditions.get("y")
         )
 
-        self.best_so_far_y = np.min(y)
+        if not np.isfinite(self.best_so_far_y):
+            best_idx = np.argmin(y)
+            self.best_so_far_y = y[best_idx]
+            self.best_so_far_x = np.copy(x[best_idx])
 
         while True:
             old_evals = self.n_function_evaluations

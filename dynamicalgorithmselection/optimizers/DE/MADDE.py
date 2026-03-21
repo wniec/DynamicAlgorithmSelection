@@ -3,15 +3,16 @@ from dynamicalgorithmselection.optimizers.DE.DE import DE
 
 
 class MADDE(DE):
+    """Implementation of this algorithm tries to be faithful both to original paper
+    and to its implementation in RL-DAS project.
+    In case of any difference, it follows RL-DAS approach"""
+
     start_condition_parameters = ["x", "y", "archive", "MF", "MCr", "k_idx", "pm"]
 
     def __init__(self, problem, options):
         super().__init__(problem, options)
         D = self.ndim_problem
         # Constants from MadDE paper/original code
-        self.Nmax = int(np.round(2 * (D**2)))
-        # self.Nmax = self.n_individuals if self.n_individuals else 170
-        self.Nmin = options.get("Nmin", 4)
         self.p = 0.18
         self.PqBX = 0.01
 
@@ -19,12 +20,12 @@ class MADDE(DE):
         self.pm = np.ones(3) / 3
 
         # Archive and Memory
-        self.A_rate = 2.30
+        self.A_rate = 2.10
         self.NA = int(np.round(self.A_rate * self.Nmax))
         self.archive = np.empty((0, self.ndim_problem))
 
         # Memory for F and Cr
-        self.memory_size = 10 * D
+        self.memory_size = 20 * D
         self.MF = np.ones(self.memory_size) * 0.2
         self.MCr = np.ones(self.memory_size) * 0.2
         self.k_idx = 0
@@ -51,24 +52,19 @@ class MADDE(DE):
     def _choose_F_Cr(self, NP):
         indices = self.rng_optimization.integers(0, self.memory_size, size=NP)
 
-        Cr = np.zeros(NP)
-        for i, idx in enumerate(indices):
-            if self.MCr[idx] == -1.0:  # Check for terminal state
-                Cr[i] = 0.0
-            else:
-                Cr[i] = self.rng_optimization.normal(loc=self.MCr[idx], scale=0.1)
-
+        # Normal sampling for Cr (bounded [0, 1], no terminal state check)
+        Cr = self.rng_optimization.normal(loc=self.MCr[indices], scale=0.1)
         Cr = np.clip(Cr, 0, 1)
 
-        # Cauchy-like sampling for F
-        F = self.MF[indices] + 0.1 * np.tan(
-            np.pi * (self.rng_optimization.random(NP) - 0.5)
-        )
-        while np.any(F <= 0):
-            idx = np.where(F <= 0)[0]
-            F[idx] = self.MF[indices[idx]] + 0.1 * np.tan(
-                np.pi * (self.rng_optimization.random(len(idx)) - 0.5)
-            )
+        # Cauchy sampling for F
+        cauchy_locs = self.MF[indices]
+        F = cauchy_locs + 0.1 * self.rng_optimization.standard_cauchy(size=NP)
+
+        # Reflection method for F < 0 (matches RL-DAS)
+        err = np.where(F < 0)[0]
+        if len(err) > 0:
+            F[err] = 2 * cauchy_locs[err] - F[err]
+
         return Cr, np.minimum(1.0, F)
 
     def _mutate(self, x, y, F, strategy_idx, q, Fa):
@@ -103,6 +99,11 @@ class MADDE(DE):
     def iterate(self, x=None, y=None, args=None):
         if x is None or y is None:
             raise ValueError("x and y must be provided for iteration.")
+
+        # Sort population by fitness (matches RL-DAS: sort at start of generation)
+        order = np.argsort(y)
+        x, y = x[order], y[order]
+
         NP = x.shape[0]
         dim = self.ndim_problem
         FEs, MaxFEs = self.n_function_evaluations, self.max_function_evaluations
@@ -138,11 +139,7 @@ class MADDE(DE):
             # Pick qbest from combined population and archive
             combined = np.vstack([x, self.archive]) if len(self.archive) > 0 else x
             q_limit = max(int(q * len(combined)), 2)
-            q_best_combined = combined[
-                np.argsort(np.concatenate([y, np.full(len(self.archive), np.inf)]))[
-                    :q_limit
-                ]
-            ]
+            q_best_combined = combined[:q_limit]
             cross_qbest = q_best_combined[
                 self.rng_optimization.integers(0, len(q_best_combined), np.sum(qu_idx))
             ]
@@ -161,49 +158,51 @@ class MADDE(DE):
         optim = new_y < y
 
         if np.any(optim):
-            # Archive update
-            self.archive = np.vstack([self.archive, x[optim]])
-            if len(self.archive) > self.NA:
-                self.archive = self.archive[
-                    self.rng_optimization.choice(
-                        len(self.archive), self.NA, replace=False
-                    )
-                ]
+            # Archive update: one-by-one to match RL-DAS semantics
+            for i in np.where(optim)[0]:
+                if len(self.archive) < self.NA:
+                    self.archive = np.vstack([self.archive, x[i:i+1]])
+                else:
+                    ri = self.rng_optimization.integers(len(self.archive))
+                    self.archive[ri] = x[i]
 
-            # Memory and Strategy probability update
-            df = np.maximum(0, y - new_y)
-            self._update_memory(F[optim], Cr[optim], df[optim])
-            self._update_pm(df, mu)
+        # Memory and strategy probability update run every generation
+        # (reference resets MF/MCr[k] to 0.5 and advances k when SF is empty)
+        df = np.maximum(0, y - new_y)
+        self._update_memory(F[optim], Cr[optim], df[optim])
+        self._update_pm(df, y, mu)
 
+        if np.any(optim):
             x[optim], y[optim] = u[optim], new_y[optim]
 
-        x, y = self._lpsr(x, y)
+        x, y = self._nlpsr(x, y)
 
         self._n_generations += 1
         return x, y
 
-    def _update_pm(self, df, mu):
+    def _update_pm(self, df, y, mu):
         count_S = np.zeros(3)
         for i in range(3):
             if np.any(mu == i):
-                count_S[i] = np.mean(df[mu == i])
+                # Aligning with optimizer.py: relative improvement df / cost
+                count_S[i] = np.mean(df[mu == i] / (y[mu == i]))
 
         if np.sum(count_S) > 0:
-            self.pm = np.maximum(
-                0.1, np.minimum(0.9, count_S / (np.sum(count_S) + 1e-15))
-            )
+            self.pm = np.maximum(0.1, np.minimum(0.9, count_S / np.sum(count_S)))
             self.pm /= np.sum(self.pm)
         else:
             self.pm = np.ones(3) / 3
 
-    def _lpsr(self, x, y):
+    def _nlpsr(self, x, y):
         FEs, MaxFEs = self.n_function_evaluations, self.max_function_evaluations
 
         # Prevent the ratio from exceeding 1.0 if FEs overshoots MaxFEs
         ratio = min(1.0, FEs / MaxFEs)
 
-        # LPSR formula: N_G = round(N_max - (N_max - N_min) * ratio)
-        new_NP = int(np.round(self.Nmax - (self.Nmax - self.Nmin) * ratio))
+        # NLPSR formula using the power curve
+        new_NP = int(
+            np.round(self.Nmax + (self.Nmin - self.Nmax) * np.power(ratio, 1.0 - ratio))
+        )
 
         # Clamp to ensure population never drops below Nmin
         new_NP = max(self.Nmin, new_NP)
@@ -214,43 +213,118 @@ class MADDE(DE):
             self.n_individuals = new_NP
 
             # Dynamically prune the archive size based on the new population
-            self.NA = int(np.round(self.A_rate * new_NP))
-
-            # Ensure NA doesn't go negative (redundant with the max clamp above, but safe)
-            self.NA = max(0, self.NA)
+            self.NA = int(max(np.round(self.A_rate * new_NP), self.Nmin))
 
             if len(self.archive) > self.NA:
-                self.archive = self.archive[
-                    self.rng_optimization.choice(
-                        len(self.archive), self.NA, replace=False
-                    )
-                ]
+                self.archive = self.archive[: self.NA]  # Slice directly
         return x, y
 
-    # Helper mutation methods (Vectorized)
+    # Helper mutation methods (Vectorized, with index deduplication matching RL-DAS)
     def _ctb_w_arc(self, x, best, archive, F):
         NP = x.shape[0]
-        xb = best[self.rng_optimization.integers(0, len(best), NP)]
-        r1 = self.rng_optimization.integers(0, NP, NP)
+        NB = len(best)
         combined = np.vstack([x, archive]) if len(archive) > 0 else x
-        r2 = self.rng_optimization.integers(0, len(combined), NP)
+        NC = len(combined)
+        idx = np.arange(NP)
+
+        # rb: index into best, rb ≠ i
+        rb = self.rng_optimization.integers(0, NB, NP)
+        count = 0
+        duplicate = np.where(rb == idx)[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            rb[duplicate] = self.rng_optimization.integers(0, NB, duplicate.shape[0])
+            duplicate = np.where(rb == idx)[0]
+            count += 1
+
+        # r1: index into x, r1 ≠ i, r1 ≠ rb
+        r1 = self.rng_optimization.integers(0, NP, NP)
+        count = 0
+        duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r1[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+            count += 1
+
+        # r2: index into combined (x+archive), r2 ≠ i, r2 ≠ rb, r2 ≠ r1
+        r2 = self.rng_optimization.integers(0, NC, NP)
+        count = 0
+        duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r2[duplicate] = self.rng_optimization.integers(0, NC, duplicate.shape[0])
+            duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+            count += 1
+
+        xb = best[rb]
+        x1 = x[r1]
+        x2 = combined[r2]
         return (
-            x + F[:, np.newaxis] * (xb - x) + F[:, np.newaxis] * (x[r1] - combined[r2])
+            x + F[:, np.newaxis] * (xb - x) + F[:, np.newaxis] * (x1 - x2)
         )
 
     def _ctr_w_arc(self, x, archive, F):
         NP = x.shape[0]
-        r1 = self.rng_optimization.integers(0, NP, NP)
         combined = np.vstack([x, archive]) if len(archive) > 0 else x
-        r2 = self.rng_optimization.integers(0, len(combined), NP)
-        return x + F[:, np.newaxis] * (x[r1] - combined[r2])
+        NC = len(combined)
+        idx = np.arange(NP)
+
+        # r1: index into x, r1 ≠ i
+        r1 = self.rng_optimization.integers(0, NP, NP)
+        count = 0
+        duplicate = np.where(r1 == idx)[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r1[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where(r1 == idx)[0]
+            count += 1
+
+        # r2: index into combined (x+archive), r2 ≠ i, r2 ≠ r1
+        r2 = self.rng_optimization.integers(0, NC, NP)
+        count = 0
+        duplicate = np.where((r2 == idx) + (r2 == r1))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r2[duplicate] = self.rng_optimization.integers(0, NC, duplicate.shape[0])
+            duplicate = np.where((r2 == idx) + (r2 == r1))[0]
+            count += 1
+
+        x1 = x[r1]
+        x2 = combined[r2]
+        return x + F[:, np.newaxis] * (x1 - x2)
 
     def _weighted_rtb(self, x, best, F, Fa):
         NP = x.shape[0]
-        xb = best[self.rng_optimization.integers(0, len(best), NP)]
+        NB = len(best)
+        idx = np.arange(NP)
+
+        # rb: index into best, rb ≠ i
+        rb = self.rng_optimization.integers(0, NB, NP)
+        count = 0
+        duplicate = np.where(rb == idx)[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            rb[duplicate] = self.rng_optimization.integers(0, NB, duplicate.shape[0])
+            duplicate = np.where(rb == idx)[0]
+            count += 1
+
+        # r1: index into x, r1 ≠ i, r1 ≠ rb
         r1 = self.rng_optimization.integers(0, NP, NP)
+        count = 0
+        duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r1[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where((r1 == rb) + (r1 == idx))[0]
+            count += 1
+
+        # r2: index into x, r2 ≠ i, r2 ≠ rb, r2 ≠ r1
         r2 = self.rng_optimization.integers(0, NP, NP)
-        return F[:, np.newaxis] * x[r1] + (F * Fa)[:, np.newaxis] * (xb - x[r2])
+        count = 0
+        duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+        while duplicate.shape[0] > 0 and count < 25:
+            r2[duplicate] = self.rng_optimization.integers(0, NP, duplicate.shape[0])
+            duplicate = np.where((r2 == rb) + (r2 == idx) + (r2 == r1))[0]
+            count += 1
+
+        xb = best[rb]
+        x1 = x[r1]
+        x2 = x[r2]
+        return F[:, np.newaxis] * x1 + (F * Fa)[:, np.newaxis] * (xb - x2)
 
     def _binomial(self, x, v, Cr):
         NP, dim = x.shape
@@ -262,17 +336,19 @@ class MADDE(DE):
 
     def _update_memory(self, SF, SCr, df):
         if len(SF) > 0:
-            w = df / (np.sum(df) + 1e-15)
+            w = df / np.sum(df)
 
             # Weighted Lehmer mean for F
-            self.MF[self.k_idx] = np.sum(w * (SF**2)) / (np.sum(w * SF) + 1e-15)
-
-            # Terminal condition check for Cr
-            if self.MCr[self.k_idx] == -1.0 or np.max(SCr) == 0:
-                self.MCr[self.k_idx] = -1.0  # Terminal state \perp
+            if np.sum(w * SF) > 1e-6:
+                self.MF[self.k_idx] = np.sum(w * (SF**2)) / np.sum(w * SF)
             else:
-                # Weighted Lehmer mean for Cr
-                self.MCr[self.k_idx] = np.sum(w * (SCr**2)) / (np.sum(w * SCr) + 1e-15)
+                self.MF[self.k_idx] = 0.5
+
+            # Weighted Lehmer mean for Cr (No terminal condition)
+            if np.sum(w * SCr) > 1e-6:
+                self.MCr[self.k_idx] = np.sum(w * (SCr**2)) / np.sum(w * SCr)
+            else:
+                self.MCr[self.k_idx] = 0.5
 
             self.k_idx = (self.k_idx + 1) % self.memory_size
         else:

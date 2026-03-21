@@ -63,12 +63,12 @@ class RolloutBuffer:
         return states, actions, old_log_probs, values, rewards, dones
 
 
-def compute_gae(rewards, dones, values, last_value):
+def compute_gae(rewards, dones, values):
     T = len(rewards)
     returns = torch.zeros(T, device=DEVICE)
     advantages = torch.zeros(T, device=DEVICE)
-    prev_return = last_value
-    prev_value = last_value
+    prev_return = 0.0
+    prev_value = 0.0
     prev_adv = 0.0
     for t in reversed(range(T)):
         mask = 1.0 - float(dones[t])
@@ -159,17 +159,19 @@ class RLDASActor(nn.Module):
         super().__init__()
         self.device = device
         self.optimizer_num = optimizer_num
-        self.embedders = [
-            (
-                nn.Sequential(
-                    nn.Linear(dim, 64),
-                    nn.ReLU(),
-                    nn.Linear(64, 1),
-                    nn.ReLU(),
-                )
-            ).to(device)
-            for _ in range(2 * optimizer_num)
-        ]
+        self.embedders = nn.ModuleList(
+            [
+                (
+                    nn.Sequential(
+                        nn.Linear(dim, 64),
+                        nn.ReLU(),
+                        nn.Linear(64, 1),
+                        nn.ReLU(),
+                    )
+                ).to(device)
+                for _ in range(2 * optimizer_num)
+            ]
+        )
 
         self.embedder_final = nn.Sequential(
             nn.Linear(9 + optimizer_num * 2, 64),
@@ -203,17 +205,19 @@ class RLDASCritic(nn.Module):
     def __init__(self, dim, optimizer_num, device):
         super().__init__()
         self.device = device
-        self.embedders = [
-            (
-                nn.Sequential(
-                    nn.Linear(dim, 64),
-                    nn.ReLU(),
-                    nn.Linear(64, 1),
-                    nn.ReLU(),
-                )
-            ).to(device)
-            for _ in range(2 * optimizer_num)
-        ]
+        self.embedders = nn.ModuleList(
+            [
+                (
+                    nn.Sequential(
+                        nn.Linear(dim, 64),
+                        nn.ReLU(),
+                        nn.Linear(64, 1),
+                        nn.ReLU(),
+                    )
+                ).to(device)
+                for _ in range(2 * optimizer_num)
+            ]
+        )
         self.embedder_final = nn.Sequential(
             nn.Linear(9 + optimizer_num * 2, 64),
             nn.Tanh(),

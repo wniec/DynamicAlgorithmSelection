@@ -7,7 +7,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
-#SBATCH -A plgautopt26-gpu-a100
+#SBATCH -A plgrldas2026-gpu-a100
 #SBATCH --array=0-9 # 10 tasks total
 
 CDB_VAL=1.2

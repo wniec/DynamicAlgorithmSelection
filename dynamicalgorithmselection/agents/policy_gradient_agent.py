@@ -30,6 +30,9 @@ class PolicyGradientAgent(Agent):
             DEVICE
         )
         self.critic = Critic(input_size=self.state_dim).to(DEVICE)
+        if not self.train_mode:
+            self.actor.eval()
+            self.critic.eval()
         self.actor_loss_fn = ActorLoss().to(DEVICE)
         self.critic_loss_fn = torch.nn.MSELoss()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-5)
@@ -76,15 +79,7 @@ class PolicyGradientAgent(Agent):
     def _compute_advantages(self, buffer):
         """Computes GAE returns and advantages."""
         states, actions, old_log_probs, values, rewards, dones = buffer.as_tensors()
-        with torch.no_grad():
-            last_value = (
-                self.critic(states[-1].unsqueeze(0).to(DEVICE)).squeeze(0).cpu().item()
-                if buffer.size() > 0
-                else 0.0
-            )
-        returns, advantages = compute_gae(
-            rewards, dones, values.detach().cpu(), last_value
-        )
+        returns, advantages = compute_gae(rewards, dones, values.detach().cpu())
         advantages = advantages.to(DEVICE)
         returns = returns.to(DEVICE)
         return states, actions, old_log_probs, returns, advantages
@@ -226,10 +221,13 @@ class PolicyGradientAgent(Agent):
 
     def _select_action(self, state, full_buffer):
         """Calculates policy, probabilities and selects an action."""
+        self.actor.eval()
+        self.critic.eval()
         with torch.no_grad():
             policy = self.actor(state.to(DEVICE))
             value = self.critic(state.to(DEVICE))
-
+        self.actor.train()
+        self.critic.train()
         if full_buffer:
             probs = policy.cpu().numpy().squeeze(0)
         else:
