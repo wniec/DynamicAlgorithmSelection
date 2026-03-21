@@ -211,6 +211,7 @@ class JDE21(DE):
 
                 if is_big and new_y < self.best_so_far_y:
                     self.best_so_far_y = new_y
+                    self.best_so_far_x = np.copy(u)
                     self.age = 0
             elif is_big and target == i:
                 self.age += 1
@@ -222,9 +223,11 @@ class JDE21(DE):
 
         # P_b Reinitialization Check
         if self.bNP > 0:
-            best_b_y = np.min(y[: self.bNP])
+            global_best_y = (
+                self.best_so_far_y if np.isfinite(self.best_so_far_y) else np.min(y)
+            )
             # Discrepancy: prevecEnakih logic
-            eqs_b = np.sum(np.abs(y[: self.bNP] - best_b_y) < self.eps)
+            eqs_b = np.sum(np.abs(y[: self.bNP] - global_best_y) < self.eps)
             age_limit = 0.1 * self.max_function_evaluations
 
             if (eqs_b > 2 and eqs_b > self.bNP * self.MyEps) or (self.age > age_limit):
@@ -317,7 +320,10 @@ class JDE21(DE):
             args, self.start_conditions.get("x"), self.start_conditions.get("y")
         )
 
-        self.best_so_far_y = np.min(y)
+        if not np.isfinite(self.best_so_far_y):
+            best_idx = np.argmin(y)
+            self.best_so_far_y = y[best_idx]
+            self.best_so_far_x = np.copy(x[best_idx])
 
         while True:
             old_evals = self.n_function_evaluations
