@@ -219,6 +219,12 @@ class JDE21(DE):
         return x, y, SF, SCr, df
 
     def iterate(self, x=None, y=None, args=None):
+        ind = np.argsort(-y)
+        x = x[ind]
+        y = y[ind]
+        self.F = self.F[ind]
+        self.Cr = self.Cr[ind]
+
         x, y = self._check_population_reduction(x, y)
 
         # P_b Reinitialization Check
