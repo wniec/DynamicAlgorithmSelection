@@ -85,11 +85,17 @@ class Agent(Optimizer):
         update=True,
     ):
         if x_history is not None and y_history is not None:
+            # with too short history of x, ELA does not cal;culate all features properly
             _, indices = np.unique(x_history, axis=0, return_index=True)
             indices = np.sort(indices)
             x_history = x_history[indices]
             y_history = y_history[indices]
-            landscape_state = ela_state_representation(x_history, y_history)
+            if len(x_history) < 50:
+                landscape_state = np.zeros(
+                    43,
+                )
+            else:
+                landscape_state = ela_state_representation(x_history, y_history)
         else:
             landscape_state = np.zeros(
                 43,
@@ -193,8 +199,13 @@ class Agent(Optimizer):
             return
 
         total_choices = len(self.choices_history) or 1
+        action_names = [f"{a.__name__}" for a in self.actions]
+        unique_action_names = len(action_names) == len(set(action_names))
         choices_count = {
-            self.actions[j].__name__: sum(1 for i in self.choices_history if i == j)
+            f"{self.actions[j].__name__}"
+            + (f"_{j}" if not unique_action_names else ""): sum(
+                1 for i in self.choices_history if i == j
+            )
             / total_choices
             for j in range(len(self.actions))
         }
@@ -205,9 +216,9 @@ class Agent(Optimizer):
         )
 
         checkpoint_choices = {
-            f"{action.__name__}_checkpoint{i}": (
-                1 if self.choices_history[i] == action_id else 0
-            )
+            f"{action.__name__}"
+            + (f"_{action_id}" if not unique_action_names else "")
+            + f"_checkpoint{i}": (1 if self.choices_history[i] == action_id else 0)
             for i, (action_id, action) in product(
                 range(len(self.choices_history)), enumerate(self.actions)
             )
