@@ -51,7 +51,6 @@ class JDE21(DE):
             )
         else:
             self.n_individuals = x.shape[0]
-            self.sNP = min(10, max(1, self.n_individuals // 4))
             self.bNP = self.n_individuals - self.sNP
         if y is None:
             y = np.array(
@@ -76,7 +75,6 @@ class JDE21(DE):
         actual_size = len(y)
         if actual_size != self.n_individuals:
             self.n_individuals = actual_size
-            self.sNP = min(10, max(1, actual_size // 4))
             self.bNP = self.n_individuals - self.sNP
 
             if len(self.F) != actual_size:
@@ -193,7 +191,7 @@ class JDE21(DE):
 
             # Crowding & Selection
             if is_big:
-                dists = np.sum((x[: self.bNP] - u) ** 2, axis=1)
+                dists = np.sum((x_snapshot[: self.bNP] - u) ** 2, axis=1)
                 target = np.argmin(dists)
             else:
                 target = i
