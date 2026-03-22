@@ -44,6 +44,10 @@ def ela_state_representation(x, y):
             x_norm = x_norm[is_unique].reset_index(drop=True)
             y_norm = y_norm[is_unique].reset_index(drop=True)
 
+        if len(x_norm) < 50 or np.var(y_norm) < 1e-8:
+            #  safeguard for degenerate case when population collapsed
+            return np.zeros(43, dtype=np.float32)
+
         meta_feats = calculate_ela_meta(x_norm, y_norm)
         ela_distr = (
             calculate_ela_distribution(x_norm, y_norm)
