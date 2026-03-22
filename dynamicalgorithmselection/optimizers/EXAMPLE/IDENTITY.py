@@ -18,10 +18,11 @@ class IDENTITY(Optimizer):
             x = self.rng_initialization.uniform(
                 self.initial_lower_boundary,
                 self.initial_upper_boundary,
+                size=(1, self.ndim_problem),
             )
 
         while not self._check_terminations():
-            self._evaluate_fitness(x)
+            self._evaluate_fitness(x[0])
 
         return self._collect(fitness)
 
