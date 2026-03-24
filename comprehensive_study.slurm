@@ -31,7 +31,7 @@ if [[ $SLURM_ARRAY_TASK_ID -ge 0 && $SLURM_ARRAY_TASK_ID -le 3 ]]; then
     echo "Running Mode: $MODE | Agent: RL-DAS | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RLDAS_${MODE}_DIM${DIM}_SEED${SEED} \
-      -p "${PORTFOLIO[@]}"  --mode $MODE --dimensionality $DIM --n_epochs 40 --agent RL-DAS -S "$SEED"
+      -p "${PORTFOLIO[@]}"  --mode $MODE --dimensionality $DIM --n_epochs 30 --agent RL-DAS -S "$SEED"
 
 # 3. Dimension-specific CV-LOPO | RL-DAS (Indices 4-7)
 elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
@@ -40,7 +40,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -ge 4 && $SLURM_ARRAY_TASK_ID -le 7 ]]; then
     echo "Running Mode: $MODE | Agent: RL-DAS | Dimension: $DIM"
 
     python3 dynamicalgorithmselection/main.py JDE21_MADDE_NL_SHADE_RSP_RLDAS_${MODE}_DIM${DIM}_SEED${SEED} \
-      -p "${PORTFOLIO[@]}"  --mode $MODE --dimensionality $DIM --n_epochs 40 --agent RL-DAS -S "$SEED"
+      -p "${PORTFOLIO[@]}"  --mode $MODE --dimensionality $DIM --n_epochs 30 --agent RL-DAS -S "$SEED"
 
 # 5. Dimension-specific RL-DAS-random (Indices 8-11)
 elif [[ $SLURM_ARRAY_TASK_ID -ge 8 && $SLURM_ARRAY_TASK_ID -le 11 ]]; then
