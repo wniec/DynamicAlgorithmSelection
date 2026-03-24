@@ -14,25 +14,28 @@ from dynamicalgorithmselection.analysis.metrics import (
     extract_metric,
     parse_ert_from_html,
 )
+from dynamicalgorithmselection.analysis.plotting import plot_cdb_impact
 from dynamicalgorithmselection.analysis.preprocessing import (
     aggregate_over_seeds,
     split_ert_by_dimension,
     split_results_by_dimension,
 )
 
-DATA_DIR = Path("results_cleaned")
+DATA_DIR = Path(".")
 DIMS = (2, 3, 5, 10)
 EXTRA_BASELINES = [
     f"BASELINES_baselines_{name}" for name in ("MADDE", "JDE21", "NL_SHADE_RSP")
 ]
 
 
-def run_results_pipeline() -> None:
+def run_results_pipeline(
+    portfolio: str = "G3PCX_LMCMAES_SPSO",
+) -> None:
     print("=" * 60)
     print("RESULTS PIPELINE")
     print("=" * 60)
-
-    results = load_experiment_results(DATA_DIR / "results")
+    results_dir = DATA_DIR / "results"
+    results = load_experiment_results(results_dir)
     print(f"Loaded {len(results)} experiments")
 
     auoc = extract_metric(results, "area_under_optimization_curve")
@@ -63,6 +66,9 @@ def run_results_pipeline() -> None:
         means = datasets[dim]["final_fitness_LOIO"].mean(axis=1).sort_values()
         for name, val in means.head(5).items():
             print(f"    {val:12.6f}  {name}")
+
+    # --- CDB impact plots for the selected portfolio ---
+    plot_cdb_impact(datasets, portfolio, dims=DIMS)
 
 
 def run_ert_pipeline() -> None:
@@ -98,5 +104,15 @@ def run_ert_pipeline() -> None:
 
 
 if __name__ == "__main__":
-    run_results_pipeline()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Analysis pipelines")
+    parser.add_argument(
+        "--portfolio",
+        default="G3PCX_LMCMAES_SPSO",
+        help="Portfolio name to analyse CDB impact for (default: G3PCX_LMCMAES_SPSO)",
+    )
+    args = parser.parse_args()
+
+    run_results_pipeline(portfolio=args.portfolio)
     run_ert_pipeline()

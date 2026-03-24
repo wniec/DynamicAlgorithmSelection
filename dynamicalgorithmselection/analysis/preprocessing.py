@@ -42,7 +42,7 @@ def extract_seed_info(
 
 def aggregate_over_seeds(
     df: pd.DataFrame,
-    max_seed: int = 99,
+    max_seed: int = 9999,
 ) -> pd.DataFrame:
     """Group experiments by base name (ignoring seed suffix) and average.
 
@@ -135,6 +135,20 @@ def split_results_by_dimension(
                 datasets[dim][key] = df[~df.index.str.contains(exclude_str, na=False)]
 
     return datasets
+
+
+def extract_cdb(experiment_name: str) -> float | None:
+    """Extract CDB value from an experiment name.
+
+    Handles both ``CDB1.5`` and bare ``_1.5_`` formats.
+    """
+    m = re.search(r"CDB([\d.]+)", experiment_name)
+    if m:
+        return float(m.group(1))
+    m = re.search(r"_CV-(?:LOIO|LOPO)_([\d.]+)_DIM", experiment_name)
+    if m:
+        return float(m.group(1))
+    return None
 
 
 def split_ert_by_dimension(
