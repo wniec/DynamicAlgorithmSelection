@@ -1,5 +1,6 @@
 """Run both analysis pipelines on results_cleaned/ and print summaries."""
 
+import argparse
 import re
 from pathlib import Path
 
@@ -104,8 +105,6 @@ def run_ert_pipeline() -> None:
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Analysis pipelines")
     parser.add_argument(
         "--portfolio",
