@@ -13,7 +13,7 @@
 SEED=${1:-42}
 CDB_VAL=${2:-1.5}
 
-PORTFOLIO=('G3PCX' 'LMCMAES' 'SPSOL')
+PORTFOLIO=('G3PCX' 'LMCMAES' 'SPSO')
 PORTFOLIO_STR=$(IFS="_"; echo "${PORTFOLIO[*]}")
 
 # CONFIGURATION
@@ -58,19 +58,19 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 9 ]]; then
     MODE="CV-LOPO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL}_SEED${SEED} \
-      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient -S $SEED
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient --dimensionality 2 3 5 10 -S $SEED
 
 # 5. Multidimensional CV-LODO (Index 10)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 10 ]]; then
     MODE="CV-LODO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL}_SEED${SEED} \
-      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient -S $SEED
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient --dimensionality 2 3 5 10 -S $SEED
 
 # 6. Global Random Agent (Index 11)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 11 ]]; then
     echo "Running Mode: Global Random Agent"
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_${CDB_VAL}_SEED${SEED} \
-      -p "${PORTFOLIO[@]}" --cdb $CDB_VAL --agent random -S "$SEED"
+      -p "${PORTFOLIO[@]}" --cdb $CDB_VAL --agent random --dimensionality 2 3 5 10 -S "$SEED"
 
 fi
