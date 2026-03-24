@@ -25,12 +25,13 @@ from dynamicalgorithmselection.analysis.preprocessing import (
 DATA_DIR = Path(".")
 DIMS = (2, 3, 5, 10)
 EXTRA_BASELINES = [
-    f"BASELINES_baselines_{name}" for name in ("MADDE", "JDE21", "NL_SHADE_RSP")
+    f"BASELINES_baselines_{name}"
+    for name in ("MADDE", "JDE21", "NL_SHADE_RSP", "best", "worst")
 ]
 
 
 def run_results_pipeline(
-    portfolio: str = "G3PCX_LMCMAES_SPSO",
+    portfolio: str = "G3PCX_LMCMAES_SPSO_",
 ) -> None:
     print("=" * 60)
     print("RESULTS PIPELINE")
@@ -68,6 +69,7 @@ def run_results_pipeline(
         for name, val in means.head(5).items():
             print(f"    {val:12.6f}  {name}")
 
+    # print(datasets)
     # --- CDB impact plots for the selected portfolio ---
     plot_cdb_impact(datasets, portfolio, dims=DIMS)
 
@@ -108,10 +110,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analysis pipelines")
     parser.add_argument(
         "--portfolio",
-        default="G3PCX_LMCMAES_SPSO",
+        default="G3PCX_LMCMAES_SPSOL",
         help="Portfolio name to analyse CDB impact for (default: G3PCX_LMCMAES_SPSO)",
     )
     args = parser.parse_args()
 
-    run_results_pipeline(portfolio=args.portfolio)
+    run_results_pipeline(portfolio=args.portfolio + "_")
     run_ert_pipeline()

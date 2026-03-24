@@ -19,7 +19,7 @@ def plot_cdb_impact(
     different colours.
     """
     dim_colors = {2: "tab:blue", 3: "tab:orange", 5: "tab:green", 10: "tab:red"}
-
+    NON_COMPARED = ["RANDOM", "MULTIDIMENSIONAL"]
     for cv_mode in ("LOIO", "LOPO"):
         fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -28,9 +28,7 @@ def plot_cdb_impact(
             matching = [
                 name
                 for name in df.index
-                if portfolio in name
-                and "RANDOM" not in name
-                and "MULTIDIMENSIONAL" not in name
+                if portfolio in name and all(i not in name for i in NON_COMPARED)
             ]
             if not matching:
                 continue
