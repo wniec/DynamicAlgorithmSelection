@@ -26,7 +26,11 @@ def plot_cdb_impact(
         for dim in dims:
             df = datasets[dim][f"auoc_{cv_mode}"]
             matching = [
-                name for name in df.index if portfolio in name and "RANDOM" not in name
+                name
+                for name in df.index
+                if portfolio in name
+                and "RANDOM" not in name
+                and "MULTIDIMENSIONAL" not in name
             ]
             if not matching:
                 continue
