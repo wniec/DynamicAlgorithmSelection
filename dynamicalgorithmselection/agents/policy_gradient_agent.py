@@ -40,7 +40,6 @@ class PolicyGradientAgent(Agent):
 
         self._load_parameters(options)
 
-        self.mean_rewards = options.get("mean_rewards", [])
         self.best_50_mean = float("inf")
 
         self.target_kl = 0.03
