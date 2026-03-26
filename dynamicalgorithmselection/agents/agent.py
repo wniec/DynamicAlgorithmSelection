@@ -1,6 +1,7 @@
 from itertools import product
 from typing import List, Type, Optional, Dict, Any, Tuple
 import numpy as np
+from wandb import Run
 
 from dynamicalgorithmselection.agents.agent_reward import AgentReward
 from dynamicalgorithmselection.agents.agent_state import (
@@ -40,7 +41,7 @@ class Agent(Optimizer):
         self.cdb = options.get("cdb")
         self.train_mode = options.get("train_mode", True)
         self.n_checkpoints = options["n_checkpoints"]
-        self.run = options.get("run", None)
+        self.run: Optional[Run] = options.get("run", None)
 
         self.checkpoints = get_checkpoints(
             self.n_checkpoints,
@@ -60,6 +61,7 @@ class Agent(Optimizer):
         )
         self.initial_value_range: Tuple[Optional[float], Optional[float]] = (None, None)
         self.reward_method = AgentReward(self.options.get("reward_option", 1))
+        self.mean_rewards = options.get("mean_rewards", [])
 
     def get_optimization_state(
         self,

@@ -40,7 +40,6 @@ class RLDASAgent(Agent):
             name: {} for name in self.alg_names
         }
         self.context_memory["Common"] = {}
-        self.mean_rewards = options.get("mean_rewards", [])
         self.best_50_mean = float("inf")
         self.schedule_interval = options.get(
             "schedule_interval", int(self.max_function_evaluations / 10)
@@ -312,7 +311,10 @@ class RLDASAgent(Agent):
 
     def _collect(self, fitness, y=None):
         results, _ = super()._collect(fitness, y)
-        self.mean_rewards.append(sum(self.rewards) / len(self.rewards))
+        mean_reward = sum(self.rewards) / len(self.rewards)
+        self.mean_rewards.append(mean_reward)
+        if self.run is not None:
+            self.run.log({"mean_reward": mean_reward})
         agent_state = {
             "network_parameters": self.network.state_dict(),
             "optimizer": self.optimizer.state_dict(),

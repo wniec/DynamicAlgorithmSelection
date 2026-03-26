@@ -4,7 +4,7 @@ import torch.nn.init as init
 import numpy as np
 
 GAMMA = 0.8
-HIDDEN_SIZE = 144
+HIDDEN_SIZE = 96
 LAMBDA = 0.5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -89,14 +89,12 @@ class Actor(nn.Module):
             layer_init(nn.Linear(input_size, HIDDEN_SIZE)),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Dropout(p=dropout_p),
         )
 
         self.head = nn.Sequential(
             layer_init(nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Dropout(p=dropout_p),
             layer_init(nn.Linear(HIDDEN_SIZE, n_actions), std=0.0),
             nn.Softmax(dim=-1),
         )
@@ -115,14 +113,12 @@ class Critic(nn.Module):
             layer_init(nn.Linear(input_size, HIDDEN_SIZE)),  # std=sqrt(2)
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Dropout(p=dropout_p),
         )
 
         self.head = nn.Sequential(
             layer_init(nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)),
             nn.LayerNorm(HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Dropout(p=dropout_p),
             layer_init(nn.Linear(HIDDEN_SIZE, 1), std=1.0),
         )
 
