@@ -94,20 +94,19 @@ def dump_stats(
     problem_instance,
     max_function_evaluations,
 ):
+    os.makedirs("results", exist_ok=True)
     with open(
-        os.path.join(
-            "results",
-            f"{name}",
-            f"{problem_instance}.json",
-        ),
-        "w",
+        os.path.join("results", f"{name}.jsonl"),
+        "a",
     ) as f:
-        json.dump(
-            {
-                problem_instance: get_runtime_stats(
-                    results["fitness_history"],
-                    max_function_evaluations,
-                )
-            },
-            f,
+        f.write(
+            json.dumps(
+                {
+                    problem_instance: get_runtime_stats(
+                        results["fitness_history"],
+                        max_function_evaluations,
+                    )
+                }
+            )
+            + "\n"
         )

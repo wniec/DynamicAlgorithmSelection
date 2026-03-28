@@ -5,10 +5,11 @@ from pathlib import Path
 def load_experiment_results(
     results_dir: str | Path,
 ) -> dict[str, dict[str, dict[str, float]]]:
-    """Load JSON result files from the results directory.
+    """Load JSONL result files from the results directory.
 
-    Each experiment subdirectory contains per-problem JSON files with metrics
-    like ``area_under_optimization_curve`` and ``final_fitness``.
+    Each ``.jsonl`` file contains one JSON object per line, keyed by problem
+    instance, with metrics like ``area_under_optimization_curve`` and
+    ``final_fitness``.
 
     Args:
         results_dir: Path to the results directory (e.g. ``results_cleaned/results``).
@@ -19,18 +20,19 @@ def load_experiment_results(
     results_dir = Path(results_dir)
     results: dict[str, dict[str, dict[str, float]]] = {}
 
-    for experiment in sorted(results_dir.iterdir()):
-        if not experiment.is_dir():
+    for result_file in sorted(results_dir.iterdir()):
+        if result_file.suffix != ".jsonl":
             continue
         experiment_data: dict[str, dict[str, float]] = {}
-        for result_file in sorted(experiment.iterdir()):
-            if not result_file.suffix == ".json":
-                continue
-            with open(result_file, encoding="utf-8") as f:
-                run_results: dict[str, dict[str, float]] = json.load(f)
-            for key, val in run_results.items():
-                experiment_data[key] = val
-        results[experiment.name] = experiment_data
+        with open(result_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                run_results: dict[str, dict[str, float]] = json.loads(line)
+                for key, val in run_results.items():
+                    experiment_data[key] = val
+        results[result_file.stem] = experiment_data
 
     return results
 
