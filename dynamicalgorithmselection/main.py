@@ -183,6 +183,20 @@ def print_info(args):
     print("Rewarding option: ", args.reward_option)
 
 
+def postprocess_and_clean(experiment_name: str):
+    exdata_path = os.path.join("exdata", experiment_name)
+    cocopp.main(exdata_path)
+    for experiment_dir in os.listdir("ppdata"):
+        if experiment_dir.startswith(experiment_name) and os.path.isdir(
+            os.path.join("ppdata", experiment_dir)
+        ):
+            shutil.move(
+                os.path.join("ppdata", experiment_dir, "pptable.html"),
+                os.path.join("ppdata", f"{experiment_name}.html"),
+            )
+            shutil.rmtree(os.path.join("ppdata", experiment_dir), ignore_errors=True)
+
+
 def common_options(args) -> Dict[str, Any]:
     options = {
         "n_checkpoints": args.n_checkpoints,
@@ -220,7 +234,7 @@ def test(args, action_space):
         agent=args.agent,
         mode=args.mode,
     )
-    cocopp.main(os.path.join("exdata", f"DAS_{args.name}"))
+    postprocess_and_clean(f"DAS_{args.name}")
 
 
 def run_training(args, action_space):
@@ -271,7 +285,7 @@ def run_CV(args, action_space):
         agent=args.agent,
         mode=args.mode,
     )
-    cocopp.main(os.path.join("exdata", f"DAS_CV_{args.name}"))
+    postprocess_and_clean(f"DAS_CV_{args.name}")
 
 
 def run_baselines(args, action_space):
@@ -296,9 +310,7 @@ def run_baselines(args, action_space):
         agent=None,
     )
     for optimizer in action_space:
-        cocopp.main(
-            os.path.join("exdata", f"{args.name}_baselines_{optimizer.__name__}")
-        )
+        postprocess_and_clean(f"{args.name}_baselines_{optimizer.__name__}")
 
 
 def set_seed(seed):
