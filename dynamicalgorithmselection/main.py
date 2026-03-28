@@ -195,6 +195,7 @@ def postprocess_and_clean(experiment_name: str):
                 os.path.join("ppdata", f"{experiment_name}.html"),
             )
             shutil.rmtree(os.path.join("ppdata", experiment_dir), ignore_errors=True)
+    shutil.rmtree(exdata_path, ignore_errors=True)
 
 
 def common_options(args) -> Dict[str, Any]:

@@ -25,6 +25,11 @@ INSTANCE_IDS = [1, 2, 3, 4, 5, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]
 DIMENSIONS = [2, 3, 5, 10, 20, 40]
 
 
+def load_global_minima(filepath: str = "bbob_optima.jsonl") -> dict[str, float]:
+    with open(filepath, "r", encoding="utf-8") as f:
+        return {k: v for line in f for k, v in json.loads(line).items()}
+
+
 def batched(iterable, n):
     """Batch data into tuples of length n. The last batch may be shorter."""
     if n < 1:
@@ -89,10 +94,7 @@ def get_suite(mode: str, train: bool, dim: List[int]):
 
 
 def dump_stats(
-    results,
-    name,
-    problem_instance,
-    max_function_evaluations,
+    results, name, problem_instance, max_function_evaluations, problem_optimum
 ):
     os.makedirs("results", exist_ok=True)
     with open(
@@ -105,6 +107,7 @@ def dump_stats(
                     problem_instance: get_runtime_stats(
                         results["fitness_history"],
                         max_function_evaluations,
+                        problem_optimum,
                     )
                 }
             )
