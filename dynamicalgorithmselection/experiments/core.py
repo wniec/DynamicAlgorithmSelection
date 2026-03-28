@@ -7,6 +7,7 @@ from tqdm import tqdm
 from dynamicalgorithmselection.experiments.utils import (
     coco_bbob_single_function,
     dump_stats,
+    load_global_minima,
 )
 from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
@@ -19,7 +20,9 @@ def run_testing(
     problem_ids: list[str],
     observer: cocoex.Observer,
 ):
+    global_optima = load_global_minima()
     for problem_id in tqdm(problem_ids, smoothing=0.0):
+        problem_optimum = global_optima[problem_id]
         problem_instance = problems_suite.get_problem(problem_id)
         problem_instance.observe_with(observer)
         max_fe = evaluations_multiplier * problem_instance.dimension
@@ -33,6 +36,7 @@ def run_testing(
             options.get("name"),
             problem_id,
             max_fe,
+            problem_optimum,
         )
 
 

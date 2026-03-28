@@ -8,6 +8,7 @@ from dynamicalgorithmselection.experiments.utils import (
     coco_bbob_single_function,
     get_suite,
     dump_stats,
+    load_global_minima,
 )
 
 import cocoex
@@ -20,12 +21,11 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 def dump_extreme_stats(
-    name: str,
-    stats,
-    problem_instance,
-    max_function_evaluations,
+    name: str, stats, problem_instance, max_function_evaluations, global_optimum
 ):
-    best_case, worst_case = get_extreme_stats(stats, max_function_evaluations)
+    best_case, worst_case = get_extreme_stats(
+        stats, max_function_evaluations, global_optimum
+    )
     os.makedirs("results", exist_ok=True)
     for suffix, case in [("best", best_case), ("worst", worst_case)]:
         with open(os.path.join("results", f"{name}_{suffix}.jsonl"), "a") as f:
@@ -124,7 +124,7 @@ def run_comparison(
     observers = {}
     suites = {}
     results_folders = []
-
+    global_optima = load_global_minima()
     print("Initializing Observers...")
     for optimizer in optimizer_portfolio:
         optimizer_name = optimizer.__name__
@@ -147,6 +147,7 @@ def run_comparison(
     for problem_id in tqdm(problem_ids, desc="Evaluating Problems", smoothing=0.0):
         stats = {}
         max_fe = None
+        problem_optimum = global_optima[problem_id]
 
         for optimizer in optimizer_portfolio:
             optimizer_name = optimizer.__name__
@@ -169,11 +170,9 @@ def run_comparison(
                 result_folder_name,
                 problem_id,
                 max_fe,
+                problem_optimum,
             )
 
         dump_extreme_stats(
-            options.get("name"),
-            stats,
-            problem_id,
-            max_fe,
+            options.get("name"), stats, problem_id, max_fe, problem_optimum
         )
