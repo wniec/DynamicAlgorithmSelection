@@ -91,7 +91,7 @@ class TestExperiment(unittest.TestCase):
         mock_problem.dimension = 2
         mock_suite_obj.get_problem.return_value = mock_problem
 
-        mock_get_suite.return_value = (mock_suite_obj, ["p1"])
+        mock_get_suite.return_value = (mock_suite_obj, ["bbob_f002_i72_d02"])
 
         mock_single_func.return_value = {"fitness_history": [1, 2]}
 
@@ -113,10 +113,10 @@ class TestExperiment(unittest.TestCase):
         mock_get_extreme.return_value = ({"best": 1}, {"worst": 0})
         case_name = "OPT1_OPT2_OPT3"
 
-        dump_extreme_stats(case_name, stats, "p1", 100)
+        dump_extreme_stats(case_name, stats, "bbob_f002_i72_d02", 100, -363.98)
 
         self.assertEqual(mock_file.call_count, 2)
-        self.assertEqual(mock_json_dump.call_count, 2)
+        self.assertEqual(mock_json_dump.call_count, 0)  # We use jsonl now
 
         args_list = mock_file.call_args_list
         self.assertIn(f"{case_name}_best", args_list[0][0][0])

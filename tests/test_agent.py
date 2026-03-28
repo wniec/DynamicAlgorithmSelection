@@ -32,29 +32,19 @@ class TestAgent:
         }
 
     def test_agent_initialization(self, mock_problem, basic_options):
-        with patch(
-            "dynamicalgorithmselection.agents.agent.get_state_representation"
-        ) as mock_get_sr:
-            mock_sr_func = MagicMock(return_value=np.zeros(5))
-            mock_get_sr.return_value = (mock_sr_func, 5)
+        agent = Agent(mock_problem, basic_options)
 
-            agent = Agent(mock_problem, basic_options)
-
-            assert agent.name == "TestAgent"
-            assert len(agent.actions) == 2
-            assert agent.n_checkpoints == 5
+        assert agent.name == "TestAgent"
+        assert len(agent.actions) == 2
+        assert agent.n_checkpoints == 5
 
     def test_get_reward_logic(self, mock_problem, basic_options):
-        with patch(
-            "dynamicalgorithmselection.agents.agent.get_state_representation",
-            return_value=(MagicMock(), 5),
-        ):
-            agent = Agent(mock_problem, basic_options)
-            agent.initial_value_range = (10.0, 20.0)
+        agent = Agent(mock_problem, basic_options)
+        agent.initial_value_range = (10.0, 20.0)
 
-            reward_good = agent.get_reward(new_best_y=15.0, old_best_y=20.0)
-            # 5.0 / 10.0 = 0.5 -> log(0.5)
-            assert np.isclose(reward_good, np.log(0.5 + 1e-5))
+        reward_good = agent.get_reward(new_best_y=15.0, old_best_y=20.0)
+        # 5.0 / 10.0 = 0.5 -> log(0.5)
+        assert np.isclose(reward_good, np.log(0.5 + 1e-5))
 
-            reward_bad = agent.get_reward(new_best_y=25.0, old_best_y=20.0)
-            assert np.isclose(reward_bad, np.log(0.0 + 1e-5))
+        reward_bad = agent.get_reward(new_best_y=25.0, old_best_y=20.0)
+        assert np.isclose(reward_bad, np.log(0.0 + 1e-5))
