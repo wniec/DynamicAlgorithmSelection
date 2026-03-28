@@ -20,7 +20,7 @@ from dynamicalgorithmselection.analysis.preprocessing import (
     split_results_by_dimension,
 )
 
-DATA_DIR = Path("results_cleaned")
+DATA_DIR = Path(".")
 DIMS = (2, 3, 5, 10)
 EXTRA_BASELINES = [
     f"BASELINES_baselines_{name}" for name in ("MADDE", "JDE21", "NL_SHADE_RSP")

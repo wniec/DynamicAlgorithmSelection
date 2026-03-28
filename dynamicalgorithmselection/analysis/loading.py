@@ -53,16 +53,13 @@ def load_ert_htmls(
     ppdata_dir = Path(ppdata_dir)
     htmls: dict[str, str] = {}
 
-    for experiment_dir in sorted(ppdata_dir.iterdir()):
-        if not experiment_dir.is_dir():
+    for experiment_file in sorted(ppdata_dir.iterdir()):
+        if experiment_file.suffix != "html" or experiment_file.stem == "index":
             continue
-        pptable_path = experiment_dir / "pptable.html"
-        if not pptable_path.exists():
-            continue
+        file_path = ppdata_dir / experiment_file
 
-        html_content = pptable_path.read_bytes().decode("iso-8859-1")
-        # Strip timestamp suffix (e.g. "_031107h3301") from directory name
-        experiment_name = "_".join(experiment_dir.name.split("_")[:-1])
+        html_content = file_path.read_bytes().decode("iso-8859-1")
+        experiment_name = experiment_file.name
         htmls[experiment_name] = html_content
 
     return htmls
