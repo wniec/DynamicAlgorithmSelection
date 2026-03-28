@@ -16,7 +16,7 @@ class TestCore(unittest.TestCase):
             "n_epochs": 1,
         }
         self.eval_multiplier = 10
-        self.problem_ids = ["p1", "p2"]
+        self.problem_ids = ["bbob_f002_i72_d02", "bbob_f011_i02_d20"]
 
         # Mock the Suite and Problem
         self.suite_mock = MagicMock()
