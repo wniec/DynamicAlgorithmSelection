@@ -26,30 +26,10 @@ def dump_extreme_stats(
     max_function_evaluations,
 ):
     best_case, worst_case = get_extreme_stats(stats, max_function_evaluations)
-    with open(
-        os.path.join(
-            "results",
-            f"{name}_best",
-            f"{problem_instance}.json",
-        ),
-        "w",
-    ) as f:
-        json.dump(
-            {problem_instance: best_case},
-            f,
-        )
-    with open(
-        os.path.join(
-            "results",
-            f"{name}_worst",
-            f"{problem_instance}.json",
-        ),
-        "w",
-    ) as f:
-        json.dump(
-            {problem_instance: worst_case},
-            f,
-        )
+    os.makedirs("results", exist_ok=True)
+    for suffix, case in [("best", best_case), ("worst", worst_case)]:
+        with open(os.path.join("results", f"{name}_{suffix}.jsonl"), "a") as f:
+            f.write(json.dumps({problem_instance: case}) + "\n")
 
 
 def coco_bbob_experiment(
@@ -89,9 +69,6 @@ def _coco_bbob_policy_gradient_train(
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(mode, True, options.get("dimensionality"))
     options["n_problems"] = len(problem_ids)
@@ -106,9 +83,6 @@ def _coco_bbob_test(
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(mode, False, options.get("dimensionality"))
     options["n_problems"] = len(problem_ids)
@@ -125,9 +99,6 @@ def _coco_bbob_test(
 
 
 def _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(
         "baselines", False, options.get("dimensionality")
@@ -159,9 +130,6 @@ def run_comparison(
         optimizer_name = optimizer.__name__
         case_name = f"{options['name']}_{optimizer_name}"
 
-        results_dir = os.path.join("results", case_name)
-        os.makedirs(results_dir, exist_ok=True)
-
         observer = cocoex.Observer("bbob", "result_folder: " + case_name)
         observers[optimizer_name] = observer
         results_folders.append("exdata/" + case_name)  # Adjust path if needed
@@ -169,10 +137,6 @@ def run_comparison(
         suites[optimizer_name] = get_suite("all", False, options.get("dimensionality"))[
             0
         ]
-
-    # Create directories for best/worst JSON stats
-    for ext in ["best", "worst"]:
-        os.makedirs(os.path.join("results", f"{options['name']}_{ext}"), exist_ok=True)
 
     cocoex.utilities.MiniPrint()
 
