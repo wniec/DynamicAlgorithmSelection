@@ -1,3 +1,5 @@
+import json
+import os
 from itertools import product
 from typing import List, Type, Optional, Dict, Any, Tuple
 import numpy as np
@@ -21,6 +23,7 @@ from dynamicalgorithmselection.optimizers.RestartOptimizer import restart_optimi
 class Agent(Optimizer):
     def __init__(self, problem, options):
         Optimizer.__init__(self, problem, options)
+        self.state_history = []
         self.rewards = []
         self.choices_history = []
         self.stagnation_count = 0
@@ -87,24 +90,25 @@ class Agent(Optimizer):
         update=True,
     ):
         if x_history is not None and y_history is not None:
-            # with too short history of x, ELA does not cal;culate all features properly
+            # with too short history of x, ELA does not calculate all features properly
             _, indices = np.unique(x_history, axis=0, return_index=True)
             indices = np.sort(indices)
             x_history = x_history[indices]
             y_history = y_history[indices]
             if len(x_history) < 50:
                 landscape_state = np.zeros(
-                    43,
+                    22,
                 )
             else:
                 landscape_state = ela_state_representation(x_history, y_history)
         else:
             landscape_state = np.zeros(
-                43,
+                22,
             )
 
         optimization_state = self.get_optimization_state()
         state = np.concatenate((landscape_state, optimization_state))
+        self.state_history.append(landscape_state[:])
         state = np.append(
             state,
             (
@@ -197,6 +201,8 @@ class Agent(Optimizer):
 
     def _log_run_metrics(self):
         """Handles logging of choices and checkpoints to external logger (e.g. wandb)."""
+        if not self.train_mode:
+            self.save_test_behaviour()
         if not self.run:
             return
 
@@ -248,3 +254,16 @@ class Agent(Optimizer):
         return self.reward_method(
             new_best_y, old_best_y, self.initial_value_range, is_final_checkpoint
         )
+
+    def save_test_behaviour(self):
+        os.makedirs("behaviour", exist_ok=True)
+        action_names = [f"{a.__name__}" for a in self.actions]
+        checkpoint_choices = [action_names[choice] for choice in self.choices_history]
+        with open(
+            os.path.join("behaviour", f"{self.name}.jsonl"),
+            "a",
+        ) as f:
+            f.write(
+                json.dumps({self.problem["fitness_function"].id: checkpoint_choices})
+                + "\n"
+            )
