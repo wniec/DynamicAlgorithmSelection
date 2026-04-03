@@ -192,7 +192,7 @@ class CMAES(ES):
             self._w >= 0,
             1.0,
             self.ndim_problem
-            / (np.square(np.linalg.norm(cm_minus_half @ d.T, axis=0)) + 1e-8),
+            / (np.square(np.linalg.norm(cm_minus_half @ d[order].T, axis=0)) + 1e-8),
         )
         cm = (
             1.0
