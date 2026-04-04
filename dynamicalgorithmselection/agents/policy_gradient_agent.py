@@ -1,3 +1,4 @@
+import json
 import os
 import numpy as np
 import torch
@@ -243,6 +244,17 @@ class PolicyGradientAgent(Agent):
         log_prob = torch.log(policy[0, action] + 1e-12).detach()
 
         return action, log_prob, value
+
+    def save_test_behaviour(self):
+        super().save_test_behaviour()
+        os.makedirs("diversity", exist_ok=True)
+        # disp.ratio_median_25 is treated as diversity
+        diversity = [float(i[12]) for i in self.state_history]
+        with open(
+            os.path.join("diversity", f"{self.name}.jsonl"),
+            "a",
+        ) as f:
+            f.write(json.dumps({self.problem["fitness_function"].id: diversity}) + "\n")
 
     def _execute_action(self, action_idx, iteration_result):
         """Instantiates and runs the selected optimizer."""
