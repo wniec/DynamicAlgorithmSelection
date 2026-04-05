@@ -208,9 +208,7 @@ class CMAES(ES):
         cm = (cm + np.transpose(cm)) / 2.0  # to ensure symmetry of covariance matrix
         # return eigenvalues and eigenvectors of a symmetric matrix
         e_va, e_ve = np.linalg.eigh(cm)  # e_va -> eigenvalues, e_ve -> eigenvectors
-        e_va = np.sqrt(
-            np.where(e_va < 0.0, 1e-8, e_va)
-        )  # to avoid negative eigenvalues
+        e_va = np.sqrt(np.maximum(e_va, 1e-20))  # to avoid zero/negative eigenvalues causing 1/e_va = inf
         # e_va: squared root of eigenvalues -> interpreted as individual step-sizes and its diagonal entries are
         #       standard deviations of different components (from Nikolaus Hansen, 2023)
         cm = (
