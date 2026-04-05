@@ -5,10 +5,11 @@ from pathlib import Path
 def load_experiment_results(
     results_dir: str | Path,
 ) -> dict[str, dict[str, dict[str, float]]]:
-    """Load JSON result files from the results directory.
+    """Load JSONL result files from the results directory.
 
-    Each experiment subdirectory contains per-problem JSON files with metrics
-    like ``area_under_optimization_curve`` and ``final_fitness``.
+    Each ``.jsonl`` file contains one JSON object per line, keyed by problem
+    instance, with metrics like ``area_under_optimization_curve`` and
+    ``final_fitness``.
 
     Args:
         results_dir: Path to the results directory (e.g. ``results_cleaned/results``).
@@ -19,18 +20,19 @@ def load_experiment_results(
     results_dir = Path(results_dir)
     results: dict[str, dict[str, dict[str, float]]] = {}
 
-    for experiment in sorted(results_dir.iterdir()):
-        if not experiment.is_dir():
+    for result_file in sorted(results_dir.iterdir()):
+        if result_file.suffix != ".jsonl":
             continue
         experiment_data: dict[str, dict[str, float]] = {}
-        for result_file in sorted(experiment.iterdir()):
-            if not result_file.suffix == ".json":
-                continue
-            with open(result_file, encoding="utf-8") as f:
-                run_results: dict[str, dict[str, float]] = json.load(f)
-            for key, val in run_results.items():
-                experiment_data[key] = val
-        results[experiment.name] = experiment_data
+        with open(result_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                run_results: dict[str, dict[str, float]] = json.loads(line)
+                for key, val in run_results.items():
+                    experiment_data[key] = val
+        results[result_file.stem] = experiment_data
 
     return results
 
@@ -53,16 +55,13 @@ def load_ert_htmls(
     ppdata_dir = Path(ppdata_dir)
     htmls: dict[str, str] = {}
 
-    for experiment_dir in sorted(ppdata_dir.iterdir()):
-        if not experiment_dir.is_dir():
+    for experiment_file in sorted(ppdata_dir.iterdir()):
+        if experiment_file.suffix != "html" or experiment_file.stem == "index":
             continue
-        pptable_path = experiment_dir / "pptable.html"
-        if not pptable_path.exists():
-            continue
+        file_path = ppdata_dir / experiment_file
 
-        html_content = pptable_path.read_bytes().decode("iso-8859-1")
-        # Strip timestamp suffix (e.g. "_031107h3301") from directory name
-        experiment_name = "_".join(experiment_dir.name.split("_")[:-1])
+        html_content = file_path.read_bytes().decode("iso-8859-1")
+        experiment_name = experiment_file.name
         htmls[experiment_name] = html_content
 
     return htmls

@@ -43,19 +43,14 @@ class TestCrossValidation(unittest.TestCase):
     @patch("dynamicalgorithmselection.experiments.cross_validation.run_training")
     @patch("dynamicalgorithmselection.experiments.cross_validation._get_cv_folds")
     @patch("dynamicalgorithmselection.experiments.cross_validation.cocoex.Observer")
-    @patch("dynamicalgorithmselection.experiments.cross_validation.os.path.exists")
-    @patch("dynamicalgorithmselection.experiments.cross_validation.os.mkdir")
     def test_run_cross_validation_flow(
         self,
-        mock_mkdir,
-        mock_exists,
         mock_observer,
         mock_get_folds,
         mock_run_training,
         mock_run_testing,
     ):
         # Setup mocks
-        mock_exists.return_value = False  # Force directory creation
         mock_suite = MagicMock()
 
         # Create fake folds: 2 folds, simple IDs
@@ -73,9 +68,6 @@ class TestCrossValidation(unittest.TestCase):
         res_folder = run_cross_validation(
             self.optimizer_mock, self.options, self.eval_mult, leaving_mode="LOIO"
         )
-
-        # Assertions
-        mock_mkdir.assert_called_with(os.path.join("results", "test_cv_opt"))
 
         # Check if training and testing were called for each fold
         self.assertEqual(mock_run_training.call_count, 2)

@@ -13,8 +13,33 @@ from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
 
-BASE_STATE_SIZE = 48
+BASE_STATE_SIZE = 27
 MAX_CONSIDERED_POPSIZE = 2500
+
+ELA_FEATURES = [
+    "ela_meta.lin_simple.coef.min",
+    "ela_meta.lin_simple.coef.max",
+    "ela_meta.lin_simple.coef.max_by_min",
+    "ela_meta.lin_w_interact.adj_r2",
+    "ela_meta.quad_simple.adj_r2",
+    "ela_meta.quad_simple.cond",
+    "ela_meta.quad_w_interact.adj_r2",
+    "nbc.nn_nb.mean_ratio",
+    "nbc.nn_nb.cor",
+    "nbc.dist_ratio.coeff_var",
+    "nbc.nb_fitness.cor",
+    "disp.ratio_mean_02",
+    "disp.ratio_median_25",
+    "disp.diff_mean_25",
+    "disp.diff_median_02",
+    "ic.h_max",
+    "ic.eps_s",
+    "ic.eps_max",
+    "ic.m0",
+    "ela_distr.skewness",
+    "ela_distr.kurtosis",
+    "ela_distr.number_of_peaks",
+]
 
 
 def ela_state_representation(x, y):
@@ -46,13 +71,20 @@ def ela_state_representation(x, y):
 
         if len(x_norm) < 50 or np.var(y_norm) < 1e-8:
             #  safeguard for degenerate case when population collapsed
-            return np.zeros(43, dtype=np.float32)
+            return np.zeros(22, dtype=np.float32)
 
         meta_feats = calculate_ela_meta(x_norm, y_norm)
         ela_distr = (
             calculate_ela_distribution(x_norm, y_norm)
             if ((y**2).sum() > 0 and np.var(y_norm) > 1e-8)
-            else {str(i): 0 for i in range(4)}
+            else {
+                i: 0.0
+                for i in (
+                    "ela_distr.skewness",
+                    "ela_distr.kurtosis",
+                    "ela_distr.number_of_peaks",
+                )
+            }
         )
         nbc_feats = calculate_nbc(x_norm, y_norm)
         disp_feats = calculate_dispersion(x_norm, y_norm)
@@ -66,7 +98,7 @@ def ela_state_representation(x, y):
             **ic_feats,
             **ela_distr,
         }
-        return np.array(list(all_features.values()), dtype=np.float32)
+        return np.array([all_features[i] for i in ELA_FEATURES], dtype=np.float32)
 
 
 class AgentState:

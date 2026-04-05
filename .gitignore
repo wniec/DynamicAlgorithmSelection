@@ -8,3 +8,6 @@ venv/
 /.venv/
 /models/
 /results/
+/logs/
+/behaviour/
+/diversity/

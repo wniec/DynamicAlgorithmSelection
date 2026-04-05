@@ -1,4 +1,3 @@
-import os
 from itertools import product
 from typing import Literal, Type, List
 
@@ -22,9 +21,6 @@ def run_cross_validation(
     evaluations_multiplier: int = 1_000,
     leaving_mode: Literal["LOIO", "LOPO", "LODO"] = "LOIO",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, cv_folds = _get_cv_folds(
         FOLDS_NUMBER, leaving_mode, options.get("dimensionality")
