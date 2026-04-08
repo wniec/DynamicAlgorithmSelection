@@ -232,6 +232,7 @@ class PolicyGradientAgent(Agent):
             probs = policy.cpu().numpy().squeeze(0)
         else:
             probs = np.ones_like(self.actions, dtype=float) / len(self.actions)
+        self.probabilities.append(probs.tolist())
 
         probs = np.nan_to_num(probs, nan=1.0, posinf=1.0, neginf=1.0)
         probs /= probs.sum()

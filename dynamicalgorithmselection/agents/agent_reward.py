@@ -26,7 +26,7 @@ class AgentReward:
         is_final_checkpoint: bool = False,
     ):
         if old_best_y == float("inf"):
-            return 0.0
+            return np.log(initial_value_range[1] - initial_value_range[0])
 
         improvement = old_best_y - new_best_y
 
@@ -41,7 +41,7 @@ class AgentReward:
         is_final_checkpoint: bool = False,
     ):
         if old_best_y == float("inf"):
-            return 0.0
+            return np.log(initial_value_range[1] - initial_value_range[0])
 
         improvement = old_best_y - new_best_y
 
@@ -56,7 +56,7 @@ class AgentReward:
         is_final_checkpoint: bool = False,
     ):
         if old_best_y == float("inf") or not is_final_checkpoint:
-            return 0.0
+            return np.log(initial_value_range[1] - initial_value_range[0])
 
         improvement = initial_value_range[0] - new_best_y
         scale = initial_value_range[1] - initial_value_range[0]
@@ -71,7 +71,7 @@ class AgentReward:
         is_final_checkpoint: bool = False,
     ):
         if old_best_y == float("inf"):
-            return 0.0
+            return np.log(initial_value_range[1] - initial_value_range[0])
 
         improvement = old_best_y - new_best_y
 

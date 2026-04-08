@@ -65,6 +65,7 @@ class Agent(Optimizer):
         self.initial_value_range: Tuple[Optional[float], Optional[float]] = (None, None)
         self.reward_method = AgentReward(self.options.get("reward_option", 1))
         self.mean_rewards = options.get("mean_rewards", [])
+        self.probabilities = []
 
     def get_optimization_state(
         self,
@@ -264,6 +265,13 @@ class Agent(Optimizer):
             "a",
         ) as f:
             f.write(
-                json.dumps({self.problem["fitness_function"].id: checkpoint_choices})
+                json.dumps(
+                    {
+                        self.problem["fitness_function"].id: [
+                            checkpoint_choices,
+                            self.probabilities,
+                        ]
+                    }
+                )
                 + "\n"
             )

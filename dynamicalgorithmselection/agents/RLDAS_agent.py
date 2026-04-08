@@ -146,6 +146,7 @@ class RLDASAgent(Agent):
             action = dist.sample()
             log_prob = dist.log_prob(action)
             probs = probs.detach().cpu().numpy()[0]
+            self.probabilities.append(probs.tolist())
 
             if self.run is not None:
                 entropy = -np.sum(probs * np.log(probs + 1e-12)) / np.log(len(probs))
