@@ -11,6 +11,7 @@ from dynamicalgorithmselection.agents.agent_state import (
     ela_state_representation,
     BASE_STATE_SIZE,
     AgentState,
+    LANDSCAPE_STATE_DIM,
 )
 from dynamicalgorithmselection.agents.agent_utils import (
     get_checkpoints,
@@ -98,13 +99,13 @@ class Agent(Optimizer):
             y_history = y_history[indices]
             if len(x_history) < 50:
                 landscape_state = np.zeros(
-                    22,
+                    LANDSCAPE_STATE_DIM,
                 )
             else:
                 landscape_state = ela_state_representation(x_history, y_history)
         else:
             landscape_state = np.zeros(
-                22,
+                LANDSCAPE_STATE_DIM,
             )
 
         optimization_state = self.get_optimization_state()

@@ -13,7 +13,9 @@ from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr
 from dynamicalgorithmselection.agents.agent_utils import MAX_DIM, RunningMeanStd
 
-BASE_STATE_SIZE = 27
+LANDSCAPE_STATE_DIM = 22
+OPTIMIZATION_STATE_DIM = 5
+BASE_STATE_SIZE = LANDSCAPE_STATE_DIM + OPTIMIZATION_STATE_DIM
 MAX_CONSIDERED_POPSIZE = 2500
 
 ELA_FEATURES = [
