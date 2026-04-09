@@ -1,21 +1,19 @@
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 
 from dynamicalgorithmselection.agents.agent_state import ELA_FEATURES
 from dynamicalgorithmselection.agents.ppo_utils import Actor
 
-# --- 1. Your Original Setup ---
 actor = Actor(n_actions=3, input_size=33)
 weights_path = "/home/wladek/IdeaProjects/DynamicAlgorithmSelection/DAS_CV_G3PCX_CMAES_MADDE_PG_CV-LOPO_CDB1.5_DIM10_SEED123_final.pth"
 state_dict = torch.load(weights_path, weights_only=False)
 actor.load_state_dict(state_dict["actor_parameters"])
 
-# Ensure the model is in evaluation mode (disables dropout, fixes batch norm)
 actor.eval()
 ACTIONS = ["G3PCX", "CMAES", "MADDE"]
 feature_names = ELA_FEATURES + [
-    "last_action_encoded_1",
-    "last_action_encoded_2",
+    *(f"last_action_is_{i}" for i in ACTIONS),
     "same_action_counter",
     *(f"{i}_choice_frequency" for i in ACTIONS),
     "choice_entropy",
@@ -24,73 +22,83 @@ feature_names = ELA_FEATURES + [
     "stagnation_count",
 ]
 
-# --- 2. Gradient Feature Importance Method ---
+# --- Directional Gradient Method ---
 
 
-def calculate_averaged_gradients(model, states_tensor, num_actions=3):
-    """
-    Calculates the average absolute gradient of each action output
-    with respect to the input state over a batch of samples.
-    """
-    # Enable gradient tracking on the inputs
+def calculate_directional_impact(model, states_tensor, num_actions=3):
     states_tensor.requires_grad_(True)
-
-    # Forward pass
-    # NOTE: If your Actor returns a tuple (e.g., action, log_prob) or a Distribution,
-    # you will need to extract just the raw probabilities/logits tensor here.
     action_outputs = model(states_tensor)
 
-    # Store the importance scores (num_actions x input_size)
-    feature_importances = np.zeros((num_actions, states_tensor.shape[1]))
+    directional_impacts = np.zeros((num_actions, states_tensor.shape[1]))
+    importance_magnitudes = np.zeros((num_actions, states_tensor.shape[1]))
 
     for action_idx in range(num_actions):
-        # Sum the outputs for the target action across all samples.
-        # This allows us to do a single backward pass for the whole batch.
         target_outputs = action_outputs[:, action_idx].sum()
-
-        # Zero out any existing gradients in the model and the input tensor
         model.zero_grad()
         if states_tensor.grad is not None:
             states_tensor.grad.zero_()
 
-        # Backward pass to calculate gradients
         target_outputs.backward(retain_graph=True)
-
-        # Extract gradients (shape: [num_samples, 33])
         gradients = states_tensor.grad.detach().numpy()
 
-        # Calculate the mean of the ABSOLUTE gradients across the batch.
-        # We use absolute values because negative gradients still indicate high importance
-        # (meaning an increase in the feature decreases the action probability).
-        avg_abs_gradients = np.mean(np.abs(gradients), axis=0)
-        feature_importances[action_idx] = avg_abs_gradients
+        # Calculate raw average (Impact Direction)
+        directional_impacts[action_idx] = np.mean(gradients, axis=0)
+        # Calculate absolute average (Importance Magnitude)
+        importance_magnitudes[action_idx] = np.mean(np.abs(gradients), axis=0)
 
-    return feature_importances
+    return directional_impacts, importance_magnitudes
 
 
-# --- 3. Execution ---
-
-# Generate or load a batch of multiple sample states.
-# IMPORTANT: For the most accurate results, replace torch.randn with a batch
-# of REAL states collected from your environment's observation space!
-num_samples = 1000
+# Generate dummy normalized states (Mean 0, Variance 1 matches torch.randn perfectly)
+# Replace with real sampled states from your buffer for exact production results!
+num_samples = 10_000
 sample_states = torch.randn((num_samples, 33), dtype=torch.float32)
 
-# Calculate the importances
-importances = calculate_averaged_gradients(actor, sample_states, num_actions=3)
+impacts, magnitudes = calculate_directional_impact(actor, sample_states, num_actions=3)
 
-# Print the top 5 most influential features for each action
-print(f"Evaluated over {num_samples} samples.\n")
+# --- Visualization ---
+
+fig, axes = plt.subplots(1, 3, figsize=(18, 10))
+fig.suptitle("Feature Impact on Action Probability", fontsize=16)
+
 for action_idx, action in enumerate(ACTIONS):
-    print(f"--- Top Features for {action} choice ---")
+    ax = axes[action_idx]
 
-    # Get the indices of the features sorted by importance (descending)
-    sorted_indices = np.argsort(importances[action_idx])[::-1]
+    # Sort by MAGNITUDE so the most influential features are still at the top,
+    # but we will plot the RAW IMPACT on the x-axis.
+    mags = magnitudes[action_idx]
+    raw_impacts = impacts[action_idx]
 
-    for rank in range(5):  # Show top 5
-        feat_idx = sorted_indices[rank]
-        score = importances[action_idx][feat_idx]
-        print(
-            f"Rank {rank + 1}: {feature_names[feat_idx]} | Importance Score = {score:.6f}"
-        )
-    print()
+    # Sort descending by magnitude (Absolute Importance)
+    sorted_indices = np.argsort(mags)[::-1]
+
+    sorted_impacts = []
+    sorted_names = []
+    colors = []
+
+    for i in sorted_indices:
+        impact_val = raw_impacts[i]
+        sorted_impacts.append(impact_val)
+
+        # Color code: Green for positive correlation, Red for negative
+        colors.append("seagreen" if impact_val >= 0 else "indianred")
+
+    # Reverse lists so the highest magnitude is at the top of the graph
+    sorted_names.reverse()
+    sorted_impacts.reverse()
+    colors.reverse()
+
+    # Plotting
+    y_pos = np.arange(len(sorted_names))
+    ax.barh(y_pos, sorted_impacts, align="center", color=colors)
+    ax.axvline(0, color="black", linewidth=1.2)
+
+    # Formatting
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(sorted_names)
+    ax.set_xlabel("Average Gradient (Impact per 1 Std Dev)")
+    ax.set_title(f"Action: {action}")
+    ax.xaxis.grid(True, linestyle="--", alpha=0.7)
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
