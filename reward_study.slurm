@@ -30,6 +30,6 @@ REWARD=${REWARDS[$SLURM_ARRAY_TASK_ID]}
 MODE="CV-LOPO"
 echo "Running Mode: $MODE | Dimension: $DIM"
 
-python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM}_SEED${SEED}_REWARD${REWARD} \
+python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_${MODE}_CDB${CDB_VAL}_DIM${DIM}_REWARD${REWARD}_SEED${SEED} \
   -p "${PORTFOLIO[@]}" --mode $MODE --dimensionality $DIM \
   --cdb $CDB_VAL --n_epochs 3 --agent policy-gradient -S $SEED -O $REWARD

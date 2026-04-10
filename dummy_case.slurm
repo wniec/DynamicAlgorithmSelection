@@ -7,7 +7,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --partition=plgrid-gpu-a100
-#SBATCH -A plgautopt26-gpu-a100
+#SBATCH -A plgrldas2026-gpu-a100
 
 SEED=${1:-42}
 CDB_VAL=1.5

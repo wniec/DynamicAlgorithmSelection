@@ -1,15 +1,15 @@
 #!/bin/bash
 
-SEEDS=(123 234 345)
+SEEDS=(12 23 34)
 
-CDB_VALUES=(1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9)
+CDB_VALUES=(1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1)
 
 PORTFOLIOS=(
     "G3PCX LMCMAES SPSO"
     "MADDE JDE21 NL_SHADE_RSP"
 )
 
-echo "Starting Cartesian product job submissions..."
+echo "Starting job submissions..."
 
 for SEED in "${SEEDS[@]}"; do
     for PORTFOLIO in "${PORTFOLIOS[@]}"; do
@@ -34,6 +34,18 @@ for SEED in "${SEEDS[@]}"; do
     echo "Submitting comprehensive study with: SEED=${SEED}"
     sbatch comprehensive_study.slurm $SEED
 
+    sleep 1
+
+    echo "Submitting reward study with: SEED=${SEED}"
+    sbatch reward_study.slurm $SEED
+
+    sleep 1
+
 done
+
+echo "Submitting dummy case study with: SEED=${SEED}"
+sbatch dummy_case.slurm $SEED
+
+sleep 1
 
 echo "All jobs submitted!"
