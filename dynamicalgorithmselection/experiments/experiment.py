@@ -8,6 +8,7 @@ from dynamicalgorithmselection.experiments.utils import (
     coco_bbob_single_function,
     get_suite,
     dump_stats,
+    load_global_minima,
 )
 
 import cocoex
@@ -20,36 +21,15 @@ from dynamicalgorithmselection.optimizers.Optimizer import Optimizer
 
 
 def dump_extreme_stats(
-    name: str,
-    stats,
-    problem_instance,
-    max_function_evaluations,
+    name: str, stats, problem_instance, max_function_evaluations, global_optimum
 ):
-    best_case, worst_case = get_extreme_stats(stats, max_function_evaluations)
-    with open(
-        os.path.join(
-            "results",
-            f"{name}_best",
-            f"{problem_instance}.json",
-        ),
-        "w",
-    ) as f:
-        json.dump(
-            {problem_instance: best_case},
-            f,
-        )
-    with open(
-        os.path.join(
-            "results",
-            f"{name}_worst",
-            f"{problem_instance}.json",
-        ),
-        "w",
-    ) as f:
-        json.dump(
-            {problem_instance: worst_case},
-            f,
-        )
+    best_case, worst_case = get_extreme_stats(
+        stats, max_function_evaluations, global_optimum
+    )
+    os.makedirs("results", exist_ok=True)
+    for suffix, case in [("best", best_case), ("worst", worst_case)]:
+        with open(os.path.join("results", f"{name}_{suffix}.jsonl"), "a") as f:
+            f.write(json.dumps({problem_instance: case}) + "\n")
 
 
 def coco_bbob_experiment(
@@ -89,9 +69,6 @@ def _coco_bbob_policy_gradient_train(
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(mode, True, options.get("dimensionality"))
     options["n_problems"] = len(problem_ids)
@@ -106,9 +83,6 @@ def _coco_bbob_test(
     evaluations_multiplier: int = 1_000,
     mode: str = "easy",
 ):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(mode, False, options.get("dimensionality"))
     options["n_problems"] = len(problem_ids)
@@ -125,9 +99,6 @@ def _coco_bbob_test(
 
 
 def _coco_bbob_test_all(optimizer, options, evaluations_multiplier, mode):
-    results_dir = os.path.join("results", f"{options.get('name')}")
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
     cocoex.utilities.MiniPrint()
     problems_suite, problem_ids = get_suite(
         "baselines", False, options.get("dimensionality")
@@ -153,14 +124,11 @@ def run_comparison(
     observers = {}
     suites = {}
     results_folders = []
-
+    global_optima = load_global_minima()
     print("Initializing Observers...")
     for optimizer in optimizer_portfolio:
         optimizer_name = optimizer.__name__
         case_name = f"{options['name']}_{optimizer_name}"
-
-        results_dir = os.path.join("results", case_name)
-        os.makedirs(results_dir, exist_ok=True)
 
         observer = cocoex.Observer("bbob", "result_folder: " + case_name)
         observers[optimizer_name] = observer
@@ -169,10 +137,6 @@ def run_comparison(
         suites[optimizer_name] = get_suite("all", False, options.get("dimensionality"))[
             0
         ]
-
-    # Create directories for best/worst JSON stats
-    for ext in ["best", "worst"]:
-        os.makedirs(os.path.join("results", f"{options['name']}_{ext}"), exist_ok=True)
 
     cocoex.utilities.MiniPrint()
 
@@ -183,6 +147,7 @@ def run_comparison(
     for problem_id in tqdm(problem_ids, desc="Evaluating Problems", smoothing=0.0):
         stats = {}
         max_fe = None
+        problem_optimum = global_optima[problem_id]
 
         for optimizer in optimizer_portfolio:
             optimizer_name = optimizer.__name__
@@ -205,11 +170,9 @@ def run_comparison(
                 result_folder_name,
                 problem_id,
                 max_fe,
+                problem_optimum,
             )
 
         dump_extreme_stats(
-            options.get("name"),
-            stats,
-            problem_id,
-            max_fe,
+            options.get("name"), stats, problem_id, max_fe, problem_optimum
         )

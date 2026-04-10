@@ -6,40 +6,69 @@ MAX_DIM = 40
 def get_runtime_stats(
     fitness_history: list[tuple[int, float]],
     function_evaluations: int,
-) -> dict[
-    str, float | list[float]
-]:  # Changed from list[Optional[float]] to list[float]
+    global_minimum: float,
+) -> dict[str, float | list[float]]:
     """
     :param fitness_history: list of tuples [fe, fitness] with only points where best so far fitness improved
     :param function_evaluations: max number of function evaluations during run.
+    :param global_minimum: the true optimal value of the problem to calculate relative precision.
     :return: dictionary of selected run statistics, ready to dump
     """
     area_under_optimization_curve = 0.0
+    area_over_convergence_curve = 0.0
     last_i = 0
 
+    # Define bounds for AOCClarge as used in the original code
+    lb = 1e-8
+    ub = 1e8
+
+    # Precompute log bounds for logarithmic scaling
+    log_lb = -8
+    log_ub = 8
+
     for i, fitness in fitness_history:
-        area_under_optimization_curve += fitness * (i - last_i)
+        # Shift fitness by the global minimum so the area is always positive
+        shifted_fitness = fitness - global_minimum
+
+        # Linear Area Under Curve
+        area_under_optimization_curve += shifted_fitness * (i - last_i)
+
+        # Logarithmic Area Over Convergence Curve
+        clipped_fitness = np.clip(shifted_fitness, lb, ub)
+        normalized_fitness = (np.log10(clipped_fitness) - log_lb) / (log_ub - log_lb)
+
+        # Correctly multiply the whole term by the width of the evaluation interval
+        area_over_convergence_curve += (1.0 - normalized_fitness) * (i - last_i)
+
         last_i = i
 
-    area_under_optimization_curve += fitness_history[-1][1] * (
-        function_evaluations - fitness_history[-1][0]
-    )
-    final_fitness = fitness_history[-1][1]
+    # Calculate the area for the final plateau
+    final_shifted_fitness = fitness_history[-1][1] - global_minimum
+    final_width = function_evaluations - fitness_history[-1][0]
+
+    area_under_optimization_curve += final_shifted_fitness * final_width
+
+    final_clipped = np.clip(final_shifted_fitness, lb, ub)
+    final_normalized = (np.log10(final_clipped) - log_lb) / (log_ub - log_lb)
+    area_over_convergence_curve += (1.0 - final_normalized) * final_width
 
     return {
         "area_under_optimization_curve": area_under_optimization_curve
         / function_evaluations,
-        "final_fitness": final_fitness,
+        "aocc": area_over_convergence_curve / function_evaluations,
+        "final_fitness": final_shifted_fitness,
     }
 
 
 def get_extreme_stats(
     fitness_histories: dict[str, list[tuple[int, float]]],
     function_evaluations: int,
+    global_minimum: float,
 ) -> tuple[dict[str, float | list[float]], dict[str, float | list[float]]]:
     """
     :param fitness_histories: list of lists of tuples [fe, fitness] with only points where best so far fitness improved for each algorithm
     :param function_evaluations: max number of function evaluations during run.
+    :param global_minimum: the true optimal value of the problem.
     :return: dictionary of selected run statistics, ready to dump
     """
     all_improvements = []
@@ -78,10 +107,9 @@ def get_extreme_stats(
                 worst_history.append((fe, fitness))
                 current_worst_fitness = new_worst_fitness
 
-    # These now match the expected return type of tuple[dict[str, float | list[float]], ...]
     return (
-        get_runtime_stats(best_history, function_evaluations),
-        get_runtime_stats(worst_history, function_evaluations),
+        get_runtime_stats(best_history, function_evaluations, global_minimum),
+        get_runtime_stats(worst_history, function_evaluations, global_minimum),
     )
 
 

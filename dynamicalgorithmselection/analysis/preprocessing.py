@@ -60,6 +60,7 @@ def aggregate_over_seeds(
 def split_results_by_dimension(
     auoc: pd.DataFrame,
     final_fitness: pd.DataFrame,
+    aocc: pd.DataFrame,
     dims: tuple[int, ...] = (2, 3, 5, 10),
     extra_baselines: list[str] | None = None,
 ) -> dict[int, dict[str, pd.DataFrame]]:
@@ -96,6 +97,7 @@ def split_results_by_dimension(
     existing_global = [r for r in global_rows if r in auoc.index]
     global_auoc = auoc.loc[existing_global]
     global_ff = final_fitness.loc[existing_global]
+    global_aocc = auoc.loc[existing_global]
 
     datasets: dict[int, dict[str, pd.DataFrame]] = {}
 
@@ -103,9 +105,7 @@ def split_results_by_dimension(
         dim_rows = [
             r
             for r in all_rows
-            if r.endswith(f"_DIM{dim}")
-            and r not in multidim_rows
-            and r not in extreme_rows
+            if f"_DIM{dim}" in r and r not in multidim_rows and r not in extreme_rows
         ]
 
         columns = [c for c in auoc.columns if int(c[-2:]) == dim]
@@ -113,12 +113,23 @@ def split_results_by_dimension(
         # Select multidim/baseline data for this dimension's columns
         md_auoc = global_auoc[columns].copy()
         md_ff = global_ff[columns].copy()
+        md_aocc = global_aocc[columns].copy()
+
         md_auoc.index = md_auoc.index.map(lambda x: f"{x}_{dim}")
         md_ff.index = md_ff.index.map(lambda x: f"{x}_{dim}")
-        auoc_combined = pd.concat([auoc.loc[dim_rows].dropna(axis=1), md_auoc])
-        ff_combined = pd.concat([final_fitness.loc[dim_rows].dropna(axis=1), md_ff])
+        md_aocc.index = md_aocc.index.map(lambda x: f"{x}_{dim}")
 
-        base_data = {"auoc": auoc_combined, "final_fitness": ff_combined}
+        auoc_combined = pd.concat([auoc.loc[dim_rows].dropna(axis=1), md_auoc])
+        ff_combined = pd.concat(
+            [final_fitness.loc[dim_rows].dropna(axis=1), md_ff]
+        )
+
+        aocc_combined = pd.concat([aocc.loc[dim_rows].dropna(axis=1), md_aocc])
+        base_data = {
+            "auoc": auoc_combined,
+            "final_fitness": ff_combined,
+            "aocc": aocc_combined,
+        }
 
         # LOIO keeps rows without "LOPO", LOPO keeps rows without "LOIO"
         cv_filters = {"LOIO": "LOPO", "LOPO": "LOIO"}
