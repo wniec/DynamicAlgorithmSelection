@@ -56,9 +56,9 @@ def load_ert_htmls(
     htmls: dict[str, str] = {}
 
     for experiment_file in sorted(ppdata_dir.iterdir()):
-        if experiment_file.suffix != "html" or experiment_file.stem == "index":
+        if experiment_file.suffix != ".html" or experiment_file.stem == "index":
             continue
-        file_path = ppdata_dir / experiment_file
+        file_path = experiment_file
 
         html_content = file_path.read_bytes().decode("iso-8859-1")
         experiment_name = experiment_file.name

@@ -42,16 +42,21 @@ def run_results_pipeline(
 
     auoc = extract_metric(results, "area_under_optimization_curve")
     final_fitness = extract_metric(results, "final_fitness")
-    print(f"Raw shapes — AUOC: {auoc.shape}, final_fitness: {final_fitness.shape}")
+    aocc = extract_metric(results, "aocc")
+    print(
+        f"Raw shapes — AUOC: {auoc.shape}, final_fitness: {final_fitness.shape}, AOCC: {aocc.shape}"
+    )
 
     auoc_agg = aggregate_over_seeds(auoc)
     ff_agg = aggregate_over_seeds(final_fitness)
+    aocc_agg = aggregate_over_seeds(aocc)
+
     print(
-        f"After seed aggregation — AUOC: {auoc_agg.shape}, final_fitness: {ff_agg.shape}"
+        f"After seed aggregation — AUOC: {auoc_agg.shape}, final_fitness: {ff_agg.shape}, AOCC: {aocc_agg.shape}"
     )
 
     datasets = split_results_by_dimension(
-        auoc_agg, ff_agg, dims=DIMS, extra_baselines=EXTRA_BASELINES
+        auoc_agg, ff_agg, aocc_agg, dims=DIMS, extra_baselines=EXTRA_BASELINES
     )
 
     for dim in DIMS:
@@ -69,7 +74,11 @@ def run_results_pipeline(
         for name, val in means.head(5).items():
             print(f"    {val:12.6f}  {name}")
 
-    # print(datasets)
+        print(f"\n  AOCC LOPO ranking (top 5):")
+        means = datasets[dim]["aocc_LOPO"].mean(axis=1).sort_values()
+        for name, val in means.head(5).items():
+            print(f"    {val:12.6f}  {name}")
+
     # --- CDB impact plots for the selected portfolio ---
     plot_cdb_impact(datasets, portfolio, dims=DIMS)
 
