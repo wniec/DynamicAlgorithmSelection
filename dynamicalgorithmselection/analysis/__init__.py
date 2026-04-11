@@ -1,6 +1,8 @@
 from dynamicalgorithmselection.analysis.loading import (
     ActionSequence,
+    DiversitySequence,
     load_action_sequences,
+    load_diversity_sequences,
     load_experiment_results,
     load_ert_htmls,
 )
@@ -20,7 +22,9 @@ __all__ = [
     "load_experiment_results",
     "load_ert_htmls",
     "load_action_sequences",
+    "load_diversity_sequences",
     "ActionSequence",
+    "DiversitySequence",
     "aggregate_over_seeds",
     "extract_seed_info",
     "split_results_by_dimension",

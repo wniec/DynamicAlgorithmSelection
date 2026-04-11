@@ -93,6 +93,76 @@ def load_action_sequences(jsonl_path: str | Path) -> list[ActionSequence]:
     return sequences
 
 
+@dataclass(frozen=True)
+class DiversitySequence:
+    """One problem instance and its population diversity values across checkpoints.
+
+    The first diversity value in the raw file (always 0.0) is an artefact and
+    is skipped during loading, so ``diversity[0]`` corresponds to checkpoint 1.
+    """
+
+    problem_key: str
+    function_id: str
+    instance_id: str
+    dimension: int
+    diversity: tuple[float, ...]
+
+
+def load_diversity_sequences(jsonl_path: str | Path) -> list[DiversitySequence]:
+    """Load population diversity sequences from a JSONL file.
+
+    Each line must contain a single ``{problem_key: [float, ...]}`` entry.
+    The first value is always 0.0 (artefact) and is skipped automatically.
+
+    Args:
+        jsonl_path: Path to the diversity JSONL file.
+
+    Returns:
+        List of :class:`DiversitySequence` objects (first value already dropped).
+    """
+    path = Path(jsonl_path)
+    sequences: list[DiversitySequence] = []
+
+    with open(path, encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            payload = json.loads(line)
+            if len(payload) != 1:
+                raise ValueError(
+                    f"Expected exactly one entry on line {line_number}, got {len(payload)}."
+                )
+
+            problem_key, diversity_values = next(iter(payload.items()))
+            match = PROBLEM_KEY_RE.fullmatch(problem_key)
+            if match is None:
+                raise ValueError(
+                    f"Unsupported problem key on line {line_number}: {problem_key!r}"
+                )
+            if not isinstance(diversity_values, list) or len(diversity_values) < 2:
+                raise ValueError(
+                    f"Expected a list with at least 2 values for {problem_key!r}."
+                )
+
+            function_id, instance_id, dimension = match.groups()
+            sequences.append(
+                DiversitySequence(
+                    problem_key=problem_key,
+                    function_id=function_id,
+                    instance_id=instance_id,
+                    dimension=int(dimension),
+                    diversity=tuple(float(v) for v in diversity_values[1:]),
+                )
+            )
+
+    if not sequences:
+        raise ValueError(f"No diversity sequences found in {path}.")
+
+    return sequences
+
+
 def load_experiment_results(
     results_dir: str | Path,
 ) -> dict[str, dict[str, dict[str, float]]]:
