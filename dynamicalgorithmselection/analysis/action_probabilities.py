@@ -2,322 +2,210 @@ from __future__ import annotations
 
 import argparse
 import math
-import re
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 from dynamicalgorithmselection.analysis.loading import (
     ActionSequence,
     load_action_sequences,
 )
 from dynamicalgorithmselection.analysis.utils import (
-    BBOB_GROUPS,
     FUNCTION_TO_GROUP,
     GROUP_ORDER,
     REPO_ROOT,
-    sanitize_filename,
-)
-
-DEFAULT_INPUT_PATH = (
-    REPO_ROOT / "DAS_CV_G3PCX_LMCMAES_SPSO_PG_CV-LOPO_CDB1.5_DIM10_SEED42_REWARD4.jsonl"
 )
 
 
-def _first_seen_algorithms(sequences: list[ActionSequence]) -> tuple[str, ...]:
-    # Sort alphabetically because the JSONL probabilities array
-    # aligns with the alphabetical order of the algorithms.
-    seen: set[str] = set()
-    for sequence in sequences:
-        for action in sequence.actions:
-            seen.add(action)
-    return tuple(sorted(seen))
+def to_empirical_probs(sequence: ActionSequence, algorithms: list[str]) -> np.ndarray:
+    """One-hot encode actions into empirical per-checkpoint probabilities.
+
+    Returns shape (n_algorithms, n_checkpoints).
+    """
+    alg_index = {alg: i for i, alg in enumerate(algorithms)}
+    probs = np.zeros((len(algorithms), len(sequence.actions)))
+    for t, action in enumerate(sequence.actions):
+        probs[alg_index[action], t] = 1.0
+    return probs
 
 
-def _validate_checkpoint_count(sequences: list[ActionSequence]) -> int:
-    checkpoint_counts = {len(sequence.actions) for sequence in sequences}
-    if len(checkpoint_counts) != 1:
-        raise ValueError(
-            "All action sequences must have the same number of checkpoints, "
-            f"got {sorted(checkpoint_counts)}."
-        )
-    return checkpoint_counts.pop()
+def to_policy_probs(sequence: ActionSequence) -> np.ndarray:
+    """Return recorded policy probabilities as (n_algorithms, n_checkpoints)."""
+    return np.array(sequence.probabilities).T
 
 
-@dataclass
-class ActionProbabilityPlotter:
-    sequences: list[ActionSequence]
-    algorithms: tuple[str, ...]
-    checkpoint_count: int
+def _group_label(seq: ActionSequence) -> str:
+    return FUNCTION_TO_GROUP.get(seq.function_id, "Unknown")
 
-    @classmethod
-    def from_jsonl(cls, jsonl_path: str | Path) -> "ActionProbabilityPlotter":
-        sequences = load_action_sequences(jsonl_path)
-        return cls(
-            sequences=sequences,
-            algorithms=_first_seen_algorithms(sequences),
-            checkpoint_count=_validate_checkpoint_count(sequences),
-        )
 
-    @property
-    def multi_dimension(self) -> bool:
-        return len({sequence.dimension for sequence in self.sequences}) > 1
+def _sort_groups(labels: list[str]) -> list[str]:
+    rank = {g: i for i, g in enumerate(GROUP_ORDER)}
+    return sorted(labels, key=lambda g: rank.get(g, math.inf))
 
-    def _aggregation_label(self, sequence: ActionSequence, mode: str) -> str:
+
+def aggregate(
+    sequences: list[ActionSequence],
+    algorithms: list[str],
+    mode: str,
+    source: str,
+) -> tuple[dict[str, np.ndarray], dict[str, int]]:
+    """Aggregate mean probabilities per label.
+
+    Args:
+        sequences: Loaded action sequences.
+        algorithms: Ordered algorithm names (must match probabilities array order).
+        mode: One of "function", "group", "overall".
+        source: One of "actions" (empirical) or "probabilities" (policy).
+
+    Returns:
+        Tuple of (data, sample_sizes) where data maps label -> mean array
+        of shape (n_algorithms, n_checkpoints).
+    """
+    groups: dict[str, list[np.ndarray]] = defaultdict(list)
+
+    for seq in sequences:
         if mode == "function":
-            base_label = sequence.function_id
+            label = seq.function_id
         elif mode == "group":
-            base_label = FUNCTION_TO_GROUP.get(sequence.function_id, "Unknown Group")
+            label = _group_label(seq)
         else:
-            raise ValueError(f"Unsupported aggregation mode: {mode}")
+            label = "Overall"
 
-        if self.multi_dimension:
-            return f"{base_label} (d{sequence.dimension})"
-        return base_label
-
-    def _sort_labels(self, labels: list[str], mode: str) -> list[str]:
-        if mode == "function":
-            return sorted(
-                labels,
-                key=lambda label: (
-                    int(re.search(r"f(\d{3})", label).group(1)),
-                    (
-                        int(re.search(r"d(\d+)", label).group(1))
-                        if "d" in label and "(d" in label
-                        else -1
-                    ),
-                ),
-            )
-
-        group_rank = {group_name: rank for rank, group_name in enumerate(GROUP_ORDER)}
-        return sorted(
-            labels,
-            key=lambda label: (
-                (
-                    int(re.search(r"d(\d+)", label).group(1))
-                    if "d" in label and "(d" in label
-                    else -1
-                ),
-                group_rank.get(label.split(" (d", maxsplit=1)[0], math.inf),
-            ),
+        probs = (
+            to_empirical_probs(seq, algorithms)
+            if source == "actions"
+            else to_policy_probs(seq)
         )
+        groups[label].append(probs)
 
-    def aggregate_probabilities(
-        self,
-        mode: str,
-    ) -> tuple[dict[str, pd.DataFrame], dict[str, int]]:
-        """Aggregate per-checkpoint expected action probabilities."""
-        grouped_sequences: dict[str, list[ActionSequence]] = defaultdict(list)
-        for sequence in self.sequences:
-            grouped_sequences[self._aggregation_label(sequence, mode)].append(sequence)
+    if mode == "function":
+        sorted_labels = sorted(groups, key=lambda f: int(f[1:]))
+    elif mode == "group":
+        sorted_labels = _sort_groups(list(groups))
+    else:
+        sorted_labels = list(groups)
 
-        tables: dict[str, pd.DataFrame] = {}
-        sample_sizes: dict[str, int] = {}
+    data = {label: np.mean(groups[label], axis=0) for label in sorted_labels}
+    sample_sizes = {label: len(groups[label]) for label in sorted_labels}
+    return data, sample_sizes
 
-        for label in self._sort_labels(list(grouped_sequences), mode):
-            sequences = grouped_sequences[label]
 
-            # Shape: (num_algorithms, num_checkpoints)
-            counts = np.zeros(
-                (len(self.algorithms), self.checkpoint_count), dtype=float
-            )
+def plot_heatmap_grid(
+    data: dict[str, np.ndarray],
+    algorithms: list[str],
+    output_path: Path,
+    max_cols: int = 4,
+) -> None:
+    """Save a publication-quality grid of heatmaps."""
+    n = len(data)
+    ncols = min(max_cols, n)
+    nrows = math.ceil(n / ncols)
 
-            for sequence in sequences:
-                # Add the raw probabilities directly for each checkpoint
-                for checkpoint, probs in enumerate(sequence.probabilities):
-                    for alg_idx, prob in enumerate(probs):
-                        counts[alg_idx, checkpoint] += prob
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(ncols * 3.5, nrows * 2.8),
+        constrained_layout=True,
+    )
+    axes_flat = np.atleast_1d(axes).ravel()
 
-            # Average the probabilities across all sequences in this group
-            mean_probabilities = counts / len(sequences)
-
-            table = pd.DataFrame(
-                mean_probabilities,
-                index=pd.Index(self.algorithms, name="algorithm"),
-                columns=pd.Index(
-                    range(1, self.checkpoint_count + 1), name="checkpoint"
-                ),
-            )
-            tables[label] = table
-            sample_sizes[label] = len(sequences)
-
-        return tables, sample_sizes
-
-    def save_probability_tables(
-        self,
-        tables: dict[str, pd.DataFrame],
-        output_dir: str | Path,
-        prefix: str,
-    ) -> list[Path]:
-        """Save aggregated probability tables as CSV."""
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        written_paths: list[Path] = []
-        for label, table in tables.items():
-            csv_path = output_path / f"{prefix}_{sanitize_filename(label)}.csv"
-            table.to_csv(csv_path, float_format="%.6f")
-            written_paths.append(csv_path)
-
-        return written_paths
-
-    def save_heatmap_grid(
-        self,
-        tables: dict[str, pd.DataFrame],
-        sample_sizes: dict[str, int],
-        output_path: str | Path,
-        title: str,
-        annotate: bool = False,
-    ) -> Path:
-        """Save a grid of heatmaps."""
-        if not tables:
-            raise ValueError("No tables available to plot.")
-
-        n_items = len(tables)
-        if n_items <= 4:
-            ncols = min(2, n_items)
-        elif n_items <= 12:
-            ncols = 4
-        else:
-            ncols = 6
-        nrows = math.ceil(n_items / ncols)
-
-        fig, axes = plt.subplots(
-            nrows=nrows,
-            ncols=ncols,
-            figsize=(ncols * 3.2, nrows * 2.6),
-            constrained_layout=True,
+    im = None
+    for ax, mean_probs in zip(axes_flat, data.values()):
+        im = ax.imshow(mean_probs, aspect="auto", cmap="viridis", vmin=0.0, vmax=1.0)
+        ax.set_yticks(range(len(algorithms)), algorithms, fontsize=8)
+        ax.set_xticks(
+            range(mean_probs.shape[1]),
+            range(1, mean_probs.shape[1] + 1),
+            fontsize=8,
         )
-        axes_array = np.atleast_1d(axes).ravel()
+        ax.tick_params(axis="x", labelrotation=45)
+        ax.set_xlabel("Checkpoint", fontsize=8)
+        ax.set_ylabel("Algorithm", fontsize=8)
 
-        image = None
-        for axis, (label, table) in zip(axes_array, tables.items(), strict=False):
-            image = axis.imshow(
-                table.to_numpy(),
-                aspect="auto",
-                cmap="viridis",
-                vmin=0.0,
-                vmax=1.0,
-            )
-            axis.set_title(f"{label}\nn={sample_sizes[label]}", fontsize=10)
-            axis.set_xticks(range(table.shape[1]), table.columns.tolist())
-            axis.set_yticks(range(table.shape[0]), table.index.tolist())
-            axis.tick_params(axis="x", labelrotation=45, labelsize=8)
-            axis.tick_params(axis="y", labelsize=8)
-            axis.set_xlabel("Checkpoint")
-            axis.set_ylabel("Algorithm")
+    for ax in axes_flat[n:]:
+        ax.set_visible(False)
 
-            if annotate:
-                for row_idx in range(table.shape[0]):
-                    for col_idx in range(table.shape[1]):
-                        value = table.iat[row_idx, col_idx]
-                        text_color = "white" if value >= 0.55 else "black"
-                        axis.text(
-                            col_idx,
-                            row_idx,
-                            f"{value:.2f}",
-                            ha="center",
-                            va="center",
-                            fontsize=7,
-                            color=text_color,
-                        )
+    fig.colorbar(im, ax=axes_flat.tolist(), shrink=0.8, label="Selection probability")
 
-        for axis in axes_array[n_items:]:
-            axis.set_visible(False)
-
-        if image is None:
-            raise RuntimeError("Failed to create heatmaps.")
-
-        colorbar = fig.colorbar(image, ax=axes_array.tolist(), shrink=0.92, pad=0.01)
-        colorbar.set_label("Selection probability", rotation=90)
-        fig.suptitle(title, fontsize=14)
-
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        return output_path
-
-    def generate_report(self, output_dir: str | Path) -> dict[str, Path]:
-        """Generate both function-level and group-level plots plus CSV tables."""
-        output_dir = Path(output_dir)
-        function_tables, function_sizes = self.aggregate_probabilities(mode="function")
-        group_tables, group_sizes = self.aggregate_probabilities(mode="group")
-
-        written: dict[str, Path] = {}
-
-        function_table_dir = output_dir / "function_tables"
-        group_table_dir = output_dir / "group_tables"
-        self.save_probability_tables(function_tables, function_table_dir, "function")
-        self.save_probability_tables(group_tables, group_table_dir, "group")
-
-        written["function_heatmaps"] = self.save_heatmap_grid(
-            function_tables,
-            function_sizes,
-            output_dir / "function_probabilities.png",
-            title="Expected algorithm probabilities by BBOB function",
-            annotate=False,
-        )
-        written["group_heatmaps"] = self.save_heatmap_grid(
-            group_tables,
-            group_sizes,
-            output_dir / "group_probabilities.png",
-            title="Expected algorithm probabilities by standard BBOB group",
-            annotate=True,
-        )
-        return written
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
-def generate_action_probability_report(
-    jsonl_path: str | Path,
-    output_dir: str | Path | None = None,
-) -> dict[str, Path]:
-    """Convenience wrapper for script and library usage."""
-    input_path = Path(jsonl_path)
-    if output_dir is None:
-        output_dir = REPO_ROOT / "analysis_plots" / input_path.stem
+def generate_plots(
+    jsonl_path: Path,
+    algorithms: list[str],
+    output_dir: Path,
+) -> None:
+    """Generate all 6 heatmap plots for a given JSONL file."""
+    sequences = load_action_sequences(jsonl_path)
 
-    plotter = ActionProbabilityPlotter.from_jsonl(input_path)
-    return plotter.generate_report(output_dir)
+    configs = [
+        (
+            "function",
+            "actions",
+            "function_action_probabilities.png",
+        ),
+        (
+            "function",
+            "probabilities",
+            "function_policy_probabilities.png",
+        ),
+        (
+            "group",
+            "actions",
+            "group_action_probabilities.png",
+        ),
+        (
+            "group",
+            "probabilities",
+            "group_policy_probabilities.png",
+        ),
+        (
+            "overall",
+            "actions",
+            "overall_action_probabilities.png",
+        ),
+        (
+            "overall",
+            "probabilities",
+            "overall_policy_probabilities.png",
+        ),
+    ]
+
+    for mode, source, filename in configs:
+        data, _ = aggregate(sequences, algorithms, mode, source)
+        output_path = output_dir / filename
+        max_cols = 3 if mode == "group" else 4
+        plot_heatmap_grid(data, algorithms, output_path, max_cols=max_cols)
+        print(f"Saved: {output_path}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Aggregate checkpoint-wise expected probabilities and save heatmaps."
-        )
+        description="Visualise DAS algorithm selection behaviour.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
     )
+    parser.add_argument("--input", type=Path, required=True, help="Input JSONL file.")
     parser.add_argument(
-        "--input",
-        type=Path,
-        default=DEFAULT_INPUT_PATH,
-        help=f"Input JSONL file (default: {DEFAULT_INPUT_PATH})",
+        "--algorithms",
+        nargs="+",
+        required=True,
+        help="Algorithm names in probabilities array order (matches filename order).",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Output directory for plots and CSV tables.",
+        help="Output directory (default: analysis_plots/<input stem>).",
     )
     args = parser.parse_args()
 
-    outputs = generate_action_probability_report(
-        jsonl_path=args.input,
-        output_dir=args.output_dir,
-    )
-    resolved_output_dir = (
-        args.output_dir
-        if args.output_dir is not None
-        else REPO_ROOT / "analysis_plots" / args.input.stem
-    )
-
-    print(f"Saved probability report to: {resolved_output_dir}")
-    for label, path in outputs.items():
-        print(f"  {label}: {path}")
+    output_dir = args.output_dir or REPO_ROOT / "analysis_plots" / args.input.stem
+    generate_plots(args.input, args.algorithms, output_dir)
 
 
 if __name__ == "__main__":
