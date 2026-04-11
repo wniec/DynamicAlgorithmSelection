@@ -1,4 +1,3 @@
-"""Shared constants and utilities for DAS analysis modules."""
 from __future__ import annotations
 
 import re
