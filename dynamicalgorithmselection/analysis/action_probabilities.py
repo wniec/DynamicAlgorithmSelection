@@ -19,6 +19,83 @@ from dynamicalgorithmselection.analysis.utils import (
 )
 
 
+def compute_transition_matrix(
+    sequences: list[ActionSequence],
+    algorithms: list[str],
+    mode: str,
+) -> dict[str, np.ndarray]:
+    """Compute transition count matrices (prev→curr) aggregated by mode.
+
+    Args:
+        sequences: Loaded action sequences.
+        algorithms: Ordered algorithm names.
+        mode: One of ``"group"`` or ``"overall"``.
+
+    Returns:
+        Dict mapping label -> integer matrix of shape (n_algorithms, n_algorithms),
+        where ``matrix[i, j]`` is the number of times algorithm ``i`` was followed
+        by algorithm ``j``.
+    """
+    alg_index = {alg: k for k, alg in enumerate(algorithms)}
+    n = len(algorithms)
+    matrices: dict[str, np.ndarray] = defaultdict(lambda: np.zeros((n, n), dtype=int))
+
+    for seq in sequences:
+        label = FUNCTION_TO_GROUP.get(seq.function_id, "Unknown") if mode == "group" else "Overall"
+        for prev, curr in zip(seq.actions[:-1], seq.actions[1:]):
+            if prev in alg_index and curr in alg_index:
+                matrices[label][alg_index[prev], alg_index[curr]] += 1
+
+    sorted_labels = _sort_groups(list(matrices)) if mode == "group" else list(matrices)
+    return {label: matrices[label] for label in sorted_labels}
+
+
+def plot_transition_counts(
+    matrices: dict[str, np.ndarray],
+    algorithms: list[str],
+    output_path: Path,
+) -> None:
+    """Save a grid of transition-count heatmaps, one panel per label."""
+    n = len(matrices)
+    ncols = min(3, n)
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(
+        nrows, ncols,
+        figsize=(ncols * 4, nrows * 3.5),
+        constrained_layout=True,
+    )
+    axes_flat = np.atleast_1d(axes).ravel()
+
+    im = None
+    for ax, (label, matrix) in zip(axes_flat, matrices.items()):
+        vals = matrix.astype(float)
+        vals[vals == 0] = np.nan
+        im = ax.imshow(vals, aspect="auto", cmap="Blues")
+        ax.set_title(label, fontsize=9)
+        ax.set_xticks(range(len(algorithms)))
+        ax.set_xticklabels(algorithms, rotation=30, ha="right", fontsize=8)
+        ax.set_yticks(range(len(algorithms)))
+        ax.set_yticklabels(algorithms, fontsize=8)
+        ax.set_xlabel("Algorithm (current step)", fontsize=8)
+        ax.set_ylabel("Algorithm (previous step)", fontsize=8)
+        for i in range(len(algorithms)):
+            for j in range(len(algorithms)):
+                cnt = matrix[i, j]
+                if cnt > 0:
+                    ax.text(j, i, str(cnt), ha="center", va="center", fontsize=7)
+
+    for ax in axes_flat[n:]:
+        ax.set_visible(False)
+
+    if im is not None:
+        fig.colorbar(im, ax=axes_flat.tolist(), shrink=0.8, label="Transition count")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
 def to_empirical_probs(sequence: ActionSequence, algorithms: list[str]) -> np.ndarray:
     """One-hot encode actions into empirical per-checkpoint probabilities.
 
@@ -172,6 +249,15 @@ def generate_plots(
         output_path = output_dir / filename
         max_cols = 3 if mode == "group" else 4
         plot_heatmap_grid(data, algorithms, output_path, max_cols=max_cols)
+        print(f"Saved: {output_path}")
+
+    for mode, filename in [
+        ("group", "group_transition_counts.png"),
+        ("overall", "overall_transition_counts.png"),
+    ]:
+        matrices = compute_transition_matrix(sequences, algorithms, mode)
+        output_path = output_dir / filename
+        plot_transition_counts(matrices, algorithms, output_path)
         print(f"Saved: {output_path}")
 
 
