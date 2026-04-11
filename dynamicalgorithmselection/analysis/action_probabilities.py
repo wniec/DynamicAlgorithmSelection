@@ -11,7 +11,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from dynamicalgorithmselection.analysis.loading import ActionSequence, load_action_sequences
+from dynamicalgorithmselection.analysis.loading import (
+    ActionSequence,
+    load_action_sequences,
+)
 from dynamicalgorithmselection.analysis.utils import (
     BBOB_GROUPS,
     FUNCTION_TO_GROUP,
@@ -21,16 +24,18 @@ from dynamicalgorithmselection.analysis.utils import (
 )
 
 DEFAULT_INPUT_PATH = (
-    REPO_ROOT / "DAS_CV_G3PCX_CMAES_MADDE_PG_CV-LOPO_CDB1.5_DIM10_SEED123.jsonl"
+    REPO_ROOT / "DAS_CV_G3PCX_LMCMAES_SPSO_PG_CV-LOPO_CDB1.5_DIM10_SEED42_REWARD4.jsonl"
 )
 
 
 def _first_seen_algorithms(sequences: list[ActionSequence]) -> tuple[str, ...]:
-    seen: dict[str, None] = {}
+    # Sort alphabetically because the JSONL probabilities array
+    # aligns with the alphabetical order of the algorithms.
+    seen: set[str] = set()
     for sequence in sequences:
         for action in sequence.actions:
-            seen.setdefault(action, None)
-    return tuple(seen)
+            seen.add(action)
+    return tuple(sorted(seen))
 
 
 def _validate_checkpoint_count(sequences: list[ActionSequence]) -> int:
@@ -105,28 +110,33 @@ class ActionProbabilityPlotter:
         self,
         mode: str,
     ) -> tuple[dict[str, pd.DataFrame], dict[str, int]]:
-        """Aggregate per-checkpoint action probabilities."""
+        """Aggregate per-checkpoint expected action probabilities."""
         grouped_sequences: dict[str, list[ActionSequence]] = defaultdict(list)
         for sequence in self.sequences:
             grouped_sequences[self._aggregation_label(sequence, mode)].append(sequence)
 
-        algorithm_index = {name: idx for idx, name in enumerate(self.algorithms)}
         tables: dict[str, pd.DataFrame] = {}
         sample_sizes: dict[str, int] = {}
 
         for label in self._sort_labels(list(grouped_sequences), mode):
             sequences = grouped_sequences[label]
+
+            # Shape: (num_algorithms, num_checkpoints)
             counts = np.zeros(
                 (len(self.algorithms), self.checkpoint_count), dtype=float
             )
 
             for sequence in sequences:
-                for checkpoint, action in enumerate(sequence.actions):
-                    counts[algorithm_index[action], checkpoint] += 1.0
+                # Add the raw probabilities directly for each checkpoint
+                for checkpoint, probs in enumerate(sequence.probabilities):
+                    for alg_idx, prob in enumerate(probs):
+                        counts[alg_idx, checkpoint] += prob
 
-            probabilities = counts / len(sequences)
+            # Average the probabilities across all sequences in this group
+            mean_probabilities = counts / len(sequences)
+
             table = pd.DataFrame(
-                probabilities,
+                mean_probabilities,
                 index=pd.Index(self.algorithms, name="algorithm"),
                 columns=pd.Index(
                     range(1, self.checkpoint_count + 1), name="checkpoint"
@@ -249,14 +259,14 @@ class ActionProbabilityPlotter:
             function_tables,
             function_sizes,
             output_dir / "function_probabilities.png",
-            title="Algorithm selection probabilities by BBOB function",
+            title="Expected algorithm probabilities by BBOB function",
             annotate=False,
         )
         written["group_heatmaps"] = self.save_heatmap_grid(
             group_tables,
             group_sizes,
             output_dir / "group_probabilities.png",
-            title="Algorithm selection probabilities by standard BBOB group",
+            title="Expected algorithm probabilities by standard BBOB group",
             annotate=True,
         )
         return written
@@ -278,7 +288,7 @@ def generate_action_probability_report(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Aggregate checkpoint-wise DAS actions and save probability heatmaps."
+            "Aggregate checkpoint-wise expected probabilities and save heatmaps."
         )
     )
     parser.add_argument(
@@ -305,7 +315,7 @@ def main() -> None:
         else REPO_ROOT / "analysis_plots" / args.input.stem
     )
 
-    print(f"Saved action-probability report to: {resolved_output_dir}")
+    print(f"Saved probability report to: {resolved_output_dir}")
     for label, path in outputs.items():
         print(f"  {label}: {path}")
 

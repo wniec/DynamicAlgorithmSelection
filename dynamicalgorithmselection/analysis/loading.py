@@ -14,13 +14,13 @@ class ActionSequence:
     instance_id: str
     dimension: int
     actions: tuple[str, ...]
+    probabilities: tuple[tuple[float, ...], ...]
 
 
 def load_action_sequences(jsonl_path: str | Path) -> list[ActionSequence]:
     """Load DAS action sequences from a JSONL file.
 
-    Each line must contain a single ``{problem_key: [algorithm, ...]}`` entry.
-    The first value is always 0.0 and should be skipped, this is an artefact.
+    Each line must contain a single ``{problem_key: [actions_list, probabilities_list]}`` entry.
 
     Args:
         jsonl_path: Path to the actions JSONL file.
@@ -43,17 +43,35 @@ def load_action_sequences(jsonl_path: str | Path) -> list[ActionSequence]:
                     f"Expected exactly one problem entry on line {line_number}, got {len(payload)}."
                 )
 
-            problem_key, actions = next(iter(payload.items()))
+            problem_key, data = next(iter(payload.items()))
+
+            # Validate the new schema: value should be a list of exactly 2 items
+            if not isinstance(data, list) or len(data) != 2:
+                raise ValueError(
+                    f"Expected a list of [actions, probabilities] for {problem_key!r} on line {line_number}."
+                )
+
+            actions, probabilities = data
+
             match = PROBLEM_KEY_RE.fullmatch(problem_key)
             if match is None:
                 raise ValueError(
                     f"Unsupported problem key format on line {line_number}: {problem_key!r}"
                 )
+
             if not isinstance(actions, list) or not all(
                 isinstance(action, str) for action in actions
             ):
                 raise ValueError(
                     f"Actions for {problem_key!r} must be a list of strings."
+                )
+
+            # Validate probabilities structure
+            if not isinstance(probabilities, list) or not all(
+                isinstance(prob_list, list) for prob_list in probabilities
+            ):
+                raise ValueError(
+                    f"Probabilities for {problem_key!r} must be a list of lists of floats."
                 )
 
             function_id, instance_id, dimension = match.groups()
@@ -64,6 +82,8 @@ def load_action_sequences(jsonl_path: str | Path) -> list[ActionSequence]:
                     instance_id=instance_id,
                     dimension=int(dimension),
                     actions=tuple(actions),
+                    # Convert list of lists to tuple of tuples for the frozen dataclass
+                    probabilities=tuple(tuple(p) for p in probabilities),
                 )
             )
 
