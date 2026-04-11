@@ -31,15 +31,6 @@ def to_empirical_probs(sequence: ActionSequence, algorithms: list[str]) -> np.nd
     return probs
 
 
-def to_policy_probs(sequence: ActionSequence) -> np.ndarray:
-    """Return recorded policy probabilities as (n_algorithms, n_checkpoints)."""
-    return np.array(sequence.probabilities).T
-
-
-def _group_label(seq: ActionSequence) -> str:
-    return FUNCTION_TO_GROUP.get(seq.function_id, "Unknown")
-
-
 def _sort_groups(labels: list[str]) -> list[str]:
     rank = {g: i for i, g in enumerate(GROUP_ORDER)}
     return sorted(labels, key=lambda g: rank.get(g, math.inf))
@@ -69,14 +60,14 @@ def aggregate(
         if mode == "function":
             label = seq.function_id
         elif mode == "group":
-            label = _group_label(seq)
+            label = FUNCTION_TO_GROUP.get(seq.function_id, "Unknown")
         else:
             label = "Overall"
 
         probs = (
             to_empirical_probs(seq, algorithms)
             if source == "actions"
-            else to_policy_probs(seq)
+            else np.array(seq.probabilities).T
         )
         groups[label].append(probs)
 
@@ -112,8 +103,9 @@ def plot_heatmap_grid(
     axes_flat = np.atleast_1d(axes).ravel()
 
     im = None
-    for ax, mean_probs in zip(axes_flat, data.values()):
+    for ax, (label, mean_probs) in zip(axes_flat, data.items()):
         im = ax.imshow(mean_probs, aspect="auto", cmap="viridis", vmin=0.0, vmax=1.0)
+        ax.set_title(label, fontsize=9)
         ax.set_yticks(range(len(algorithms)), algorithms, fontsize=8)
         ax.set_xticks(
             range(mean_probs.shape[1]),
