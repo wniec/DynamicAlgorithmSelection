@@ -5,6 +5,7 @@ import re
 import numpy as np
 import pandas as pd
 from bs4 import BeautifulSoup
+from autorank import autorank
 
 
 def extract_metric(
@@ -103,6 +104,26 @@ def compute_solve_rate(
     for dim, df in datasets.items():
         is_inf = np.isinf(df).astype(float)
         rate = (1 - is_inf.mean(axis=1)).sort_values()
+        solve_rates[dim] = rate
+    return solve_rates
+
+
+def compute_ERT_rank(
+    datasets: dict[int, pd.DataFrame],
+) -> dict[int, pd.Series]:
+    """Compute the fraction of problems solved (non-infinite ERT) per experiment.
+
+    Args:
+        datasets: Per-dimension ERT DataFrames as returned by
+            :func:`~dynamicalgorithmselection.analysis.preprocessing.split_ert_by_dimension`.
+
+    Returns:
+        ``{dim: Series}`` with solve rates sorted ascending.
+    """
+    solve_rates: dict[int, pd.Series] = {}
+    for dim, df in datasets.items():
+        rankdf = autorank(df.T, alpha=0.05, verbose=False).rankdf
+        rate = rankdf["meanrank"].sort_values()
         solve_rates[dim] = rate
     return solve_rates
 

@@ -6,12 +6,12 @@ from dynamicalgorithmselection.agents.agent_state import ELA_FEATURES
 from dynamicalgorithmselection.agents.ppo_utils import Actor
 
 actor = Actor(n_actions=3, input_size=33)
-weights_path = "/home/wladek/IdeaProjects/DynamicAlgorithmSelection/DAS_CV_G3PCX_CMAES_MADDE_PG_CV-LOPO_CDB1.5_DIM10_SEED123_final.pth"
+weights_path = "/home/wladek/IdeaProjects/DynamicAlgorithmSelection/DAS_CV_G3PCX_LMCMAES_SPSO_PG_MULTIDIMENSIONAL_CV-LOIO_CDB2.1_SEED34_final.pth"
 state_dict = torch.load(weights_path, weights_only=False)
 actor.load_state_dict(state_dict["actor_parameters"])
 
 actor.eval()
-ACTIONS = ["G3PCX", "CMAES", "MADDE"]
+ACTIONS = ["G3PCX", "LMCMAES", "SPSO"]
 feature_names = ELA_FEATURES + [
     *(f"last_action_is_{i}" for i in ACTIONS),
     "same_action_counter",
@@ -80,10 +80,9 @@ for action_idx, action in enumerate(ACTIONS):
         impact_val = raw_impacts[i]
         sorted_impacts.append(impact_val)
 
+        sorted_names.append(feature_names[i])
         # Color code: Green for positive correlation, Red for negative
         colors.append("seagreen" if impact_val >= 0 else "indianred")
-
-    # Reverse lists so the highest magnitude is at the top of the graph
     sorted_names.reverse()
     sorted_impacts.reverse()
     colors.reverse()

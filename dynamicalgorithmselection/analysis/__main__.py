@@ -14,8 +14,9 @@ from dynamicalgorithmselection.analysis.metrics import (
     compute_solve_rate,
     extract_metric,
     parse_ert_from_html,
+    compute_ERT_rank,
 )
-from dynamicalgorithmselection.analysis.plotting import plot_cdb_impact
+from dynamicalgorithmselection.analysis.plotting import plot_cdb_impact, plot_ert_impact
 from dynamicalgorithmselection.analysis.preprocessing import (
     aggregate_over_seeds,
     split_ert_by_dimension,
@@ -83,7 +84,9 @@ def run_results_pipeline(
     plot_cdb_impact(datasets, portfolio, dims=DIMS)
 
 
-def run_ert_pipeline() -> None:
+def run_ert_pipeline(
+    portfolio: str = "G3PCX_LMCMAES_SPSO_",
+) -> None:
     print("\n" + "=" * 60)
     print("ERT PIPELINE")
     print("=" * 60)
@@ -114,12 +117,20 @@ def run_ert_pipeline() -> None:
         for name, val in solve_rates[dim].tail(5).items():
             print(f"    {val:.3f}  {name}")
 
+    ert_ranks = compute_ERT_rank(ert_datasets)
+
+    for dim in DIMS:
+        print(f"\n  ERT rank dim={dim} (top 5):")
+        for name, val in ert_ranks[dim].tail(5).items():
+            print(f"    {val:.3f}  {name}")
+    plot_ert_impact(ert_ranks, portfolio, dims=DIMS)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analysis pipelines")
     parser.add_argument(
         "--portfolio",
-        default="G3PCX_LMCMAES_SPSOL",
+        default="G3PCX_LMCMAES_SPSO",
         help="Portfolio name to analyse CDB impact for (default: G3PCX_LMCMAES_SPSO)",
     )
     args = parser.parse_args()
