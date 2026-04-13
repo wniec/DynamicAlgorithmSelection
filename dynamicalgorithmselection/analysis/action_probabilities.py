@@ -447,13 +447,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    algorithms = [alg for alg in args.algorithms.split(",") if alg]
+    portfolio = "_".join(algorithms)
+
     output_dir = args.output_dir or REPO_ROOT / "analysis_plots" / "multi_experiment"
-    algorithms = [alg for alg in args.portfolio.split("_") if alg]
     generate_multi_experiment_plots(
         behaviour_dir=args.behaviour_dir,
         algorithms=algorithms,
         output_dir=output_dir,
-        portfolio=args.portfolio,
+        portfolio=portfolio,
     )
 
 
