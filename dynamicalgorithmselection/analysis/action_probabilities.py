@@ -430,9 +430,14 @@ def main() -> None:
         help="Directory with behaviour JSONL files.",
     )
     parser.add_argument(
-        "--portfolio",
-        default="G3PCX_LMCMAES_SPSO",
-        help="Portfolio string to filter filenames and derive probability-vector order.",
+        "--algorithms",
+        default="G3PCX,LMCMAES,SPSO",
+        help=(
+            "Comma-separated ordered list of algorithm names, e.g. "
+            "MADDE,JDE21,NL_SHADE_RSP.  Required when any algorithm name "
+            "contains an underscore.  Defaults to splitting --portfolio on '_', "
+            "which is only correct when no algorithm name contains underscores."
+        ),
     )
     parser.add_argument(
         "--output-dir",
