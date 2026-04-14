@@ -120,9 +120,7 @@ def split_results_by_dimension(
         md_aocc.index = md_aocc.index.map(lambda x: f"{x}_{dim}")
 
         auoc_combined = pd.concat([auoc.loc[dim_rows].dropna(axis=1), md_auoc])
-        ff_combined = pd.concat(
-            [final_fitness.loc[dim_rows].dropna(axis=1), md_ff]
-        )
+        ff_combined = pd.concat([final_fitness.loc[dim_rows].dropna(axis=1), md_ff])
 
         aocc_combined = pd.concat([aocc.loc[dim_rows].dropna(axis=1), md_aocc])
         base_data = {

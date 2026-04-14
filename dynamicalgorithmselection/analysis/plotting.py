@@ -1,11 +1,50 @@
 """Plotting utilities for analysis results."""
 
 from itertools import product
+from typing import Callable
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from dynamicalgorithmselection.analysis.metrics import compute_ERT_rank
 from dynamicalgorithmselection.analysis.preprocessing import extract_cdb
+
+
+# Globals cleanly defined at the top
+DIM_COLORS = {2: "tab:blue", 3: "tab:orange", 5: "tab:green", 10: "tab:red"}
+NON_COMPARED = ["RANDOM", "MULTIDIMENSIONAL", "REWARD"]
+
+
+def _plot_lines_by_dimension(
+    ax: plt.Axes,
+    dims: tuple[int, ...],
+    data_extractor: Callable[[int], list[tuple[float, float]]],
+) -> None:
+    """Helper to extract data, sort by CDB, and plot lines per dimension.
+
+    Args:
+        ax: The matplotlib Axes object to plot on.
+        dims: The tuple of dimensions to iterate over.
+        data_extractor: A callback function that takes an integer dimension
+            and returns a list of (cdb, metric_value) tuples.
+    """
+    for dim in dims:
+        dim_data = data_extractor(dim)
+        if not dim_data:
+            continue
+
+        # Sort strictly by CDB (index 0) to prevent Python from breaking ties
+        # by sorting the Y values, which creates false vertical trends.
+        pairs = sorted([(key, val) for key, val in dim_data], key=lambda x: x[0])
+        xs, ys = [i[0] for i in pairs], [i[1] for i in pairs]
+
+        ax.plot(
+            xs,
+            ys,
+            marker="o",
+            label=f"DIM {dim}",
+            color=DIM_COLORS.get(dim),
+        )
 
 
 def plot_cdb_impact(
@@ -13,52 +52,34 @@ def plot_cdb_impact(
     portfolio: str,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
-    """Plot AUOC vs CDB for each CV mode (LOIO / LOPO).
+    """Plot AUOC/AOCC vs CDB for standard and multidimensional training.
 
-    For the given *portfolio*, finds matching experiments across all
-    dimensions, extracts the CDB value from each experiment name, and
-    produces two plots (one per CV mode) with dimensions shown in
-    different colours.
+    Args:
+        datasets: Dictionary of DataFrames segmented by dimension and metric.
+        portfolio: Portfolio name to filter experiments by.
+        dims: Dimensions to plot.
     """
-    dim_colors = {2: "tab:blue", 3: "tab:orange", 5: "tab:green", 10: "tab:red"}
-    NON_COMPARED = ["RANDOM", "MULTIDIMENSIONAL", "REWARD"]
+    # 1. Standard LOIO / LOPO Plots
     for metric, cv_mode in product(("auoc", "aocc"), ("LOIO", "LOPO")):
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        for dim in dims:
+        def extract_standard_data(dim: int) -> list[tuple[float, float]]:
             df = datasets[dim][f"{metric}_{cv_mode}"]
             df = (df - df.mean()) / df.std()
             matching = [
                 name
                 for name in df.index
-                if portfolio in name and all(i not in name for i in NON_COMPARED)
+                if portfolio in name and all(nc not in name for nc in NON_COMPARED)
             ]
-            if not matching:
-                continue
 
-            cdb_vals: list[float] = []
-            auoc_means: list[float] = []
-            for name in matching:
-                cdb = extract_cdb(name)
-                if cdb is None:
-                    continue
-                cdb_vals.append(cdb)
-                auoc_means.append(df.loc[name].mean())
+            # Using list comprehension prevents overwriting duplicate CDB values
+            return [
+                (extract_cdb(name), float(df.loc[name].mean()))
+                for name in matching
+                if extract_cdb(name) is not None
+            ]
 
-            if not cdb_vals:
-                continue
-
-            # Sort by CDB for a clean line plot
-            pairs = sorted(zip(cdb_vals, auoc_means))
-            xs, ys = zip(*pairs)
-
-            ax.plot(
-                xs,
-                ys,
-                marker="o",
-                label=f"DIM {dim}",
-                color=dim_colors.get(dim),
-            )
+        _plot_lines_by_dimension(ax, dims, extract_standard_data)
 
         ax.set_xlabel("CDB")
         ax.set_ylabel(f"{metric.upper()} (mean over problems)")
@@ -68,25 +89,54 @@ def plot_cdb_impact(
         fig.tight_layout()
         plt.show()
 
+    # 2. Multidimensional Plots (LOPO only)
+    cv_mode = "LOPO"
+    for metric in ("auoc", "aocc"):
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        def extract_multi_data(dim: int) -> list[tuple[float, float]]:
+            df = datasets[dim][f"{metric}_{cv_mode}"]
+            df = (df - df.mean()) / df.std()
+            matching = [
+                name
+                for name in df.index
+                if portfolio in name and all(nc not in name for nc in NON_COMPARED)
+            ]
+
+            return [
+                (extract_cdb(name), float(df.loc[name].mean()))
+                for name in matching
+                if extract_cdb(name) is not None
+            ]
+
+        _plot_lines_by_dimension(ax, dims, extract_multi_data)
+
+        ax.set_xlabel("CDB")
+        ax.set_ylabel(f"{metric.upper()} (mean over problems)")
+        ax.set_title(f"CDB impact — {portfolio} — {cv_mode} Multidimensional training")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        plt.show()
+
 
 def plot_ert_impact(
-    datasets: dict[int, pd.Series],
+    datasets: dict[int, pd.DataFrame],
     portfolio: str,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
-    """Plot AUOC vs CDB for each CV mode (LOIO / LOPO).
+    """Plot ERT rank vs CDB for standard and multidimensional training.
 
-    For the given *portfolio*, finds matching experiments across all
-    dimensions, extracts the CDB value from each experiment name, and
-    produces two plots (one per CV mode) with dimensions shown in
-    different colours.
+    Args:
+        datasets: Per-dimension ERT DataFrames/Series.
+        portfolio: Portfolio name to filter experiments by.
+        dims: Dimensions to plot.
     """
-    dim_colors = {2: "tab:blue", 3: "tab:orange", 5: "tab:green", 10: "tab:red"}
-    NON_COMPARED = ["RANDOM", "MULTIDIMENSIONAL", "REWARD"]
+    # 1. Standard LOIO / LOPO Plots
     for cv_mode in ("LOIO", "LOPO"):
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        for dim in dims:
+        def extract_ert_data(dim: int) -> list[tuple[float, float]]:
             df = datasets[dim]
             matching = [
                 name
@@ -96,36 +146,56 @@ def plot_ert_impact(
                 and cv_mode in name
             ]
             if not matching:
-                continue
+                return []
 
-            cdb_vals: list[float] = []
-            auoc_means: list[float] = []
-            for name in matching:
-                cdb = extract_cdb(name)
-                if cdb is None:
-                    continue
-                cdb_vals.append(cdb)
-                auoc_means.append(df.loc[name].mean())
+            matching_df = df.loc[matching]
+            ert_ranks = compute_ERT_rank({dim: matching_df})[dim]
 
-            if not cdb_vals:
-                continue
+            return [
+                (extract_cdb(name), float(ert_ranks.loc[name]))
+                for name in matching
+                if extract_cdb(name) is not None and name in ert_ranks.index
+            ]
 
-            # Sort by CDB for a clean line plot
-            pairs = sorted(zip(cdb_vals, auoc_means))
-            xs, ys = zip(*pairs)
-
-            ax.plot(
-                xs,
-                ys,
-                marker="o",
-                label=f"DIM {dim}",
-                color=dim_colors.get(dim),
-            )
+        _plot_lines_by_dimension(ax, dims, extract_ert_data)
 
         ax.set_xlabel("CDB")
-        ax.set_ylabel(f"(mean ERT rank over problems)")
+        ax.set_ylabel("(mean ERT ranking over problems)")
         ax.set_title(f"CDB impact — {portfolio} — {cv_mode}")
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
         plt.show()
+
+    # 2. Multidimensional Plots (LOPO only)
+    cv_mode = "LOPO"
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    def extract_multi_ert_data(dim: int) -> list[tuple[float, float]]:
+        df = datasets[dim]
+        matching = [
+            name
+            for name in df.index
+            if portfolio in name and "MULTIDIMENSIONAL" in name and cv_mode in name
+        ]
+        if not matching:
+            return []
+
+        matching_df = df.loc[matching]
+        ert_ranks = compute_ERT_rank({dim: matching_df})[dim]
+
+        return [
+            (extract_cdb(name), float(ert_ranks.loc[name]))
+            for name in matching
+            if extract_cdb(name) is not None and name in ert_ranks.index
+        ]
+
+    _plot_lines_by_dimension(ax, dims, extract_multi_ert_data)
+
+    ax.set_xlabel("CDB")
+    ax.set_ylabel("(mean ERT ranking over MULTIDIMENSIONAL problems)")
+    ax.set_title(f"CDB impact — {portfolio} — {cv_mode} MULTIDIMENSIONAL")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    plt.show()

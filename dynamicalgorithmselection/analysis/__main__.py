@@ -111,19 +111,12 @@ def run_ert_pipeline(
         print(f"  ERT shape: {ert_datasets[dim].shape}")
 
     solve_rates = compute_solve_rate(ert_datasets)
-
     for dim in DIMS:
         print(f"\n  Solve rate dim={dim} (top 5):")
         for name, val in solve_rates[dim].tail(5).items():
             print(f"    {val:.3f}  {name}")
 
-    ert_ranks = compute_ERT_rank(ert_datasets)
-
-    for dim in DIMS:
-        print(f"\n  ERT rank dim={dim} (top 5):")
-        for name, val in ert_ranks[dim].tail(5).items():
-            print(f"    {val:.3f}  {name}")
-    plot_ert_impact(ert_ranks, portfolio, dims=DIMS)
+    plot_ert_impact(ert_datasets, portfolio, dims=DIMS)
 
 
 if __name__ == "__main__":
