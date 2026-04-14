@@ -1,8 +1,45 @@
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from dynamicalgorithmselection.analysis.utils import PROBLEM_KEY_RE
+
+#: Regex to parse relevant behaviour filenames, e.g.
+#: DAS_CV_G3PCX_LMCMAES_SPSO_PG_CV-LOIO_CDB1.0_DIM2_SEED12.jsonl
+_BEHAVIOUR_FILE_RE = re.compile(
+    r"DAS_CV_(.+)_PG_CV-(\w+)_(CDB[\d.]+)_DIM(\d+)_SEED(\d+)\.jsonl$"
+)
+
+
+@dataclass(frozen=True)
+class BehaviourFile:
+    """Parsed metadata from a behaviour JSONL filename."""
+
+    path: Path
+    portfolio: str   # e.g. "G3PCX_LMCMAES_SPSO"
+    exp_type: str    # "LOIO" or "LOPO"
+    cdb: str         # e.g. "CDB1.0"
+    dim: int         # 2, 3, 5, or 10
+    seed: int        # 12, 23, or 34
+
+
+def discover_behaviour_files(
+    behaviour_dir: Path,
+    portfolio: str = "G3PCX_LMCMAES_SPSO",
+    exp_types: tuple[str, ...] = ("LOIO", "LOPO"),
+) -> list[BehaviourFile]:
+    """Discover and parse all matching behaviour files."""
+    files: list[BehaviourFile] = []
+    for path in sorted(behaviour_dir.glob("*.jsonl")):
+        m = _BEHAVIOUR_FILE_RE.match(path.name)
+        if m is None:
+            continue
+        p, et, cdb, dim, seed = m.groups()
+        if p != portfolio or et not in exp_types:
+            continue
+        files.append(BehaviourFile(path=path, portfolio=p, exp_type=et, cdb=cdb, dim=int(dim), seed=int(seed)))
+    return files
 
 
 @dataclass(frozen=True)
