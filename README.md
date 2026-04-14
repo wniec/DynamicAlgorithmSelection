@@ -14,6 +14,7 @@ optimization process.
     * **LM-CMAES**, **Standard PSO**, **CPSO**, **IPSO**, **PSOL**, **OPOA2015**, **POWELL**, and **G3PCX**.
 * **Unified Population:** All algorithms share the same **population size** (`n_individuals`), ensuring seamless
   transitions between solvers.
+* **State Representation** Implemented RL-DAS state representation and our own method based on Exploratory Landscape Analysis.
 * **Quantized Switching:** The agent makes switching decisions in **quantized stages**.
     * The number of switches is defined by `n_checkpoints`.
     * The length of optimization episodes increases exponentially based on the Checkpoint Division Exponent (`cdb`).
@@ -71,7 +72,6 @@ uv run das <name> [options]
 | `-a`, `--agent`                    | `str`       | `policy-gradient`           | Agent type. Options: `policy-gradient`, `random`, `RL-DAS`, `RL-DAS-random`.                                     |
 | `-l`, `--mode`                     | `str`       | `LOIO`                      | Train/Test split mode (see [Split Strategies](https://www.google.com/search?q=%23-train-test-split-strategies)). |
 | `-x`, `--cdb`                      | `float`     | `1.0`                       | **Checkpoint Division Exponent**; determines how quickly checkpoint length increases.                            |
-| `-r`, `--state-representation`     | `str`       | `ELA`                       | Method used to extract features from the algorithm population.                                                   |
 | `-d`, `--force-restarts`           | `bool`      | `False`                     | Enable selection of forcibly restarting optimizers.                                                              |
 | `-D`, `--dimensionality`           | `list[int]` | `[2, 3, 5, 10, 20, 40]`     | Dimensionality of problems.                                                                                      |
 | `-E`, `--n_epochs`                 | `int`       | `1`                         | Number of training epochs.                                                                                       |
@@ -147,19 +147,6 @@ Provides a sparse reward. It returns `0.0` for all intermediate checkpoints. At 
 * **Option 4 (`4`): Binary Threshold Reward**
 Calculates the scaled improvement between checkpoints and provides a binary outcome: it returns `1.0` if the scaled improvement is greater than or equal to a minimum threshold (`1e-3`), and `0.0` otherwise.
 
-
-## 🧠 State Representation
-
-There are two options for representing the optimization state (`-r` flag):
-
-1. **`ELA` (Exploratory Landscape Analysis):**
-   Implemented using [pflacco](https://pflacco.readthedocs.io/en/latest/index.html). Uses a subset of features to manage
-   computational complexity.
-2. **`custom`:**
-   A proposed feature extraction method
-   implemented [here](dynamicalgorithmselection/agents/agent_state.py). This can be
-   modified to include additional features.
-
 ---
 
 ## 🤝 Acknowledgment
@@ -170,8 +157,3 @@ There are two options for representing the optimization state (`-r` flag):
   🔗 [MetaEvolution Lab](https://metaevo.github.io/)
 
 ---
-
-## 🚀 Roadmap / To-Do
-
-* [ ] Add more sub-optimizers.
-* [ ] Enable additional parameters specifying the agent's model architecture and behavior.

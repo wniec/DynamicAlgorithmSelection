@@ -17,11 +17,11 @@ class BehaviourFile:
     """Parsed metadata from a behaviour JSONL filename."""
 
     path: Path
-    portfolio: str   # e.g. "G3PCX_LMCMAES_SPSO"
-    exp_type: str    # "LOIO" or "LOPO"
-    cdb: str         # e.g. "CDB1.0"
-    dim: int         # 2, 3, 5, or 10
-    seed: int        # 12, 23, or 34
+    portfolio: str  # e.g. "G3PCX_LMCMAES_SPSO"
+    exp_type: str  # "LOIO" or "LOPO"
+    cdb: str  # e.g. "CDB1.0"
+    dim: int  # 2, 3, 5, or 10
+    seed: int  # 12, 23, or 34
 
 
 def discover_behaviour_files(
@@ -38,7 +38,16 @@ def discover_behaviour_files(
         p, et, cdb, dim, seed = m.groups()
         if p != portfolio or et not in exp_types:
             continue
-        files.append(BehaviourFile(path=path, portfolio=p, exp_type=et, cdb=cdb, dim=int(dim), seed=int(seed)))
+        files.append(
+            BehaviourFile(
+                path=path,
+                portfolio=p,
+                exp_type=et,
+                cdb=cdb,
+                dim=int(dim),
+                seed=int(seed),
+            )
+        )
     return files
 
 

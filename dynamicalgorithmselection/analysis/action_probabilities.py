@@ -48,6 +48,7 @@ _RC: dict[str, object] = {
     "grid.linestyle": "--",
 }
 
+
 def to_empirical_probs(sequence: ActionSequence, algorithms: list[str]) -> np.ndarray:
     """One-hot encode actions into empirical per-checkpoint probabilities.
 
@@ -115,7 +116,8 @@ def aggregate(
 def _make_legend_handles(algorithms: list[str]) -> list[Line2D]:
     return [
         Line2D(
-            [0], [0],
+            [0],
+            [0],
             color=ALGO_COLORS.get(alg, "black"),
             linestyle=ALGO_LINESTYLES.get(alg, "-"),
             linewidth=1.5,
@@ -137,7 +139,8 @@ def plot_lineplots_with_variability(
     with plt.rc_context(_RC):
         n = len(mean_data)
         fig, axes = plt.subplots(
-            1, n,
+            1,
+            n,
             figsize=(n * 2.8, 2.6),
             constrained_layout=True,
             sharey=True,
@@ -193,7 +196,8 @@ def plot_heatmap_mean(
     n = len(mean_data)
     with plt.rc_context(_RC):
         fig, axes = plt.subplots(
-            1, n,
+            1,
+            n,
             figsize=(n * 2.8, 2.2),
             constrained_layout=True,
         )
@@ -202,13 +206,19 @@ def plot_heatmap_mean(
         for ax, (label, mean_probs) in zip(axes_flat, mean_data.items()):
             n_checkpoints = mean_probs.shape[1]
             xlabels = list(range(1, n_checkpoints + 1))
-            im = ax.imshow(mean_probs, aspect="auto", cmap="viridis", vmin=0.0, vmax=1.0)
+            im = ax.imshow(
+                mean_probs, aspect="auto", cmap="viridis", vmin=0.0, vmax=1.0
+            )
             ax.set_title(label, fontsize=8)
             ax.set_yticks(range(len(algorithms)), algorithms, fontsize=7)
-            ax.set_xticks(range(n_checkpoints), xlabels, fontsize=7, rotation=45, ha="right")
+            ax.set_xticks(
+                range(n_checkpoints), xlabels, fontsize=7, rotation=45, ha="right"
+            )
             ax.set_xlabel("Checkpoint", fontsize=7)
 
-        fig.colorbar(im, ax=axes_flat.tolist(), shrink=0.8, label="Selection probability")
+        fig.colorbar(
+            im, ax=axes_flat.tolist(), shrink=0.8, label="Selection probability"
+        )
 
         if title:
             fig.suptitle(title, fontsize=9)
@@ -238,7 +248,8 @@ def plot_summary_lineplots(
 
     with plt.rc_context(_RC):
         fig, axes = plt.subplots(
-            n_rows, n_cols,
+            n_rows,
+            n_cols,
             figsize=(n_cols * 2.6, n_rows * 2.2),
             constrained_layout=True,
             sharey=True,
@@ -274,7 +285,9 @@ def plot_summary_lineplots(
                     ax.set_xlabel("Checkpoint", fontsize=7)
                     ax.set_xticks(xs if n_checkpoints <= 10 else xs[::2])
                 if col_idx == 0:
-                    prob_label = "Policy prob." if source == "probabilities" else "Action freq."
+                    prob_label = (
+                        "Policy prob." if source == "probabilities" else "Action freq."
+                    )
                     seed_label = f"(n={n_seeds})" if n_seeds else ""
                     ax.set_ylabel(f"$d={dim}$\n{prob_label} {seed_label}", fontsize=7)
 
@@ -287,7 +300,11 @@ def plot_summary_lineplots(
             fontsize=7,
         )
 
-        source_label = "Policy probabilities" if source == "probabilities" else "Action frequencies"
+        source_label = (
+            "Policy probabilities"
+            if source == "probabilities"
+            else "Action frequencies"
+        )
         fig.suptitle(f"{exp_type} — {source_label}", fontsize=10, y=1.01)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -354,14 +371,18 @@ def generate_multi_experiment_plots(
     Additionally saves summary figures per (exp_type, CDB) with all
     dimensionalities in rows and all function groups in columns.
     """
-    all_files = discover_behaviour_files(behaviour_dir, portfolio=portfolio, exp_types=exp_types)
+    all_files = discover_behaviour_files(
+        behaviour_dir, portfolio=portfolio, exp_types=exp_types
+    )
     if not all_files:
         raise FileNotFoundError(
             f"No behaviour files matching portfolio={portfolio!r} found in {behaviour_dir}."
         )
 
     # Group by (exp_type, dim, cdb) then by seed
-    grouped: dict[tuple[str, int, str], dict[int, list[BehaviourFile]]] = defaultdict(lambda: defaultdict(list))
+    grouped: dict[tuple[str, int, str], dict[int, list[BehaviourFile]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for bf in all_files:
         grouped[(bf.exp_type, bf.dim, bf.cdb)][bf.seed].append(bf)
 
@@ -369,14 +390,16 @@ def generate_multi_experiment_plots(
     sources = [("probabilities", "policy"), ("actions", "actions")]
 
     # summary[exp_type][cdb][src_key][dim] = (mean_data, std_data)
-    summary: dict[str, dict[str, dict[str, dict[int, tuple[dict, dict]]]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(dict))
+    summary: dict[str, dict[str, dict[str, dict[int, tuple[dict, dict]]]]] = (
+        defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
     )
 
     for (exp_type, dim, cdb), files_by_seed in sorted(grouped.items()):
         n_seeds = len(files_by_seed)
         plots_dir = output_dir / exp_type / f"dim{dim}" / cdb.lower() / "plots"
-        print(f"\n[{exp_type}  dim={dim}  {cdb}]  seeds={sorted(files_by_seed)}  folds/seed={len(next(iter(files_by_seed.values())))}")
+        print(
+            f"\n[{exp_type}  dim={dim}  {cdb}]  seeds={sorted(files_by_seed)}  folds/seed={len(next(iter(files_by_seed.values())))}"
+        )
 
         for source, src_key in sources:
             per_seed = _aggregate_per_seed(files_by_seed, algorithms, mode, source)
@@ -386,7 +409,10 @@ def generate_multi_experiment_plots(
 
             lp_path = plots_dir / f"{src_key}_lineplot.png"
             plot_lineplots_with_variability(
-                mean_data, std_data, algorithms, lp_path,
+                mean_data,
+                std_data,
+                algorithms,
+                lp_path,
                 title=f"{exp_type}  d={dim}  {cdb}  —  {'Policy probabilities' if src_key == 'policy' else 'Action frequencies'}",
                 n_seeds=n_seeds,
             )
@@ -394,7 +420,9 @@ def generate_multi_experiment_plots(
 
             hm_path = plots_dir / f"{src_key}_heatmap.png"
             plot_heatmap_mean(
-                mean_data, algorithms, hm_path,
+                mean_data,
+                algorithms,
+                hm_path,
                 title=f"{exp_type}  d={dim}  {cdb}  —  {'Policy probabilities' if src_key == 'policy' else 'Action frequencies'}",
             )
             print(f"  Saved: {hm_path}")
@@ -408,14 +436,19 @@ def generate_multi_experiment_plots(
                     continue
                 any_dim = next(iter(dim_results))
                 n_seeds = len(grouped[(exp_type, any_dim, cdb)])
-                summary_path = output_dir / exp_type / cdb.lower() / f"{src_key}_summary.png"
+                summary_path = (
+                    output_dir / exp_type / cdb.lower() / f"{src_key}_summary.png"
+                )
                 plot_summary_lineplots(
-                    dim_results, algorithms, summary_path,
+                    dim_results,
+                    algorithms,
+                    summary_path,
                     exp_type=f"{exp_type} {cdb}",
                     source=source,
                     n_seeds=n_seeds,
                 )
                 print(f"\nSaved summary: {summary_path}")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
