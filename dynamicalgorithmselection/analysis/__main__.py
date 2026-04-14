@@ -66,17 +66,20 @@ def run_results_pipeline(
             print(f"  {key}: {df.shape}")
 
         print(f"\n  AUOC LOPO ranking (top 5):")
-        means = datasets[dim]["auoc_LOPO"].mean(axis=1).sort_values()
+        means: pd.DataFrame = datasets[dim]["auoc_LOPO"].mean(axis=1).sort_values()
+        means.to_latex(f"AUOC_DIM{dim}.tex")
         for name, val in means.head(5).items():
             print(f"    {val:12.2f}  {name}")
 
         print(f"\n  Final fitness LOIO ranking (top 5):")
         means = datasets[dim]["final_fitness_LOIO"].mean(axis=1).sort_values()
+        means.to_latex(f"FF_DIM{dim}.tex")
         for name, val in means.head(5).items():
             print(f"    {val:12.6f}  {name}")
 
         print(f"\n  AOCC LOPO ranking (top 5):")
         means = datasets[dim]["aocc_LOPO"].mean(axis=1).sort_values()
+        means.to_latex(f"AOCC_DIM{dim}.tex")
         for name, val in means.head(5).items():
             print(f"    {val:12.6f}  {name}")
 
@@ -111,10 +114,12 @@ def run_ert_pipeline(
         print(f"  ERT shape: {ert_datasets[dim].shape}")
 
     solve_rates = compute_solve_rate(ert_datasets)
+    ert_rankings = compute_ERT_rank(ert_datasets)
     for dim in DIMS:
         print(f"\n  Solve rate dim={dim} (top 5):")
         for name, val in solve_rates[dim].tail(5).items():
             print(f"    {val:.3f}  {name}")
+            ert_rankings[dim].to_latex(f"ERT_DIM{dim}.tex")
 
     plot_ert_impact(ert_datasets, portfolio, dims=DIMS)
 
