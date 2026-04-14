@@ -64,7 +64,7 @@ def split_results_by_dimension(
     dims: tuple[int, ...] = (2, 3, 5, 10),
     extra_baselines: list[str] | None = None,
 ) -> dict[int, dict[str, pd.DataFrame]]:
-    """Split AUOC and final_fitness DataFrames by dimension and CV mode.
+    """Split AUOC, final_fitness and AOCC DataFrames by dimension and CV mode.
 
     Produces per-dimension datasets filtered by LOIO/LOPO cross-validation
     mode. Multidimensional experiments and baselines are included in each
@@ -73,12 +73,14 @@ def split_results_by_dimension(
     Args:
         auoc: Aggregated AUOC DataFrame (experiments x problems).
         final_fitness: Aggregated final fitness DataFrame (experiments x problems).
+        auoc: Aggregated AOCC DataFrame (experiments x problems).
         dims: Tuple of dimensions to split by.
         extra_baselines: Additional baseline experiment names to include
             (e.g. ``["BASELINES_baselines_MADDE"]``).
 
     Returns:
         ``{dim: {"auoc_LOIO": df, "auoc_LOPO": df,
+                 "aocc_LOIO": df, "aocc_LOPO": df,
                  "final_fitness_LOIO": df, "final_fitness_LOPO": df}}``.
     """
     all_rows = list(auoc.index)
@@ -97,7 +99,7 @@ def split_results_by_dimension(
     existing_global = [r for r in global_rows if r in auoc.index]
     global_auoc = auoc.loc[existing_global]
     global_ff = final_fitness.loc[existing_global]
-    global_aocc = auoc.loc[existing_global]
+    global_aocc = aocc.loc[existing_global]
 
     datasets: dict[int, dict[str, pd.DataFrame]] = {}
 

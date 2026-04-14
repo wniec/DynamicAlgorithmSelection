@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from dynamicalgorithmselection.analysis.latex_utils import get_output_latex
 from dynamicalgorithmselection.analysis.loading import (
     load_experiment_results,
     load_ert_htmls,
@@ -29,6 +30,24 @@ EXTRA_BASELINES = [
     f"BASELINES_baselines_{name}"
     for name in ("MADDE", "JDE21", "NL_SHADE_RSP", "best", "worst")
 ]
+
+# Global list to store Series/DataFrames for the final joint table
+LOPO_TABLES = []
+LOIO_TABLES = []
+
+
+def strip_dim_from_index(data_obj, dim: int):
+    """
+    Strips dimension-specific suffixes from the pandas index so
+    cross-dimensional joins align correctly.
+    Handles: '_DIM{dim}' anywhere, and '_{dim}' at the end of the string.
+    """
+    # Create a copy to avoid SettingWithCopy warnings just in case
+    data_obj = data_obj.copy()
+    data_obj.index = data_obj.index.str.replace(
+        f"_DIM{dim}", "", regex=False
+    ).str.replace(rf"_{dim}$", "", regex=True)
+    return data_obj
 
 
 def run_results_pipeline(
@@ -62,26 +81,25 @@ def run_results_pipeline(
 
     for dim in DIMS:
         print(f"\n--- Dimension {dim} ---")
-        for key, df in datasets[dim].items():
-            print(f"  {key}: {df.shape}")
 
-        print(f"\n  AUOC LOPO ranking (top 5):")
-        means: pd.DataFrame = datasets[dim]["auoc_LOPO"].mean(axis=1).sort_values()
-        means.to_latex(f"AUOC_DIM{dim}.tex")
-        for name, val in means.head(5).items():
-            print(f"    {val:12.2f}  {name}")
+        # We will extract both LOPO and LOIO for all metrics
+        scenarios = ["LOPO", "LOIO"]
+        tables = (LOPO_TABLES, LOIO_TABLES)
 
-        print(f"\n  Final fitness LOIO ranking (top 5):")
-        means = datasets[dim]["final_fitness_LOIO"].mean(axis=1).sort_values()
-        means.to_latex(f"FF_DIM{dim}.tex")
-        for name, val in means.head(5).items():
-            print(f"    {val:12.6f}  {name}")
+        for table, scenario in zip(tables, scenarios):
+            # Final Fitness
+            ff_key = f"final_fitness_{scenario}"
+            if ff_key in datasets[dim]:
+                means_ff = datasets[dim][ff_key].mean(axis=1)
+                means_ff.name = f"FF_DIM{dim}"
+                table.append(strip_dim_from_index(means_ff, dim))
 
-        print(f"\n  AOCC LOPO ranking (top 5):")
-        means = datasets[dim]["aocc_LOPO"].mean(axis=1).sort_values()
-        means.to_latex(f"AOCC_DIM{dim}.tex")
-        for name, val in means.head(5).items():
-            print(f"    {val:12.6f}  {name}")
+            # AOCC
+            aocc_key = f"aocc_{scenario}"
+            if aocc_key in datasets[dim]:
+                means_aocc = datasets[dim][aocc_key].mean(axis=1)
+                means_aocc.name = f"AOCC_DIM{dim}"
+                table.append(strip_dim_from_index(means_aocc, dim))
 
     # --- CDB impact plots for the selected portfolio ---
     plot_cdb_impact(datasets, portfolio, dims=DIMS)
@@ -101,7 +119,9 @@ def run_ert_pipeline(
     for name, html in htmls.items():
         data: dict[str, object] = parse_ert_from_html(html)
         seed_match = re.search(r"_SEED(\d+)", name)
-        data["base_name"] = name[: seed_match.start()] if seed_match else name
+        data["base_name"] = (
+            name[: seed_match.start()].replace(".html", "") if seed_match else name
+        )
         all_ert.append(data)
 
     df_ert = pd.DataFrame(all_ert).groupby("base_name").mean(numeric_only=True)
@@ -115,11 +135,17 @@ def run_ert_pipeline(
 
     solve_rates = compute_solve_rate(ert_datasets)
     ert_rankings = compute_ERT_rank(ert_datasets)
+
     for dim in DIMS:
         print(f"\n  Solve rate dim={dim} (top 5):")
         for name, val in solve_rates[dim].tail(5).items():
             print(f"    {val:.3f}  {name}")
-            ert_rankings[dim].to_latex(f"ERT_DIM{dim}.tex")
+
+        # Extract ERT ranking, rename, clean index, and append
+        ert_rank = ert_rankings[dim]
+        ert_rank = ert_rank.add_suffix(f"_ERT_DIM{dim}")
+
+        # GLOBAL_TABLES.append(strip_dim_from_index(ert_rank, dim))
 
     plot_ert_impact(ert_datasets, portfolio, dims=DIMS)
 
@@ -135,3 +161,5 @@ if __name__ == "__main__":
 
     run_results_pipeline(portfolio=args.portfolio + "_")
     run_ert_pipeline()
+
+    get_output_latex(LOIO_TABLES, LOPO_TABLES)

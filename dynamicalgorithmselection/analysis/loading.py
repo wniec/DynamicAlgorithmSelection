@@ -230,7 +230,10 @@ def load_experiment_results(
                 run_results: dict[str, dict[str, float]] = json.loads(line)
                 for key, val in run_results.items():
                     experiment_data[key] = val
-        results[result_file.stem] = experiment_data
+        experiment_name = result_file.stem
+        experiment_name = re.sub(r"_(\d\.\d)", r"_RANDOM_CDB\1", experiment_name)
+
+        results[experiment_name] = experiment_data
 
     return results
 
