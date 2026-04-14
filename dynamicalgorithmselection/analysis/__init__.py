@@ -6,6 +6,7 @@ from dynamicalgorithmselection.analysis.loading import (
     load_experiment_results,
     load_ert_htmls,
 )
+from dynamicalgorithmselection.analysis.latex_utils import get_output_latex
 from dynamicalgorithmselection.analysis.preprocessing import (
     aggregate_over_seeds,
     extract_seed_info,
@@ -32,4 +33,5 @@ __all__ = [
     "extract_metric",
     "parse_ert_from_html",
     "compute_solve_rate",
+    "get_output_latex",
 ]
