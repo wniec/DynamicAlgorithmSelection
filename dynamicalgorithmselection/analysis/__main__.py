@@ -17,7 +17,11 @@ from dynamicalgorithmselection.analysis.metrics import (
     parse_ert_from_html,
     compute_ERT_rank,
 )
-from dynamicalgorithmselection.analysis.plotting import plot_cdb_impact, plot_ert_impact
+from dynamicalgorithmselection.analysis.plotting import (
+    plot_cdb_impact,
+    plot_ert_impact,
+    plot_cdb_impact_comparison,
+)
 from dynamicalgorithmselection.analysis.preprocessing import (
     aggregate_over_seeds,
     split_ert_by_dimension,
@@ -103,6 +107,7 @@ def run_results_pipeline(
 
     # --- CDB impact plots for the selected portfolio ---
     plot_cdb_impact(datasets, portfolio, dims=DIMS)
+    plot_cdb_impact_comparison(datasets, portfolio, dims=DIMS)
 
 
 def run_ert_pipeline(

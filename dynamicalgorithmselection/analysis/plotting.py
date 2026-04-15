@@ -4,6 +4,7 @@ from itertools import product
 from typing import Callable
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from dynamicalgorithmselection.analysis.metrics import compute_ERT_rank
@@ -117,6 +118,132 @@ def plot_cdb_impact(
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
+        plt.show()
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+
+def plot_cdb_impact_comparison(
+    datasets: dict[int, dict[str, pd.DataFrame]],
+    portfolio: str,
+    dims: tuple[int, ...] = (2, 3, 5, 10),
+    cv_mode: str = "LOPO",
+) -> None:
+    """Plot a violin plot comparing baselines, RL-DAS, Exp-DAS (CDB=2.1), Multi Exp-DAS, and Random agents on AOCC."""
+
+    def get_category(name: str) -> str | None:
+        # Extract baselines (e.g., MADDE, JDE21, best, worst)
+        if "BASELINES_baselines_" in name:
+            return name.split("BASELINES_baselines_")[-1]
+        if "best" in name:
+            return "best case"
+        if "worst" in name:
+            return "worst case"
+        # Extract Random agents
+        if "RANDOM_CDB2.1" in name:
+            return "Random-Exp (CDB=2.1)"
+        if "RANDOM" in name and "CDB" not in name:
+            return "Random AS"
+
+        # Extract DAS variations
+        if portfolio in name:
+            if "MULTIDIMENSIONAL" in name:
+                if "CDB2.1" in name:
+                    return "Multi Exp-DAS (CDB=2.1)"
+            else:
+                if "CDB2.1" in name:
+                    return "Exp-DAS (CDB=2.1)"
+                # Standard RL-DAS typically relies on CDB 1.0
+                if "CDB1.0" in name:
+                    return "RL-DAS"
+
+        return None
+
+    for dim in dims:
+        metric_key = f"auoc_{cv_mode}"
+
+        # Verify we have data for this dimension and metric before creating plots
+        if metric_key not in datasets.get(dim, {}):
+            continue
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        fig.suptitle(f"Agent Comparison - Dimension {dim} ({cv_mode})", fontsize=16)
+
+        df = datasets[dim][metric_key]
+
+        cat_data = {}
+        # For a violin plot, we need the raw distribution of values instead of just the mean.
+        # This gathers all problem/run scores for every experiment in that category.
+        for exp_name, row in df.iterrows():
+            cat = get_category(exp_name)
+            if cat:
+                cat_data.setdefault(cat, []).extend(row.dropna().tolist())
+
+        # Set a standard display order
+        order = [
+            "RL-DAS",
+            "Exp-DAS (CDB=2.1)",
+            "Multi Exp-DAS (CDB=2.1)",
+            "Random AS",
+            "Random-Exp (CDB=2.1)",
+            "MADDE",
+            "JDE21",
+            "NL_SHADE_RSP",
+            "best",
+            "worst",
+        ]
+
+        # Filter labels to those present in data with at least one value
+        labels = [c for c in order if c in cat_data and len(cat_data[c]) > 0]
+        labels += [c for c in cat_data if c not in labels and len(cat_data[c]) > 0]
+        dataset = [cat_data[c] for c in labels]
+
+        if not dataset:
+            plt.close(fig)
+            continue
+
+        # Create violin plot
+        parts = ax.violinplot(dataset, positions=range(len(labels)), showmeans=True)
+
+        # Highlight groups by color and apply hatching for easy reading
+        for i, label in enumerate(labels):
+            if "Multi" in label and "DAS" in label:
+                color = "tab:orange"
+                hatch = "//"
+            elif "DAS" in label:
+                color = "tab:orange"
+                hatch = ""
+            elif "Random" in label:
+                color = "tab:green"
+                hatch = ""
+            else:
+                color = "tab:blue"
+                hatch = ""
+
+            pc = parts["bodies"][i]
+            pc.set_facecolor(color)
+            pc.set_edgecolor("black")
+            pc.set_alpha(0.8)
+            if hatch:
+                pc.set_hatch(hatch)
+
+        # Style the lines within the violin plot
+        for partname in ("cbars", "cmins", "cmaxes", "cmeans"):
+            if partname in parts:
+                vp = parts[partname]
+                vp.set_edgecolor("black")
+                vp.set_linewidth(1.5)
+
+        ax.set_title("AOCC")
+        ax.set_ylabel("Distribution of Values over problems")
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+        ax.grid(axis="y", linestyle="--", alpha=0.7)
+
+        plt.tight_layout()
         plt.show()
 
 
