@@ -1,6 +1,5 @@
 """Plotting utilities for analysis results."""
 
-from itertools import product
 from pathlib import Path
 from typing import Callable
 
@@ -40,90 +39,199 @@ def _plot_lines_by_dimension(
         ax.plot(xs, ys, marker="o", label=f"DIM {dim}", color=DIM_COLORS.get(dim))
 
 
-def plot_cdb_impact(
+def _significance_marker(p: float) -> str:
+    if pd.isna(p):
+        return ""
+    if p < 0.001:
+        return "***"
+    if p < 0.01:
+        return "**"
+    if p < 0.05:
+        return "*"
+    return ""
+
+
+def plot_wilcoxon_heatmap(
+    table: pd.DataFrame,
+    save_dir: Path,
+    filename: str = "cdb_wilcoxon_heatmap.png",
+) -> None:
+    """Heatmap of rank-biserial effect size for each CDB vs baseline.
+
+    One subplot per (cv_mode, experiment_type); rows are dimensions,
+    columns are CDB values (excluding the baseline). Cell color encodes
+    rank-biserial correlation; annotation encodes Holm-adjusted significance.
+    """
+    if table.empty:
+        return
+
+    families = sorted(
+        {(r.cv_mode, r.experiment_type) for r in table.itertuples(index=False)}
+    )
+    if not families:
+        return
+
+    fig, axes = plt.subplots(
+        1, len(families), figsize=(4.2 * len(families), 3.6), squeeze=False
+    )
+    axes = axes[0]
+    im = None
+
+    for ax, (cv_mode, exp_type) in zip(axes, families):
+        sub = table[(table.cv_mode == cv_mode) & (table.experiment_type == exp_type)]
+        pivot_eff = sub.pivot(index="dim", columns="cdb", values="rank_biserial")
+        pivot_p = sub.pivot(index="dim", columns="cdb", values="p_value_holm")
+
+        pivot_eff = pivot_eff.reindex(sorted(pivot_eff.columns), axis=1)
+        pivot_p = pivot_p.reindex(sorted(pivot_p.columns), axis=1)
+
+        im = ax.imshow(
+            pivot_eff.values,
+            cmap="RdBu_r",
+            vmin=-1.0,
+            vmax=1.0,
+            aspect="auto",
+        )
+
+        for i, _dim in enumerate(pivot_eff.index):
+            for j, _cdb in enumerate(pivot_eff.columns):
+                eff = pivot_eff.iloc[i, j]
+                mark = _significance_marker(pivot_p.iloc[i, j])
+                color = "white" if not pd.isna(eff) and abs(eff) > 0.55 else "black"
+                ax.text(j, i, mark, ha="center", va="center", fontsize=10, color=color)
+
+        ax.set_xticks(range(len(pivot_eff.columns)))
+        ax.set_xticklabels([f"{c:g}" for c in pivot_eff.columns])
+        ax.set_yticks(range(len(pivot_eff.index)))
+        ax.set_yticklabels([f"DIM {d}" for d in pivot_eff.index])
+        ax.set_xlabel("CDB (vs. CDB=1.0)")
+
+    if im is not None:
+        cbar = fig.colorbar(im, ax=axes, shrink=0.85, pad=0.02)
+        cbar.set_label("rank-biserial effect size")
+
+    _save_and_close(fig, save_dir, filename)
+
+
+def _plot_combined_cdb_panel(
+    ax_line: plt.Axes,
+    ax_heat: plt.Axes,
     datasets: dict[int, dict[str, pd.DataFrame]],
+    wilcoxon_table: pd.DataFrame,
+    portfolio: str,
+    dims: tuple[int, ...],
+    cv_mode: str,
+    exp_type: str,
+    metric: str,
+) -> None:
+    if exp_type == "multi":
+        row_filter = lambda n: "MULTIDIMENSIONAL" in n  # noqa: E731
+    else:
+        row_filter = lambda n: "MULTIDIMENSIONAL" not in n  # noqa: E731
+
+    def extract_data(dim: int) -> list[tuple[float, float]]:
+        df = datasets[dim][f"{metric}_{cv_mode}"]
+        matching = [
+            name
+            for name in df.index
+            if portfolio in name
+            and row_filter(name)
+            and all(nc not in name for nc in NON_COMPARED)
+        ]
+        return [
+            (extract_cdb(name), float(df.loc[name].mean()))
+            for name in matching
+            if extract_cdb(name) is not None
+        ]
+
+    _plot_lines_by_dimension(ax_line, dims, extract_data)
+    # Use "D=X" labels instead of default "DIM X"
+    handles, labels = ax_line.get_legend_handles_labels()
+    labels = [lbl.replace("DIM ", "D=") for lbl in labels]
+    ax_line.legend(handles, labels)
+    ax_line.set_xlabel("CDB")
+    ax_line.set_ylabel(f"{metric.upper()} (mean over problems)")
+    ax_line.grid(True, alpha=0.3)
+
+    sub = wilcoxon_table[
+        (wilcoxon_table.cv_mode == cv_mode)
+        & (wilcoxon_table.experiment_type == exp_type)
+    ]
+    if sub.empty:
+        ax_heat.set_visible(False)
+        return
+
+    pivot_eff = sub.pivot(index="dim", columns="cdb", values="rank_biserial")
+    pivot_p = sub.pivot(index="dim", columns="cdb", values="p_value_holm")
+    pivot_eff = pivot_eff.reindex(sorted(pivot_eff.columns), axis=1)
+    pivot_p = pivot_p.reindex(sorted(pivot_p.columns), axis=1)
+    pivot_eff = pivot_eff.reindex(sorted(pivot_eff.index))
+    pivot_p = pivot_p.reindex(sorted(pivot_p.index))
+
+    ax_heat.imshow(
+        pivot_eff.values, cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="auto"
+    )
+
+    for i in range(pivot_eff.shape[0]):
+        for j in range(pivot_eff.shape[1]):
+            eff = pivot_eff.iloc[i, j]
+            mark = _significance_marker(pivot_p.iloc[i, j])
+            color = "white" if not pd.isna(eff) and abs(eff) > 0.55 else "black"
+            ax_heat.text(
+                j, i, mark, ha="center", va="center", fontsize=10, color=color
+            )
+
+    ax_heat.set_xticks(range(len(pivot_eff.columns)))
+    ax_heat.set_xticklabels([f"{c:g}" for c in pivot_eff.columns])
+    ax_heat.set_yticks(range(len(pivot_eff.index)))
+    ax_heat.set_yticklabels([f"D={d}" for d in pivot_eff.index])
+    ax_heat.set_xlabel("CDB (vs. CDB=1.0)")
+
+
+def plot_cdb_impact_with_significance(
+    datasets: dict[int, dict[str, pd.DataFrame]],
+    wilcoxon_table: pd.DataFrame,
     portfolio: str,
     save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
-    """Plot AOCC vs CDB for standard and multidimensional training.
+    """Combined AOCC-vs-CDB lines + Wilcoxon heatmap, one figure per family.
 
-    Args:
-        datasets: Dictionary of DataFrames segmented by dimension and metric.
-        portfolio: Portfolio name to filter experiments by.
-        dims: Dimensions to plot.
+    Generates three figures (LOIO standard, LOPO standard, LOPO multi). Each
+    figure is 1 column x 2 rows: top shows mean AOCC across problems per
+    dimension over CDB; bottom shows rank-biserial effect size vs CDB=1.0
+    with Holm-adjusted significance markers.
     """
-    # 1. Standard LOIO / LOPO Plots
-    for metric, cv_mode in product(("aocc",), ("LOIO", "LOPO")):
-        fig, ax = plt.subplots(figsize=(8, 5))
+    metric = "aocc"
+    panels = [
+        ("LOIO", "standard", "cdb_impact_with_significance_aocc_LOIO.png"),
+        ("LOPO", "standard", "cdb_impact_with_significance_aocc_LOPO.png"),
+        ("LOPO", "multi", "cdb_impact_with_significance_aocc_multi_LOPO.png"),
+    ]
 
-        def extract_standard_data(dim: int) -> list[tuple[float, float]]:
-            df = datasets[dim][f"{metric}_{cv_mode}"]
-            matching = [
-                name
-                for name in df.index
-                if portfolio in name and all(nc not in name for nc in NON_COMPARED)
-            ]
-
-            return [
-                (extract_cdb(name), float(df.loc[name].mean()))
-                for name in matching
-                if extract_cdb(name) is not None
-            ]
-
-        _plot_lines_by_dimension(ax, dims, extract_standard_data)
-
-        ax.set_xlabel("CDB")
-        ax.set_ylabel(f"{metric.upper()} (mean over problems)")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+    for cv_mode, exp_type, filename in panels:
+        fig, (ax_line, ax_heat) = plt.subplots(
+            2, 1, figsize=(12, 7), gridspec_kw={"height_ratios": [1.4, 1.0]}
+        )
+        _plot_combined_cdb_panel(
+            ax_line,
+            ax_heat,
+            datasets,
+            wilcoxon_table,
+            portfolio,
+            dims,
+            cv_mode,
+            exp_type,
+            metric,
+        )
         fig.tight_layout()
-        _save_and_close(fig, save_dir, f"cdb_impact_{metric}_{cv_mode}.png")
-
-    # 2. Multidimensional Plots (LOPO only)
-    cv_mode = "LOPO"
-    for metric in ("aocc",):
-        fig, ax = plt.subplots(figsize=(8, 5))
-
-        def extract_multi_data(dim: int) -> list[tuple[float, float]]:
-            df = datasets[dim][f"{metric}_{cv_mode}"]
-            matching = [
-                name
-                for name in df.index
-                if portfolio in name and all(nc not in name for nc in NON_COMPARED)
-            ]
-
-            return [
-                (extract_cdb(name), float(df.loc[name].mean()))
-                for name in matching
-                if extract_cdb(name) is not None
-            ]
-
-        _plot_lines_by_dimension(ax, dims, extract_multi_data)
-
-        ax.set_xlabel("CDB")
-        ax.set_ylabel(f"{metric.upper()} (mean over problems)")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        fig.tight_layout()
-        _save_and_close(fig, save_dir, f"cdb_impact_multi_{metric}_{cv_mode}.png")
-
-
-    if p < 0.001:
-
-def plot_wilcoxon_heatmap(
-    columns are CDB values (excluding the baseline). Cell color encodes
-    rank-biserial correlation; annotation encodes Holm-adjusted significance.
-        {(r.cv_mode, r.experiment_type) for r in table.itertuples(index=False)}
-    axes = axes[0]
-    im = None
-
-        pivot_eff = pivot_eff.reindex(sorted(pivot_eff.columns), axis=1)
+        _save_and_close(fig, save_dir, filename)
 
 
 def plot_cdb_impact_comparison(
     datasets: dict[int, dict[str, pd.DataFrame]],
     portfolio: str,
+    save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
     cv_mode: str = "LOPO",
 ) -> None:
@@ -158,7 +266,7 @@ def plot_cdb_impact_comparison(
         return None
 
     for dim in dims:
-        metric_key = f"auoc_{cv_mode}"
+        metric_key = f"aocc_{cv_mode}"
 
         # Verify we have data for this dimension and metric before creating plots
         if metric_key not in datasets.get(dim, {}):
@@ -239,12 +347,13 @@ def plot_cdb_impact_comparison(
         ax.grid(axis="y", linestyle="--", alpha=0.7)
 
         plt.tight_layout()
-        plt.show()
+        _save_and_close(fig, save_dir, f"cdb_impact_comparison_dim{dim}_{cv_mode}.png")
 
 
 def plot_ert_impact(
     datasets: dict[int, pd.DataFrame],
     portfolio: str,
+    save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
     """Plot ERT rank vs CDB for standard and multidimensional training.
@@ -287,7 +396,7 @@ def plot_ert_impact(
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
-        plt.show()
+        _save_and_close(fig, save_dir, f"ert_impact_{cv_mode}.png")
 
     # 2. Multidimensional Plots (LOPO only)
     cv_mode = "LOPO"
@@ -320,4 +429,4 @@ def plot_ert_impact(
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    plt.show()
+    _save_and_close(fig, save_dir, f"ert_impact_multi_{cv_mode}.png")

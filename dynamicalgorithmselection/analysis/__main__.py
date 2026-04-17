@@ -18,14 +18,17 @@ from dynamicalgorithmselection.analysis.metrics import (
     compute_ERT_rank,
 )
 from dynamicalgorithmselection.analysis.plotting import (
-    plot_cdb_impact,
     plot_ert_impact,
     plot_cdb_impact_comparison,
+    plot_cdb_impact_with_significance,
 )
 from dynamicalgorithmselection.analysis.preprocessing import (
     aggregate_over_seeds,
     split_ert_by_dimension,
     split_results_by_dimension,
+)
+from dynamicalgorithmselection.analysis.statistical_tests import (
+    compute_cdb_wilcoxon_table,
 )
 
 DATA_DIR = Path(".")
@@ -56,6 +59,8 @@ def strip_dim_from_index(data_obj, dim: int):
 
 def run_results_pipeline(
     portfolio: str = "G3PCX_LMCMAES_SPSO_",
+    plots_dir: Path = Path("plots"),
+    stats_path: Path = Path("plots/cdb_wilcoxon.csv"),
 ) -> None:
     print("=" * 60)
     print("RESULTS PIPELINE")
@@ -64,23 +69,21 @@ def run_results_pipeline(
     results = load_experiment_results(results_dir)
     print(f"Loaded {len(results)} experiments")
 
-    auoc = extract_metric(results, "area_under_optimization_curve")
     final_fitness = extract_metric(results, "final_fitness")
     aocc = extract_metric(results, "aocc")
     print(
-        f"Raw shapes — AUOC: {auoc.shape}, final_fitness: {final_fitness.shape}, AOCC: {aocc.shape}"
+        f"Raw shapes — final_fitness: {final_fitness.shape}, AOCC: {aocc.shape}"
     )
 
-    auoc_agg = aggregate_over_seeds(auoc)
     ff_agg = aggregate_over_seeds(final_fitness)
     aocc_agg = aggregate_over_seeds(aocc)
 
     print(
-        f"After seed aggregation — AUOC: {auoc_agg.shape}, final_fitness: {ff_agg.shape}, AOCC: {aocc_agg.shape}"
+        f"After seed aggregation — final_fitness: {ff_agg.shape}, AOCC: {aocc_agg.shape}"
     )
 
     datasets = split_results_by_dimension(
-        auoc_agg, ff_agg, aocc_agg, dims=DIMS, extra_baselines=EXTRA_BASELINES
+        ff_agg, aocc_agg, dims=DIMS, extra_baselines=EXTRA_BASELINES
     )
 
     for dim in DIMS:
@@ -106,12 +109,23 @@ def run_results_pipeline(
                 table.append(strip_dim_from_index(means_aocc, dim))
 
     # --- CDB impact plots for the selected portfolio ---
-    plot_cdb_impact(datasets, portfolio, dims=DIMS)
-    plot_cdb_impact_comparison(datasets, portfolio, dims=DIMS)
+    plot_cdb_impact_comparison(datasets, portfolio, save_dir=plots_dir, dims=DIMS)
+
+    # --- Wilcoxon signed-rank (one-sided) vs CDB=1.0 baseline ---
+    stats_table = compute_cdb_wilcoxon_table(
+        datasets, portfolio, save_path=stats_path, dims=DIMS
+    )
+    print(
+        f"\nWilcoxon table: {stats_table.shape[0]} comparisons -> {stats_path.resolve()}"
+    )
+    plot_cdb_impact_with_significance(
+        datasets, stats_table, portfolio, save_dir=plots_dir, dims=DIMS
+    )
 
 
 def run_ert_pipeline(
     portfolio: str = "G3PCX_LMCMAES_SPSO_",
+    plots_dir: Path = Path("plots"),
 ) -> None:
     print("\n" + "=" * 60)
     print("ERT PIPELINE")
@@ -152,7 +166,7 @@ def run_ert_pipeline(
 
         # GLOBAL_TABLES.append(strip_dim_from_index(ert_rank, dim))
 
-    plot_ert_impact(ert_datasets, portfolio, dims=DIMS)
+    plot_ert_impact(ert_datasets, portfolio, save_dir=plots_dir, dims=DIMS)
 
 
 if __name__ == "__main__":
@@ -162,9 +176,28 @@ if __name__ == "__main__":
         default="G3PCX_LMCMAES_SPSO",
         help="Portfolio name to analyse CDB impact for (default: G3PCX_LMCMAES_SPSO)",
     )
+    parser.add_argument(
+        "--plots-dir",
+        default="plots",
+        type=Path,
+        help="Directory where all generated plots are saved (default: plots/)",
+    )
+    parser.add_argument(
+        "--stats-path",
+        default=None,
+        type=Path,
+        help="CSV path for the CDB Wilcoxon table (default: <plots-dir>/cdb_wilcoxon.csv)",
+    )
     args = parser.parse_args()
 
-    run_results_pipeline(portfolio=args.portfolio + "_")
-    run_ert_pipeline()
+    stats_path = args.stats_path or (args.plots_dir / "cdb_wilcoxon.csv")
+
+    run_results_pipeline(
+        portfolio=args.portfolio + "_",
+        plots_dir=args.plots_dir,
+        stats_path=stats_path,
+    )
+    run_ert_pipeline(plots_dir=args.plots_dir)
 
     get_output_latex(LOIO_TABLES, LOPO_TABLES)
+    print(f"\nAll plots saved to: {args.plots_dir.resolve()}")
