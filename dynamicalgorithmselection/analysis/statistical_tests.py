@@ -1,5 +1,6 @@
 """One-sided Wilcoxon signed-rank tests comparing CDB variants vs CDB=1.0."""
 
+from itertools import permutations
 from pathlib import Path
 
 import numpy as np
@@ -82,7 +83,7 @@ def _wilcoxon_row(
 
 def compute_cdb_wilcoxon_table(
     datasets: dict[int, dict[str, pd.DataFrame]],
-    portfolio: str,
+    portfolio: list[str],
     save_path: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
     metric: str = "aocc",
@@ -116,7 +117,7 @@ def compute_cdb_wilcoxon_table(
             matching = [
                 n
                 for n in df.index
-                if portfolio in n
+                if any(("_".join(i) in n) for i in permutations(portfolio))
                 and predicate(n)
                 and all(nc not in n for nc in NON_COMPARED)
             ]
@@ -148,9 +149,7 @@ def compute_cdb_wilcoxon_table(
             adj = _holm([r["p_value"] for r in family_rows])
             for r, p_adj in zip(family_rows, adj):
                 r["p_value_holm"] = p_adj
-                r["significant"] = (
-                    bool(p_adj < alpha) if not np.isnan(p_adj) else False
-                )
+                r["significant"] = bool(p_adj < alpha) if not np.isnan(p_adj) else False
             records.extend(family_rows)
 
     columns = [
@@ -170,9 +169,11 @@ def compute_cdb_wilcoxon_table(
         "p_value_holm",
         "significant",
     ]
-    table = pd.DataFrame(records, columns=columns).sort_values(
-        ["cv_mode", "experiment_type", "dim", "cdb"], kind="stable"
-    ).reset_index(drop=True)
+    table = (
+        pd.DataFrame(records, columns=columns)
+        .sort_values(["cv_mode", "experiment_type", "dim", "cdb"], kind="stable")
+        .reset_index(drop=True)
+    )
 
     save_path.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(save_path, index=False, float_format="%.6g")

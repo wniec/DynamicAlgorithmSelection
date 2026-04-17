@@ -58,7 +58,7 @@ def strip_dim_from_index(data_obj, dim: int):
 
 
 def run_results_pipeline(
-    portfolio: str = "G3PCX_LMCMAES_SPSO_",
+    portfolio: list[str] = ["G3PCX", "LMCMAES", "SPSO"],
     plots_dir: Path = Path("plots"),
     stats_path: Path = Path("plots/cdb_wilcoxon.csv"),
 ) -> None:
@@ -71,9 +71,7 @@ def run_results_pipeline(
 
     final_fitness = extract_metric(results, "final_fitness")
     aocc = extract_metric(results, "aocc")
-    print(
-        f"Raw shapes — final_fitness: {final_fitness.shape}, AOCC: {aocc.shape}"
-    )
+    print(f"Raw shapes — final_fitness: {final_fitness.shape}, AOCC: {aocc.shape}")
 
     ff_agg = aggregate_over_seeds(final_fitness)
     aocc_agg = aggregate_over_seeds(aocc)
@@ -99,7 +97,6 @@ def run_results_pipeline(
             if ff_key in datasets[dim]:
                 means_ff = datasets[dim][ff_key].mean(axis=1)
                 means_ff.name = f"FF_DIM{dim}"
-                table.append(strip_dim_from_index(means_ff, dim))
 
             # AOCC
             aocc_key = f"aocc_{scenario}"
@@ -124,7 +121,7 @@ def run_results_pipeline(
 
 
 def run_ert_pipeline(
-    portfolio: str = "G3PCX_LMCMAES_SPSO_",
+    portfolio: list[str] = ["G3PCX", "LMCMAES", "SPSO"],
     plots_dir: Path = Path("plots"),
 ) -> None:
     print("\n" + "=" * 60)
@@ -173,7 +170,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analysis pipelines")
     parser.add_argument(
         "--portfolio",
-        default="G3PCX_LMCMAES_SPSO",
+        nargs="+",
+        default=["G3PCX", "LMCMAES", "SPSO"],
         help="Portfolio name to analyse CDB impact for (default: G3PCX_LMCMAES_SPSO)",
     )
     parser.add_argument(
@@ -193,11 +191,11 @@ if __name__ == "__main__":
     stats_path = args.stats_path or (args.plots_dir / "cdb_wilcoxon.csv")
 
     run_results_pipeline(
-        portfolio=args.portfolio + "_",
+        portfolio=args.portfolio,
         plots_dir=args.plots_dir,
         stats_path=stats_path,
     )
-    run_ert_pipeline(plots_dir=args.plots_dir)
+    run_ert_pipeline(plots_dir=args.plots_dir, portfolio=args.portfolio)
 
     get_output_latex(LOIO_TABLES, LOPO_TABLES)
     print(f"\nAll plots saved to: {args.plots_dir.resolve()}")

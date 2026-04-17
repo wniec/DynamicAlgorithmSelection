@@ -6,7 +6,6 @@ def apply_precision_and_bolding(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     aocc_cols = [c for c in df.columns if "AOCC" in str(c)]
-    ff_cols = [c for c in df.columns if "FF" in str(c)]
 
     def format_aocc(val):
         if pd.isna(val):
@@ -19,17 +18,6 @@ def apply_precision_and_bolding(df: pd.DataFrame) -> pd.DataFrame:
             return f"BSTART{formatted}BEND"
         return formatted
 
-    def format_ff(val):
-        if pd.isna(val):
-            return "N/A"
-        num = float(val)
-        formatted = f"{num:.3f}"
-
-        # If this value matches the max, wrap it in our placeholder
-        if num == min_val:
-            return f"BSTART{formatted}BEND"
-        return formatted
-
     for col in aocc_cols:
         if col not in df.columns:
             continue
@@ -37,20 +25,8 @@ def apply_precision_and_bolding(df: pd.DataFrame) -> pd.DataFrame:
         # Find the exact numeric maximum, ignoring NaNs
         numeric_col = pd.to_numeric(df[col], errors="coerce")
         max_val = numeric_col.max()
-        min_val = numeric_col.min()
 
         df[col] = df[col].apply(format_aocc)
-
-    for col in ff_cols:
-        if col not in df.columns:
-            continue
-
-        # Find the exact numeric maximum, ignoring NaNs
-        numeric_col = pd.to_numeric(df[col], errors="coerce")
-        max_val = numeric_col.max()
-        min_val = numeric_col.min()
-
-        df[col] = df[col].apply(format_ff)
 
     return df
 
@@ -84,6 +60,8 @@ def format_scenario_df(df: pd.DataFrame, scenario_target: str) -> pd.DataFrame:
 
     # Create boolean column for MULTIDIMENSIONAL and then remove the substring
     df["multidimensional"] = df["name"].str.contains("MULTIDIMENSIONAL", na=False)
+    df = df[~df["multidimensional"]]
+    df = df.drop(columns=["multidimensional"])
     df["name"] = df["name"].str.replace("MULTIDIMENSIONAL", "", regex=False)
 
     # Remove the scenario substring (e.g., "CV-LOPO" or "CV-LOIO")
@@ -109,6 +87,11 @@ def format_scenario_df(df: pd.DataFrame, scenario_target: str) -> pd.DataFrame:
     df.loc[mask_pg, "method"] = "Exponential-DAS"
     df["name"] = df["name"].str.replace("PG", "", regex=False)
 
+    # Drop PG with CDB other than 1.0 or 2.1
+    mask_cdb_invalid = ~df["CDB"].isin(["1.0", "2.1"])
+    rows_to_drop = mask_pg & mask_cdb_invalid
+    df = df[~rows_to_drop]
+
     # 2. RLDAS -> RL-DAS
     mask_rldas = df["name"].str.contains("RLDAS", na=False)
     df.loc[mask_rldas, "method"] = "RL-DAS"
@@ -124,6 +107,9 @@ def format_scenario_df(df: pd.DataFrame, scenario_target: str) -> pd.DataFrame:
     df.loc[mask_random, "method"] = "Random-Exponential"
     df["name"] = df["name"].str.replace("RANDOM", "", regex=False)
 
+    rows_to_drop = mask_random & mask_cdb_invalid
+    df = df[~rows_to_drop]
+
     # Strip any trailing, leading, or double underscores left by deletions
     df["name"] = df["name"].str.replace(r"__+", "_", regex=True).str.strip("_")
     df["name"] = (
@@ -137,7 +123,7 @@ def format_scenario_df(df: pd.DataFrame, scenario_target: str) -> pd.DataFrame:
 
     # Set the new composite primary key
     # (You can add 'method' to this index list if you want it to be part of the MultiIndex)
-    df = df.groupby(["name", "CDB", "multidimensional", "method"]).first()
+    df = df.groupby(["name", "CDB", "method"]).first()
     df.index.names = [
         "algorithm/portfolio" if x == "name" else x for x in df.index.names
     ]
@@ -155,13 +141,13 @@ def format_scenario_df(df: pd.DataFrame, scenario_target: str) -> pd.DataFrame:
     #    - Multidimensional (Boolean)
     #    - Method
     df = df.sort_values(
-        by=["name_len", "algorithm/portfolio", "CDB", "multidimensional", "method"],
-        ascending=[True, True, True, True, True],
+        by=["name_len", "algorithm/portfolio", "CDB", "method"],
+        ascending=[True, True, True, True],
     )
 
     # 5. Drop the helper column and set the index back if you want it as a MultiIndex again
     df = df.drop(columns=["name_len"])
-    df = df.set_index(["algorithm/portfolio", "CDB", "multidimensional", "method"])
+    df = df.set_index(["algorithm/portfolio", "CDB", "method"])
     return df
 
 

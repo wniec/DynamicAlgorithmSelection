@@ -8,6 +8,7 @@ import pandas as pd
 
 from dynamicalgorithmselection.analysis.metrics import compute_ERT_rank
 from dynamicalgorithmselection.analysis.preprocessing import extract_cdb
+from itertools import permutations
 
 
 def _save_and_close(fig: plt.Figure, save_dir: Path, filename: str) -> None:
@@ -118,7 +119,7 @@ def _plot_combined_cdb_panel(
     ax_heat: plt.Axes,
     datasets: dict[int, dict[str, pd.DataFrame]],
     wilcoxon_table: pd.DataFrame,
-    portfolio: str,
+    portfolio: list[str],
     dims: tuple[int, ...],
     cv_mode: str,
     exp_type: str,
@@ -134,7 +135,7 @@ def _plot_combined_cdb_panel(
         matching = [
             name
             for name in df.index
-            if portfolio in name
+            if any(("_".join(i) in name) for i in permutations(portfolio))
             and row_filter(name)
             and all(nc not in name for nc in NON_COMPARED)
         ]
@@ -168,18 +169,14 @@ def _plot_combined_cdb_panel(
     pivot_eff = pivot_eff.reindex(sorted(pivot_eff.index))
     pivot_p = pivot_p.reindex(sorted(pivot_p.index))
 
-    ax_heat.imshow(
-        pivot_eff.values, cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="auto"
-    )
+    ax_heat.imshow(pivot_eff.values, cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="auto")
 
     for i in range(pivot_eff.shape[0]):
         for j in range(pivot_eff.shape[1]):
             eff = pivot_eff.iloc[i, j]
             mark = _significance_marker(pivot_p.iloc[i, j])
             color = "white" if not pd.isna(eff) and abs(eff) > 0.55 else "black"
-            ax_heat.text(
-                j, i, mark, ha="center", va="center", fontsize=10, color=color
-            )
+            ax_heat.text(j, i, mark, ha="center", va="center", fontsize=10, color=color)
 
     ax_heat.set_xticks(range(len(pivot_eff.columns)))
     ax_heat.set_xticklabels([f"{c:g}" for c in pivot_eff.columns])
@@ -191,7 +188,7 @@ def _plot_combined_cdb_panel(
 def plot_cdb_impact_with_significance(
     datasets: dict[int, dict[str, pd.DataFrame]],
     wilcoxon_table: pd.DataFrame,
-    portfolio: str,
+    portfolio: list[str],
     save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
@@ -230,7 +227,7 @@ def plot_cdb_impact_with_significance(
 
 def plot_cdb_impact_comparison(
     datasets: dict[int, dict[str, pd.DataFrame]],
-    portfolio: str,
+    portfolio: list[str],
     save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
     cv_mode: str = "LOPO",
@@ -252,7 +249,7 @@ def plot_cdb_impact_comparison(
             return "Random AS"
 
         # Extract DAS variations
-        if portfolio in name:
+        if any("_".join(i) in name for i in permutations(portfolio)):
             if "MULTIDIMENSIONAL" in name:
                 if "CDB2.1" in name:
                     return "Multi Exp-DAS (CDB=2.1)"
@@ -352,7 +349,7 @@ def plot_cdb_impact_comparison(
 
 def plot_ert_impact(
     datasets: dict[int, pd.DataFrame],
-    portfolio: str,
+    portfolio: list[str],
     save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
@@ -372,7 +369,7 @@ def plot_ert_impact(
             matching = [
                 name
                 for name in df.index
-                if portfolio in name
+                if any(("_".join(i) in name) for i in permutations(portfolio))
                 and all(i not in name for i in NON_COMPARED)
                 and cv_mode in name
             ]
@@ -407,7 +404,9 @@ def plot_ert_impact(
         matching = [
             name
             for name in df.index
-            if portfolio in name and "MULTIDIMENSIONAL" in name and cv_mode in name
+            if any(("_".join(i) in name) for i in permutations(portfolio))
+            and "MULTIDIMENSIONAL" in name
+            and cv_mode in name
         ]
         if not matching:
             return []
@@ -425,7 +424,7 @@ def plot_ert_impact(
 
     ax.set_xlabel("CDB")
     ax.set_ylabel("(mean ERT ranking over MULTIDIMENSIONAL problems)")
-    ax.set_title(f"CDB impact — {portfolio} — {cv_mode} MULTIDIMENSIONAL")
+    ax.set_title(f"CDB impact — {' '.join(portfolio)} — {cv_mode} MULTIDIMENSIONAL")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
