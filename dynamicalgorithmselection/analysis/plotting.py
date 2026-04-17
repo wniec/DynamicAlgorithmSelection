@@ -1,14 +1,20 @@
 """Plotting utilities for analysis results."""
 
 from itertools import product
+from pathlib import Path
 from typing import Callable
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 from dynamicalgorithmselection.analysis.metrics import compute_ERT_rank
 from dynamicalgorithmselection.analysis.preprocessing import extract_cdb
+
+
+def _save_and_close(fig: plt.Figure, save_dir: Path, filename: str) -> None:
+    save_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_dir / filename, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
 
 # Globals cleanly defined at the top
@@ -21,39 +27,26 @@ def _plot_lines_by_dimension(
     dims: tuple[int, ...],
     data_extractor: Callable[[int], list[tuple[float, float]]],
 ) -> None:
-    """Helper to extract data, sort by CDB, and plot lines per dimension.
-
-    Args:
-        ax: The matplotlib Axes object to plot on.
-        dims: The tuple of dimensions to iterate over.
-        data_extractor: A callback function that takes an integer dimension
-            and returns a list of (cdb, metric_value) tuples.
-    """
+    """Helper to extract data, sort by CDB, and plot lines per dimension."""
     for dim in dims:
         dim_data = data_extractor(dim)
         if not dim_data:
             continue
 
-        # Sort strictly by CDB (index 0) to prevent Python from breaking ties
-        # by sorting the Y values, which creates false vertical trends.
-        pairs = sorted([(key, val) for key, val in dim_data], key=lambda x: x[0])
-        xs, ys = [i[0] for i in pairs], [i[1] for i in pairs]
+        pairs = sorted(dim_data, key=lambda x: x[0])
+        xs = [p[0] for p in pairs]
+        ys = [p[1] for p in pairs]
 
-        ax.plot(
-            xs,
-            ys,
-            marker="o",
-            label=f"DIM {dim}",
-            color=DIM_COLORS.get(dim),
-        )
+        ax.plot(xs, ys, marker="o", label=f"DIM {dim}", color=DIM_COLORS.get(dim))
 
 
 def plot_cdb_impact(
     datasets: dict[int, dict[str, pd.DataFrame]],
     portfolio: str,
+    save_dir: Path,
     dims: tuple[int, ...] = (2, 3, 5, 10),
 ) -> None:
-    """Plot AUOC/AOCC vs CDB for standard and multidimensional training.
+    """Plot AOCC vs CDB for standard and multidimensional training.
 
     Args:
         datasets: Dictionary of DataFrames segmented by dimension and metric.
@@ -61,19 +54,17 @@ def plot_cdb_impact(
         dims: Dimensions to plot.
     """
     # 1. Standard LOIO / LOPO Plots
-    for metric, cv_mode in product(("auoc", "aocc"), ("LOIO", "LOPO")):
+    for metric, cv_mode in product(("aocc",), ("LOIO", "LOPO")):
         fig, ax = plt.subplots(figsize=(8, 5))
 
         def extract_standard_data(dim: int) -> list[tuple[float, float]]:
             df = datasets[dim][f"{metric}_{cv_mode}"]
-            df = (df - df.mean()) / df.std()
             matching = [
                 name
                 for name in df.index
                 if portfolio in name and all(nc not in name for nc in NON_COMPARED)
             ]
 
-            # Using list comprehension prevents overwriting duplicate CDB values
             return [
                 (extract_cdb(name), float(df.loc[name].mean()))
                 for name in matching
@@ -84,20 +75,18 @@ def plot_cdb_impact(
 
         ax.set_xlabel("CDB")
         ax.set_ylabel(f"{metric.upper()} (mean over problems)")
-        ax.set_title(f"CDB impact — {portfolio} — {cv_mode}")
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
-        plt.show()
+        _save_and_close(fig, save_dir, f"cdb_impact_{metric}_{cv_mode}.png")
 
     # 2. Multidimensional Plots (LOPO only)
     cv_mode = "LOPO"
-    for metric in ("auoc", "aocc"):
+    for metric in ("aocc",):
         fig, ax = plt.subplots(figsize=(8, 5))
 
         def extract_multi_data(dim: int) -> list[tuple[float, float]]:
             df = datasets[dim][f"{metric}_{cv_mode}"]
-            df = (df - df.mean()) / df.std()
             matching = [
                 name
                 for name in df.index
@@ -114,16 +103,22 @@ def plot_cdb_impact(
 
         ax.set_xlabel("CDB")
         ax.set_ylabel(f"{metric.upper()} (mean over problems)")
-        ax.set_title(f"CDB impact — {portfolio} — {cv_mode} Multidimensional training")
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
-        plt.show()
+        _save_and_close(fig, save_dir, f"cdb_impact_multi_{metric}_{cv_mode}.png")
 
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+    if p < 0.001:
+
+def plot_wilcoxon_heatmap(
+    columns are CDB values (excluding the baseline). Cell color encodes
+    rank-biserial correlation; annotation encodes Holm-adjusted significance.
+        {(r.cv_mode, r.experiment_type) for r in table.itertuples(index=False)}
+    axes = axes[0]
+    im = None
+
+        pivot_eff = pivot_eff.reindex(sorted(pivot_eff.columns), axis=1)
 
 
 def plot_cdb_impact_comparison(
