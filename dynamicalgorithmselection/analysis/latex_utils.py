@@ -195,6 +195,13 @@ def get_output_latex(loio_tables, lopo_tables):
         loio_mask = get_baseline_mask(df_loio_clean)
         df_loio_clean = df_loio_clean[~loio_mask]
 
+        # Split baselines: single-algorithm runs vs. population-based competitors
+        _SINGLE_ALGO = {"G3PCX", "LMCMAES", "SPSO"}
+        algo_names = df_baselines.index.get_level_values("algorithm/portfolio")
+        single_algo_mask = algo_names.isin(_SINGLE_ALGO)
+        df_single_algo = df_baselines[single_algo_mask].copy()
+        df_baselines = df_baselines[~single_algo_mask].copy()
+
         df_lopo_clean.columns = df_lopo_clean.columns.str.replace("_", " ")
         df_loio_clean.columns = df_loio_clean.columns.str.replace("_", " ")
 
@@ -202,6 +209,8 @@ def get_output_latex(loio_tables, lopo_tables):
         df_loio_clean = apply_precision_and_bolding(df_loio_clean)
         if not df_baselines.empty:
             df_baselines.columns = df_baselines.columns.str.replace("_", " ")
+        if not df_single_algo.empty:
+            df_single_algo.columns = df_single_algo.columns.str.replace("_", " ")
 
         save_latex_with_bolding(df_lopo_clean, output_lopo)
         save_latex_with_bolding(df_loio_clean, output_loio)
@@ -209,6 +218,12 @@ def get_output_latex(loio_tables, lopo_tables):
             save_latex_with_bolding(df_baselines, output_baselines)
             print(
                 f"Saved BASELINES dataset to {output_baselines} (Shape: {df_baselines.shape})"
+            )
+        if not df_single_algo.empty:
+            save_latex_with_bolding(df_single_algo, "single_algo_baselines.tex")
+            print(
+                f"Saved single-algorithm baselines to single_algo_baselines.tex"
+                f" (Shape: {df_single_algo.shape})"
             )
 
         print(
