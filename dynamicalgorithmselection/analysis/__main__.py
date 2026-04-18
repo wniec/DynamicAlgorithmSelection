@@ -21,6 +21,8 @@ from dynamicalgorithmselection.analysis.plotting import (
     plot_ert_impact,
     plot_cdb_impact_comparison,
     plot_cdb_impact_with_significance,
+    plot_rl_exp_das_vs_random,
+    plot_rl_vs_random_with_significance,
 )
 from dynamicalgorithmselection.analysis.preprocessing import (
     aggregate_over_seeds,
@@ -29,6 +31,7 @@ from dynamicalgorithmselection.analysis.preprocessing import (
 )
 from dynamicalgorithmselection.analysis.statistical_tests import (
     compute_cdb_wilcoxon_table,
+    compute_rl_vs_random_wilcoxon_table,
 )
 
 DATA_DIR = Path(".")
@@ -117,6 +120,21 @@ def run_results_pipeline(
     )
     plot_cdb_impact_with_significance(
         datasets, stats_table, portfolio, save_dir=plots_dir, dims=DIMS
+    )
+
+    # --- RL-Exponential-DAS vs Exponential-Random comparison (LOIO and LOPO) ---
+    plot_rl_exp_das_vs_random(datasets, portfolio, save_dir=plots_dir, dims=DIMS)
+
+    rl_vs_random_stats_path = stats_path.parent / "rl_vs_random_wilcoxon.csv"
+    rl_vs_random_table = compute_rl_vs_random_wilcoxon_table(
+        datasets, portfolio, save_path=rl_vs_random_stats_path, dims=DIMS
+    )
+    print(
+        f"RL vs Random Wilcoxon table: {rl_vs_random_table.shape[0]} comparisons"
+        f" -> {rl_vs_random_stats_path.resolve()}"
+    )
+    plot_rl_vs_random_with_significance(
+        datasets, rl_vs_random_table, portfolio, save_dir=plots_dir, dims=DIMS
     )
 
 
