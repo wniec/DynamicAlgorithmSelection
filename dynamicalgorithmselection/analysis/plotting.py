@@ -10,6 +10,18 @@ from dynamicalgorithmselection.analysis.metrics import compute_ERT_rank
 from dynamicalgorithmselection.analysis.preprocessing import extract_cdb
 from itertools import permutations
 
+SINGLE_ALGO_BASELINES = ("G3PCX", "LMCMAES", "SPSO")
+SINGLE_ALGO_LINESTYLES = {
+    "G3PCX": (0, (6, 2)),
+    "LMCMAES": (0, (1, 1.5)),
+    "SPSO": (0, (5, 1.5, 1, 1.5)),
+}
+SINGLE_ALGO_COLORS = {
+    "G3PCX": "#000000",
+    "LMCMAES": "#8B1A1A",
+    "SPSO": "#4B0082",
+}
+
 
 def _save_and_close(fig: plt.Figure, save_dir: Path, filename: str) -> None:
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -223,6 +235,122 @@ def plot_cdb_impact_with_significance(
         )
         fig.tight_layout()
         _save_and_close(fig, save_dir, filename)
+
+
+def plot_aocc_by_cdb_per_dimension(
+    datasets: dict[int, dict[str, pd.DataFrame]],
+    portfolio: list[str],
+    save_dir: Path,
+    dims: tuple[int, ...] = (2, 3, 5, 10),
+) -> None:
+    """AOCC vs CDB with one subplot per dimension, overlaying single-algo baselines.
+
+    Generates one figure per CV mode (LOIO, LOPO). Each figure has one subplot
+    per dimension showing the portfolio DAS AOCC curve across CDB values plus
+    horizontal reference lines for the single-algorithm baselines (G3PCX,
+    LMCMAES, SPSO) at that dimension.
+    """
+    row_filter = lambda n: "MULTIDIMENSIONAL" not in n  # noqa: E731
+    das_color = "#1f77b4"
+    random_color = "#2ca02c"
+
+    for cv_mode in ("LOIO", "LOPO"):
+        fig, axes = plt.subplots(
+            1, len(dims), figsize=(4.2 * len(dims), 4.2), sharey=False
+        )
+        if len(dims) == 1:
+            axes = [axes]
+
+        for ax, dim in zip(axes, dims):
+            df = datasets.get(dim, {}).get(f"aocc_{cv_mode}")
+            if df is None:
+                ax.set_visible(False)
+                continue
+
+            matching = [
+                name
+                for name in df.index
+                if any(("_".join(i) in name) for i in permutations(portfolio))
+                and row_filter(name)
+                and all(nc not in name for nc in NON_COMPARED)
+            ]
+            pairs = sorted(
+                (
+                    (extract_cdb(name), float(df.loc[name].mean()))
+                    for name in matching
+                    if extract_cdb(name) is not None
+                ),
+                key=lambda p: p[0],
+            )
+            if pairs:
+                xs = [p[0] for p in pairs]
+                ys = [p[1] for p in pairs]
+                ax.plot(xs, ys, marker="o", color=das_color, label="DAS")
+
+            random_rows = [
+                name
+                for name in df.index
+                if "RANDOM" in name
+                and "RANDOM_DAS" not in name
+                and "MULTIDIMENSIONAL" not in name
+            ]
+            random_pairs = sorted(
+                (
+                    (extract_cdb(name), float(df.loc[name].mean()))
+                    for name in random_rows
+                    if extract_cdb(name) is not None
+                ),
+                key=lambda p: p[0],
+            )
+            if random_pairs:
+                rxs = [p[0] for p in random_pairs]
+                rys = [p[1] for p in random_pairs]
+                ax.plot(
+                    rxs,
+                    rys,
+                    marker="s",
+                    linestyle="--",
+                    color=random_color,
+                    alpha=0.9,
+                    label="Random AS",
+                )
+
+            for algo in SINGLE_ALGO_BASELINES:
+                row_name = f"BASELINES_baselines_{algo}_{dim}"
+                if row_name not in df.index:
+                    continue
+                ax.axhline(
+                    float(df.loc[row_name].mean()),
+                    color=SINGLE_ALGO_COLORS[algo],
+                    linestyle=SINGLE_ALGO_LINESTYLES[algo],
+                    alpha=0.9,
+                    linewidth=1.6,
+                    label=algo,
+                )
+
+            ax.set_title(f"D={dim}")
+            ax.set_xlabel("CDB")
+            ax.grid(True, alpha=0.3)
+
+        axes[0].set_ylabel(f"AOCC (mean over problems) — {cv_mode}")
+
+        # Single shared legend for the whole figure (dedup across subplots)
+        seen: dict[str, object] = {}
+        for ax in axes:
+            for h, lbl in zip(*ax.get_legend_handles_labels()):
+                if lbl not in seen:
+                    seen[lbl] = h
+        if seen:
+            fig.legend(
+                handles=list(seen.values()),
+                labels=list(seen.keys()),
+                loc="lower center",
+                ncol=len(seen),
+                bbox_to_anchor=(0.5, -0.02),
+                frameon=True,
+            )
+        fig.tight_layout(rect=(0, 0.06, 1, 1))
+        _save_and_close(fig, save_dir, f"aocc_by_cdb_per_dim_{cv_mode}.png")
 
 
 def plot_cdb_impact_comparison(

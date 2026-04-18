@@ -230,15 +230,23 @@ def load_experiment_results(
     for result_file in sorted(results_dir.iterdir()):
         if result_file.suffix != ".jsonl":
             continue
-        experiment_data: dict[str, dict[str, float]] = {}
+        # Problem keys can repeat across lines (one line per seed in baseline
+        # files). Accumulate then average per metric so all seeds contribute.
+        accumulator: dict[str, dict[str, list[float]]] = {}
         with open(result_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 run_results: dict[str, dict[str, float]] = json.loads(line)
-                for key, val in run_results.items():
-                    experiment_data[key] = val
+                for key, metrics in run_results.items():
+                    bucket = accumulator.setdefault(key, {})
+                    for metric_name, value in metrics.items():
+                        bucket.setdefault(metric_name, []).append(value)
+        experiment_data = {
+            key: {m: sum(vals) / len(vals) for m, vals in metrics.items()}
+            for key, metrics in accumulator.items()
+        }
         experiment_name = result_file.stem
         experiment_name = re.sub(r"_(\d\.\d)", r"_RANDOM_CDB\1", experiment_name)
 

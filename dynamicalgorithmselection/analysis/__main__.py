@@ -18,6 +18,7 @@ from dynamicalgorithmselection.analysis.metrics import (
     compute_ERT_rank,
 )
 from dynamicalgorithmselection.analysis.plotting import (
+    plot_aocc_by_cdb_per_dimension,
     plot_ert_impact,
     plot_cdb_impact_comparison,
     plot_cdb_impact_with_significance,
@@ -38,7 +39,16 @@ DATA_DIR = Path(".")
 DIMS = (2, 3, 5, 10)
 EXTRA_BASELINES = [
     f"BASELINES_baselines_{name}"
-    for name in ("MADDE", "JDE21", "NL_SHADE_RSP", "best", "worst")
+    for name in (
+        "MADDE",
+        "JDE21",
+        "NL_SHADE_RSP",
+        "best",
+        "worst",
+        "G3PCX",
+        "LMCMAES",
+        "SPSO",
+    )
 ]
 
 # Global list to store Series/DataFrames for the final joint table
@@ -121,6 +131,9 @@ def run_results_pipeline(
     plot_cdb_impact_with_significance(
         datasets, stats_table, portfolio, save_dir=plots_dir, dims=DIMS
     )
+
+    # --- AOCC vs CDB per dimension, overlaid with single-algorithm baselines ---
+    plot_aocc_by_cdb_per_dimension(datasets, portfolio, save_dir=plots_dir, dims=DIMS)
 
     # --- RL-Exponential-DAS vs Exponential-Random comparison (LOIO and LOPO) ---
     plot_rl_exp_das_vs_random(datasets, portfolio, save_dir=plots_dir, dims=DIMS)
