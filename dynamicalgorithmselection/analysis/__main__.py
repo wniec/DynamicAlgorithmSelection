@@ -19,6 +19,7 @@ from dynamicalgorithmselection.analysis.metrics import (
 )
 from dynamicalgorithmselection.analysis.plotting import (
     plot_aocc_by_cdb_per_dimension,
+    plot_aocc_by_cdb_per_dimension_and_group,
     plot_ert_impact,
     plot_cdb_impact_comparison,
     plot_cdb_impact_with_significance,
@@ -134,6 +135,9 @@ def run_results_pipeline(
 
     # --- AOCC vs CDB per dimension, overlaid with single-algorithm baselines ---
     plot_aocc_by_cdb_per_dimension(datasets, portfolio, save_dir=plots_dir, dims=DIMS)
+    plot_aocc_by_cdb_per_dimension_and_group(
+        datasets, portfolio, save_dir=plots_dir, dims=DIMS
+    )
 
     # --- RL-Exponential-DAS vs Exponential-Random comparison (LOIO and LOPO) ---
     plot_rl_exp_das_vs_random(datasets, portfolio, save_dir=plots_dir, dims=DIMS)

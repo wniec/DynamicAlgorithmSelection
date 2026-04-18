@@ -256,7 +256,7 @@ def plot_aocc_by_cdb_per_dimension(
 
     for cv_mode in ("LOIO", "LOPO"):
         fig, axes = plt.subplots(
-            1, len(dims), figsize=(4.2 * len(dims), 4.2), sharey=False
+            1, len(dims), figsize=(4.4 * len(dims), 5.4), sharey=False
         )
         if len(dims) == 1:
             axes = [axes]
@@ -285,7 +285,7 @@ def plot_aocc_by_cdb_per_dimension(
             if pairs:
                 xs = [p[0] for p in pairs]
                 ys = [p[1] for p in pairs]
-                ax.plot(xs, ys, marker="o", color=das_color, label="DAS")
+                ax.plot(xs, ys, marker="o", color=das_color, label="RL-Exp-DAS")
 
             random_rows = [
                 name
@@ -312,7 +312,7 @@ def plot_aocc_by_cdb_per_dimension(
                     linestyle="--",
                     color=random_color,
                     alpha=0.9,
-                    label="Random AS",
+                    label="Exp Random-AS",
                 )
 
             for algo in SINGLE_ALGO_BASELINES:
@@ -328,11 +328,14 @@ def plot_aocc_by_cdb_per_dimension(
                     label=algo,
                 )
 
-            ax.set_title(f"D={dim}")
-            ax.set_xlabel("CDB")
+            ax.set_title(f"D={dim}", fontsize=16)
+            ax.set_xlabel("CDB", fontsize=13)
+            ax.tick_params(axis="both", labelsize=12)
             ax.grid(True, alpha=0.3)
 
-        axes[0].set_ylabel(f"AOCC (mean over problems) — {cv_mode}")
+        axes[0].set_ylabel(
+            f"AOCC (mean over problems) — {cv_mode}", fontsize=13
+        )
 
         # Single shared legend for the whole figure (dedup across subplots)
         seen: dict[str, object] = {}
@@ -348,9 +351,185 @@ def plot_aocc_by_cdb_per_dimension(
                 ncol=len(seen),
                 bbox_to_anchor=(0.5, -0.02),
                 frameon=True,
+                fontsize=12,
             )
-        fig.tight_layout(rect=(0, 0.06, 1, 1))
-        _save_and_close(fig, save_dir, f"aocc_by_cdb_per_dim_{cv_mode}.png")
+        fig.tight_layout(rect=(0, 0.05, 1, 1))
+        save_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(
+            save_dir / f"aocc_by_cdb_per_dim_{cv_mode}.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+
+
+BBOB_GROUPS: tuple[tuple[str, tuple[int, int]], ...] = (
+    ("Separable", (1, 5)),
+    ("Low/mod. cond.", (6, 9)),
+    ("High cond. unimodal", (10, 14)),
+    ("Multimodal, struct.", (15, 19)),
+    ("Multimodal, weak str.", (20, 24)),
+)
+
+
+def _columns_for_group(columns, fn_range: tuple[int, int]) -> list[str]:
+    lo, hi = fn_range
+    result = []
+    for c in columns:
+        parts = c.split("_")
+        if len(parts) < 2 or not parts[1].startswith("f"):
+            continue
+        try:
+            fn = int(parts[1][1:])
+        except ValueError:
+            continue
+        if lo <= fn <= hi:
+            result.append(c)
+    return result
+
+
+def plot_aocc_by_cdb_per_dimension_and_group(
+    datasets: dict[int, dict[str, pd.DataFrame]],
+    portfolio: list[str],
+    save_dir: Path,
+    dims: tuple[int, ...] = (2, 3, 5, 10),
+) -> None:
+    """AOCC vs CDB split by BBOB function group (cols) and dimension (rows).
+
+    One figure per CV mode. Each cell shows the RL-Exp-DAS curve, Exp Random-AS
+    curve, and the single-algorithm horizontal baselines, restricted to
+    problems in that BBOB function group.
+    """
+    row_filter = lambda n: "MULTIDIMENSIONAL" not in n  # noqa: E731
+    das_color = "#1f77b4"
+    random_color = "#2ca02c"
+
+    for cv_mode in ("LOIO", "LOPO"):
+        n_rows, n_cols = len(dims), len(BBOB_GROUPS)
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(3.6 * n_cols, 3.0 * n_rows),
+            sharex=True,
+            squeeze=False,
+        )
+
+        for row, dim in enumerate(dims):
+            df = datasets.get(dim, {}).get(f"aocc_{cv_mode}")
+            for col, (group_name, fn_range) in enumerate(BBOB_GROUPS):
+                ax = axes[row][col]
+
+                if df is None:
+                    ax.set_visible(False)
+                    continue
+
+                group_cols = _columns_for_group(df.columns, fn_range)
+                if not group_cols:
+                    ax.set_visible(False)
+                    continue
+
+                sub = df[group_cols]
+
+                matching = [
+                    name
+                    for name in sub.index
+                    if any(("_".join(i) in name) for i in permutations(portfolio))
+                    and row_filter(name)
+                    and all(nc not in name for nc in NON_COMPARED)
+                ]
+                pairs = sorted(
+                    (
+                        (extract_cdb(name), float(sub.loc[name].mean()))
+                        for name in matching
+                        if extract_cdb(name) is not None
+                    ),
+                    key=lambda p: p[0],
+                )
+                if pairs:
+                    xs = [p[0] for p in pairs]
+                    ys = [p[1] for p in pairs]
+                    ax.plot(xs, ys, marker="o", color=das_color, label="RL-Exp-DAS")
+
+                random_rows = [
+                    name
+                    for name in sub.index
+                    if "RANDOM" in name
+                    and "RANDOM_DAS" not in name
+                    and "MULTIDIMENSIONAL" not in name
+                ]
+                random_pairs = sorted(
+                    (
+                        (extract_cdb(name), float(sub.loc[name].mean()))
+                        for name in random_rows
+                        if extract_cdb(name) is not None
+                    ),
+                    key=lambda p: p[0],
+                )
+                if random_pairs:
+                    rxs = [p[0] for p in random_pairs]
+                    rys = [p[1] for p in random_pairs]
+                    ax.plot(
+                        rxs,
+                        rys,
+                        marker="s",
+                        linestyle="--",
+                        color=random_color,
+                        alpha=0.9,
+                        label="Exp Random-AS",
+                    )
+
+                for algo in SINGLE_ALGO_BASELINES:
+                    row_name = f"BASELINES_baselines_{algo}_{dim}"
+                    if row_name not in sub.index:
+                        continue
+                    ax.axhline(
+                        float(sub.loc[row_name].mean()),
+                        color=SINGLE_ALGO_COLORS[algo],
+                        linestyle=SINGLE_ALGO_LINESTYLES[algo],
+                        alpha=0.9,
+                        linewidth=1.4,
+                        label=algo,
+                    )
+
+                ax.grid(True, alpha=0.3)
+                ax.tick_params(axis="both", labelsize=10)
+                if row == 0:
+                    ax.set_title(
+                        f"{group_name}\n(f{fn_range[0]}–f{fn_range[1]})",
+                        fontsize=12,
+                    )
+                if row == n_rows - 1:
+                    ax.set_xlabel("CDB", fontsize=12)
+                if col == 0:
+                    ax.set_ylabel(f"D={dim}", fontsize=12)
+
+        seen: dict[str, object] = {}
+        for row_axes in axes:
+            for ax in row_axes:
+                if not ax.get_visible():
+                    continue
+                for h, lbl in zip(*ax.get_legend_handles_labels()):
+                    if lbl not in seen:
+                        seen[lbl] = h
+        if seen:
+            fig.legend(
+                handles=list(seen.values()),
+                labels=list(seen.keys()),
+                loc="lower center",
+                ncol=len(seen),
+                bbox_to_anchor=(0.5, -0.01),
+                frameon=True,
+                fontsize=11,
+            )
+
+        fig.tight_layout(rect=(0, 0.03, 1, 0.97))
+        save_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(
+            save_dir / f"aocc_by_cdb_per_dim_group_{cv_mode}.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close(fig)
 
 
 def plot_cdb_impact_comparison(
