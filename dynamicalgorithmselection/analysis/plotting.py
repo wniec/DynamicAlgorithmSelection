@@ -492,16 +492,16 @@ def plot_aocc_by_cdb_per_dimension_and_group(
                     )
 
                 ax.grid(True, alpha=0.3)
-                ax.tick_params(axis="both", labelsize=10)
+                ax.tick_params(axis="both", labelsize=14)
                 if row == 0:
                     ax.set_title(
                         f"{group_name}\n(f{fn_range[0]}–f{fn_range[1]})",
-                        fontsize=12,
+                        fontsize=16,
                     )
                 if row == n_rows - 1:
-                    ax.set_xlabel("CDB", fontsize=12)
+                    ax.set_xlabel("CDB", fontsize=16)
                 if col == 0:
-                    ax.set_ylabel(f"D={dim}", fontsize=12)
+                    ax.set_ylabel(f"D={dim}", fontsize=16)
 
         seen: dict[str, object] = {}
         for row_axes in axes:
@@ -519,7 +519,7 @@ def plot_aocc_by_cdb_per_dimension_and_group(
                 ncol=len(seen),
                 bbox_to_anchor=(0.5, -0.01),
                 frameon=True,
-                fontsize=11,
+                fontsize=14,
             )
 
         fig.tight_layout(rect=(0, 0.03, 1, 0.97))
