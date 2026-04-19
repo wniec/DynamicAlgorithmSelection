@@ -1,10 +1,12 @@
 """Metric extraction and computation."""
 
 import re
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-from bs4 import BeautifulSoup
+from autorank import autorank
+from bs4 import BeautifulSoup, Tag
 
 
 def extract_metric(
@@ -15,16 +17,16 @@ def extract_metric(
 
     Args:
         results: Nested dict as returned by
-            :func:`~dynamicalgorithmselection.analysis.loading.load_experiment_results`.
-        metric: Metric key to extract (e.g. ``"area_under_optimization_curve"``
-            or ``"final_fitness"``).
+            `load_experiment_results` (experiment -> problem -> metric -> value).
+        metric: Metric key to extract (e.g., "area_under_optimization_curve"
+            or "final_fitness").
 
     Returns:
         DataFrame with experiments as rows and problems as columns.
     """
-    data: dict[str, dict[str, float]] = {}
+    data: dict[str, dict[str, float]] = defaultdict(dict)
+
     for experiment, problems in results.items():
-        data[experiment] = {}
         for problem_key, metrics in problems.items():
             if metric in metrics:
                 data[experiment][problem_key] = metrics[metric]
@@ -35,18 +37,17 @@ def parse_ert_from_html(
     html_content: str,
     targets: tuple[str, ...] = ("1e-5", "1e-7"),
 ) -> dict[str, float]:
-    """Parse ERT ratios from a COCO ``pptable.html`` file.
+    """Parse ERT ratios from a COCO `pptable.html` file.
 
     Extracts the ERT (Expected Runtime) divided by the best BBOB-2009
-    algorithm's ERT for specified precision targets. Only the second row
-    per function block (the ratio row) is extracted.
+    algorithm's ERT for specified precision targets.
 
     Args:
-        html_content: Raw HTML string from ``pptable.html``.
+        html_content: Raw HTML string from `pptable.html`.
         targets: Column headers (precision targets) to extract.
 
     Returns:
-        Dict mapping ``"DIM{d}_f{nn}_target_{t}"`` to the ERT ratio value.
+        Dict mapping "DIM{d}_f{nn}_target_{t}" to the ERT ratio value.
     """
     soup = BeautifulSoup(html_content, "html.parser")
     extracted: dict[str, float] = {}
@@ -56,33 +57,52 @@ def parse_ert_from_html(
         if dimension is None:
             continue
 
-        thead = table.find("thead")
-        if not thead:
-            continue
-        headers = [td.get_text(strip=True) for td in thead.find_all(["th", "td"])][1:]
-
-        tbody = table.find("tbody")
-        if not tbody:
+        headers = _extract_table_headers(table)
+        if not headers:
             continue
 
-        current_func: str | None = None
-        for row in tbody.find_all("tr"):
-            th = row.find("th")
-            tds = [td.get_text(strip=True) for td in row.find_all("td")]
+        extracted.update(_parse_table_rows(table, headers, dimension, targets))
 
-            if th and th.get_text(strip=True):
-                current_func = th.get_text(strip=True)
-            elif current_func and (not th or not th.get_text(strip=True)):
-                func_num = int(current_func[1:])
-                for i, header in enumerate(headers):
-                    if header in targets and i < len(tds):
-                        raw_value = tds[i].split(" ")[0]
-                        if "∞" in raw_value:
-                            ratio = float("inf")
-                        else:
-                            ratio = float(raw_value)
-                        key = f"DIM{dimension}_f{func_num:02d}_target_{header}"
-                        extracted[key] = ratio
+    return extracted
+
+
+def _extract_table_headers(table: Tag) -> list[str]:
+    """Extract column headers from an HTML table's thead."""
+    thead = table.find("thead")
+    if not thead:
+        return []
+    return [td.get_text(strip=True) for td in thead.find_all(["th", "td"])][1:]
+
+
+def _parse_table_rows(
+    table: Tag, headers: list[str], dimension: int, targets: tuple[str, ...]
+) -> dict[str, float]:
+    """Parse the tbody of an HTML table for function ERT ratios."""
+    tbody = table.find("tbody")
+    if not tbody:
+        return {}
+
+    extracted = {}
+    current_func: str | None = None
+
+    for row in tbody.find_all("tr"):
+        th = row.find("th")
+        tds = [td.get_text(strip=True) for td in row.find_all("td")]
+        th_text = th.get_text(strip=True) if th else ""
+
+        # A populated `th` indicates the start of a new function block
+        if th_text:
+            current_func = th_text
+
+        # An empty `th` while inside a function block indicates the ratio row
+        elif current_func and not th_text:
+            func_num = int(current_func[1:])
+            for i, header in enumerate(headers):
+                if header in targets and i < len(tds):
+                    raw_value = tds[i].split(" ")[0]
+                    ratio = float("inf") if "∞" in raw_value else float(raw_value)
+                    key = f"DIM{dimension}_f{func_num:02d}_target_{header}"
+                    extracted[key] = ratio
 
     return extracted
 
@@ -93,11 +113,10 @@ def compute_solve_rate(
     """Compute the fraction of problems solved (non-infinite ERT) per experiment.
 
     Args:
-        datasets: Per-dimension ERT DataFrames as returned by
-            :func:`~dynamicalgorithmselection.analysis.preprocessing.split_ert_by_dimension`.
+        datasets: Per-dimension ERT DataFrames.
 
     Returns:
-        ``{dim: Series}`` with solve rates sorted ascending.
+        Dictionary mapping dimension to a Series of solve rates, sorted ascending.
     """
     solve_rates: dict[int, pd.Series] = {}
     for dim, df in datasets.items():
@@ -107,7 +126,29 @@ def compute_solve_rate(
     return solve_rates
 
 
-def _parse_dimension(table) -> int | None:  # noqa: ANN001
+def compute_ERT_rank(
+    datasets: dict[int, pd.DataFrame],
+) -> dict[int, pd.DataFrame]:
+    """Compute the mean rank of Expected Runtimes (ERT) per experiment.
+
+    Because lower ERTs are better, this function uses `order='ascending'`.
+    Infinite values (failed runs) are penalized to the worst ranks.
+
+    Args:
+        datasets: Per-dimension ERT DataFrames.
+
+    Returns:
+        Dictionary mapping dimension to a Series of mean ERT ranks.
+    """
+    solve_rates: dict[int, pd.DataFrame] = {}
+    for dim, df in datasets.items():
+        rankdf = autorank(df.T, alpha=0.05, verbose=False, order="ascending").rankdf
+        rate = pd.DataFrame(rankdf[["meanrank"]])
+        solve_rates[dim] = rate
+    return solve_rates
+
+
+def _parse_dimension(table: Tag) -> int | None:
     """Extract the dimension number from the paragraph preceding a table."""
     prev_p = table.find_previous_sibling("p")
     if prev_p:

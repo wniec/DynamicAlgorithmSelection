@@ -58,46 +58,44 @@ def aggregate_over_seeds(
 
 
 def split_results_by_dimension(
-    auoc: pd.DataFrame,
     final_fitness: pd.DataFrame,
     aocc: pd.DataFrame,
     dims: tuple[int, ...] = (2, 3, 5, 10),
     extra_baselines: list[str] | None = None,
 ) -> dict[int, dict[str, pd.DataFrame]]:
-    """Split AUOC and final_fitness DataFrames by dimension and CV mode.
+    """Split final_fitness and AOCC DataFrames by dimension and CV mode.
 
     Produces per-dimension datasets filtered by LOIO/LOPO cross-validation
     mode. Multidimensional experiments and baselines are included in each
     dimension's dataset with their columns filtered to match.
 
     Args:
-        auoc: Aggregated AUOC DataFrame (experiments x problems).
         final_fitness: Aggregated final fitness DataFrame (experiments x problems).
+        aocc: Aggregated AOCC DataFrame (experiments x problems).
         dims: Tuple of dimensions to split by.
         extra_baselines: Additional baseline experiment names to include
             (e.g. ``["BASELINES_baselines_MADDE"]``).
 
     Returns:
-        ``{dim: {"auoc_LOIO": df, "auoc_LOPO": df,
+        ``{dim: {"aocc_LOIO": df, "aocc_LOPO": df,
                  "final_fitness_LOIO": df, "final_fitness_LOPO": df}}``.
     """
-    all_rows = list(auoc.index)
+    all_rows = list(aocc.index)
 
     multidim_rows = [r for r in all_rows if "MULTIDIMENSIONAL" in r]
     baseline_rows = [r for r in all_rows if "RANDOM" in r and "RANDOM_DAS" not in r]
     if extra_baselines:
         for name in extra_baselines:
-            if name in auoc.index and name not in baseline_rows:
+            if name in aocc.index and name not in baseline_rows:
                 baseline_rows.append(name)
 
     extreme_rows = [r for r in all_rows if "best" in r or "worst" in r]
     global_rows = list(set(baseline_rows + multidim_rows + extreme_rows))
 
     # Build global datasets (filtered to only rows that exist)
-    existing_global = [r for r in global_rows if r in auoc.index]
-    global_auoc = auoc.loc[existing_global]
+    existing_global = [r for r in global_rows if r in aocc.index]
     global_ff = final_fitness.loc[existing_global]
-    global_aocc = auoc.loc[existing_global]
+    global_aocc = aocc.loc[existing_global]
 
     datasets: dict[int, dict[str, pd.DataFrame]] = {}
 
@@ -108,25 +106,19 @@ def split_results_by_dimension(
             if f"_DIM{dim}" in r and r not in multidim_rows and r not in extreme_rows
         ]
 
-        columns = [c for c in auoc.columns if int(c[-2:]) == dim]
+        columns = [c for c in aocc.columns if int(c[-2:]) == dim]
 
         # Select multidim/baseline data for this dimension's columns
-        md_auoc = global_auoc[columns].copy()
         md_ff = global_ff[columns].copy()
         md_aocc = global_aocc[columns].copy()
 
-        md_auoc.index = md_auoc.index.map(lambda x: f"{x}_{dim}")
         md_ff.index = md_ff.index.map(lambda x: f"{x}_{dim}")
         md_aocc.index = md_aocc.index.map(lambda x: f"{x}_{dim}")
 
-        auoc_combined = pd.concat([auoc.loc[dim_rows].dropna(axis=1), md_auoc])
-        ff_combined = pd.concat(
-            [final_fitness.loc[dim_rows].dropna(axis=1), md_ff]
-        )
+        ff_combined = pd.concat([final_fitness.loc[dim_rows].dropna(axis=1), md_ff])
 
         aocc_combined = pd.concat([aocc.loc[dim_rows].dropna(axis=1), md_aocc])
         base_data = {
-            "auoc": auoc_combined,
             "final_fitness": ff_combined,
             "aocc": aocc_combined,
         }

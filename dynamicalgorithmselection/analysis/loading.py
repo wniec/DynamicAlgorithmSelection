@@ -17,11 +17,11 @@ class BehaviourFile:
     """Parsed metadata from a behaviour JSONL filename."""
 
     path: Path
-    portfolio: str   # e.g. "G3PCX_LMCMAES_SPSO"
-    exp_type: str    # "LOIO" or "LOPO"
-    cdb: str         # e.g. "CDB1.0"
-    dim: int         # 2, 3, 5, or 10
-    seed: int        # 12, 23, or 34
+    portfolio: str  # e.g. "G3PCX_LMCMAES_SPSO"
+    exp_type: str  # "LOIO" or "LOPO"
+    cdb: str  # e.g. "CDB1.0"
+    dim: int  # 2, 3, 5, or 10
+    seed: int  # 12, 23, or 34
 
 
 def discover_behaviour_files(
@@ -38,7 +38,16 @@ def discover_behaviour_files(
         p, et, cdb, dim, seed = m.groups()
         if p != portfolio or et not in exp_types:
             continue
-        files.append(BehaviourFile(path=path, portfolio=p, exp_type=et, cdb=cdb, dim=int(dim), seed=int(seed)))
+        files.append(
+            BehaviourFile(
+                path=path,
+                portfolio=p,
+                exp_type=et,
+                cdb=cdb,
+                dim=int(dim),
+                seed=int(seed),
+            )
+        )
     return files
 
 
@@ -221,16 +230,27 @@ def load_experiment_results(
     for result_file in sorted(results_dir.iterdir()):
         if result_file.suffix != ".jsonl":
             continue
-        experiment_data: dict[str, dict[str, float]] = {}
+        # Problem keys can repeat across lines (one line per seed in baseline
+        # files). Accumulate then average per metric so all seeds contribute.
+        accumulator: dict[str, dict[str, list[float]]] = {}
         with open(result_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 run_results: dict[str, dict[str, float]] = json.loads(line)
-                for key, val in run_results.items():
-                    experiment_data[key] = val
-        results[result_file.stem] = experiment_data
+                for key, metrics in run_results.items():
+                    bucket = accumulator.setdefault(key, {})
+                    for metric_name, value in metrics.items():
+                        bucket.setdefault(metric_name, []).append(value)
+        experiment_data = {
+            key: {m: sum(vals) / len(vals) for m, vals in metrics.items()}
+            for key, metrics in accumulator.items()
+        }
+        experiment_name = result_file.stem
+        experiment_name = re.sub(r"_(\d\.\d)", r"_RANDOM_CDB\1", experiment_name)
+
+        results[experiment_name] = experiment_data
 
     return results
 

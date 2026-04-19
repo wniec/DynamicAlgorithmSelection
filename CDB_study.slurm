@@ -51,7 +51,7 @@ elif [[ $SLURM_ARRAY_TASK_ID -eq 8 ]]; then
     MODE="CV-LOIO"
     echo "Running Mode: $MODE | Multidimensional PG"
     python3 dynamicalgorithmselection/main.py ${PORTFOLIO_STR}_PG_MULTIDIMENSIONAL_${MODE}_CDB${CDB_VAL}_SEED${SEED} \
-      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient -S $SEED
+      -p "${PORTFOLIO[@]}" --mode $MODE --cdb $CDB_VAL --agent policy-gradient --dimensionality 2 3 5 10 -S $SEED
 
 # 4. Multidimensional CV-LOPO (Index 9)
 elif [[ $SLURM_ARRAY_TASK_ID -eq 9 ]]; then
